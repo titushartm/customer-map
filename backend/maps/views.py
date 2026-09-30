@@ -16,7 +16,7 @@ from django.views.decorators.http import require_GET
 
 from . import referrals as rules
 from .audiences import AUDIENCES, RECENT_LIMIT, RECENT_WINDOWS_DAYS
-from .models import PartnerTerritory, ReferralCode, Region, RegionLevel, Segment, State, Target
+from .models import ReferralCode, Region, RegionLevel, SalesPartner, Segment, State, Target
 
 
 def _coords(request, required=True):
@@ -43,7 +43,7 @@ def _audience(name):
 def _partner_id(request):
     """
     Welcher Partner schaut? Später aus request.user (SalesPartner.users). Bis dahin darf der
-    Prototyp den Partner per ?partner=<external_id> wählen, aber nur mit MAP_ALLOW_PARTNER_PARAM
+    Prototyp den Partner per ?partner=<id> wählen, aber nur mit MAP_ALLOW_PARTNER_PARAM
     (Default: DEBUG). Sonst könnte jeder fremde Gebiete abrufen.
     """
     if not getattr(settings, "MAP_ALLOW_PARTNER_PARAM", settings.DEBUG):
@@ -67,23 +67,20 @@ def _scoped(request, cfg, segment=None):
     meta = {"segments": Segment.values}
 
     if cfg["scope"] == "territory":
-        territories = list(
-            PartnerTerritory.objects.filter(partner__external_id=_partner_id(request), partner__active=True)
-            .select_related("partner")
-        )
-        if not territories:
+        partner = SalesPartner.objects.filter(pk=_partner_id(request), active=True).first()
+        if partner is None:
+            raise Http404("Diesen Partner gibt es nicht oder er ist deaktiviert")
+        regions = [t.region for t in partner.territories.select_related("region")]
+        if not regions:
             raise Http404("Für diesen Partner ist kein Gebiet hinterlegt")
-        # Je Gebiet: Präfix UND eines seiner Segmente
-        qs = qs.filter(reduce(or_, (
-            Q(region__key__startswith=t.key_prefix, segment__in=t.segments) for t in territories
-        )))
-        meta["partner"] = territories[0].partner.name
-        meta["territories"] = [str(t) for t in territories]
-        meta["segments"] = [s for s in Segment.values if any(s in t.segments for t in territories)]
-        # Fläche fürs Hervorheben: Vereinigung der Kreisgrenzen (kreisfreie Städte sind als Kreis importiert).
-        # Im Betrieb vorberechnen oder cachen, ST_Union über viele Kreise ist nicht billig.
-        in_area = reduce(or_, (Q(key__startswith=t.key_prefix) for t in territories))
-        area = Region.objects.filter(in_area, level=RegionLevel.KREIS, boundary__isnull=False).aggregate(u=Union("boundary"))["u"]
+        # Nur das Segment des Partners, in einer seiner Regionen (Land, Kreis oder Gemeinde)
+        qs = qs.filter(reduce(or_, (Q(region__key__startswith=r.key) for r in regions)), segment=partner.segment)
+        meta["partner"] = partner.name
+        meta["territories"] = [r.name for r in regions]
+        meta["segments"] = [partner.segment]
+        # Fläche fürs Hervorheben: Vereinigung der Gebietsregionen selbst.
+        # Im Betrieb beim Speichern des Partners vorberechnen, ST_Union über große Länder ist nicht billig.
+        area = Region.objects.filter(pk__in=[r.pk for r in regions], boundary__isnull=False).aggregate(u=Union("boundary"))["u"]
         meta["territory"] = json.loads(area.simplify(0.003, preserve_topology=True).geojson) if area else None
 
     if segment:

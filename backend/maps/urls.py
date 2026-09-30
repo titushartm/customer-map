@@ -1,6 +1,6 @@
 from django.urls import path
 
-from . import views
+from . import partner_admin, views
 
 app_name = "maps"
 
@@ -14,4 +14,9 @@ urlpatterns = [
     path("geo/reverse/", views.reverse_location, name="reverse"),
     path("geo/search/", views.place_search, name="search"),
     path("geo/states/", views.states, name="states"),
+    # Admin-Bereich, nur SpeechMind intern
+    path("partners/", partner_admin.partners, name="partners"),
+    path("partners/preview/", partner_admin.partner_preview, name="partner-preview"),
+    path("partners/<int:pk>/", partner_admin.partner_detail, name="partner"),
+    path("geo/areas/", partner_admin.areas, name="areas"),
 ]

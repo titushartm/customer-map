@@ -5,7 +5,9 @@ Download: https://gdz.bkg.bund.de -> Verwaltungsgebiete 1:250 000 (VG250), Shape
 Aufruf:   python manage.py import_vg250 /pfad/zu/VG250_GEM.shp [--plz-csv plz_ags.csv]
 
 Mit VG250-EW (Shape mit Einwohnerzahlen, Feld EWZ) kommt die Einwohnerzahl gleich mit.
-Kreise (VG250_KRS.shp) lassen sich mit --level kreis genauso importieren.
+Kreise (VG250_KRS.shp) und Länder (VG250_LAN.shp) lassen sich mit --level kreis bzw. --level land
+genauso importieren. Reihenfolge: land, kreis, gemeinde. Länder werden keine Ziel-Verwaltungen,
+sie dienen nur als Partnergebiet.
 
 Die optionale CSV (Spalten: plz,ags) ordnet Postleitzahlen den Gemeinden zu,
 z. B. erzeugt aus der OpenPLZ API oder OSM-Postleitzahlgebieten.
@@ -56,6 +58,7 @@ class Command(BaseCommand):
                     "level": level,
                     "state": ags[:2],
                     "name": feat.get("GEN"),
+                    "kind": feat.get("BEZ"),
                     **({"population": int(feat.get("EWZ"))} if "EWZ" in fields else {}),
                     "boundary": geom,
                     # point_on_surface liegt garantiert in der Gemeinde, der Schwerpunkt nicht immer
@@ -63,7 +66,10 @@ class Command(BaseCommand):
                     "postcodes": sorted(postcodes.get(ags, [])),
                 },
             )
-            # Jede Region ist auch eine Ziel-Verwaltung; Kundenstatus bleibt beim erneuten Import erhalten
+            count += 1
+            if level == RegionLevel.LAND:
+                continue
+            # Jede Gemeinde und jeder Kreis ist auch eine Ziel-Verwaltung; Kundenstatus bleibt beim erneuten Import erhalten
             Target.objects.update_or_create(
                 key=ags,
                 defaults={
@@ -74,6 +80,5 @@ class Command(BaseCommand):
                     "size": region.population,
                 },
             )
-            count += 1
 
         self.stdout.write(self.style.SUCCESS(f"{count} Regionen ({level}) importiert."))

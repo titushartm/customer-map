@@ -5,7 +5,7 @@ from .models import PartnerTerritory, Referral, ReferralCode, Region, SalesPartn
 
 @admin.register(Region)
 class RegionAdmin(admin.GISModelAdmin):
-    list_display = ("name", "key", "level", "state", "population")
+    list_display = ("name", "key", "level", "kind", "state", "population")
     list_filter = ("level", "state")
     search_fields = ("name", "key", "postcodes")
     raw_id_fields = ("parent",)
@@ -22,11 +22,14 @@ class TargetAdmin(admin.GISModelAdmin):
 class PartnerTerritoryInline(admin.TabularInline):
     model = PartnerTerritory
     extra = 0
+    autocomplete_fields = ("region",)
 
 
 @admin.register(SalesPartner)
 class SalesPartnerAdmin(admin.ModelAdmin):
-    list_display = ("name", "external_id", "contact_name", "email", "phone", "active")
+    # Gepflegt wird im Admin-Tab der Karte; das hier ist der Notzugang
+    list_display = ("name", "segment", "contact_name", "email", "phone", "active")
+    list_filter = ("segment", "active")
     search_fields = ("name", "external_id", "contact_name")
     filter_horizontal = ("users",)
     inlines = [PartnerTerritoryInline]

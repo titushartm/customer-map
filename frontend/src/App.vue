@@ -1,33 +1,56 @@
 <script setup>
 import { ref, computed, defineAsyncComponent, onMounted, onBeforeUnmount } from 'vue'
-import { listPartners, listReferrers, lookupReferral } from './api/map.js'
+import { fetchPartners, listCustomerLogins, listReferrers, lookupReferral } from './api/map.js'
 import { SEGMENTS } from './lib/segments.js'
 import ReferralBanner from './components/referral/ReferralBanner.vue'
+import ReferralStrip from './components/referral/ReferralStrip.vue'
 
 // MapLibre ist groß (~250 kB gzip). Auf der Startseite deshalb nachladen.
 const MunicipalityExplorer = defineAsyncComponent(() => import('./components/municipality-map/MunicipalityExplorer.vue'))
 const RegionList = defineAsyncComponent(() => import('./components/region-list/RegionList.vue'))
 const RecommendationDialog = defineAsyncComponent(() => import('./components/region-list/RecommendationDialog.vue'))
 const ReferralView = defineAsyncComponent(() => import('./components/referral/ReferralView.vue'))
+const PartnerAdmin = defineAsyncComponent(() => import('./components/admin/PartnerAdmin.vue'))
 
 // Prototyp: Die Anmeldung wird simuliert. Tabs und Partnerauswahl stehen für "wer ist eingeloggt".
 const TABS = [
   { id: 'kunden', label: 'Kunden', note: 'Öffentliche Startseite, eine je Segment. Besucher sehen Kunden im Umkreis, nicht freigegebene nur als Zahl.' },
-  { id: 'partner', label: 'Partner', note: 'Vertriebspartner sehen ihr Gebiet und nur ihre Segmente: Kunden und Noch-nicht-Kunden, mit Größe und Lizenz.' },
+  { id: 'partner', label: 'Partner', note: 'Vertriebspartner sehen ihr Gebiet und nur ihr Segment: Kunden und Noch-nicht-Kunden, mit Größe und Lizenz.' },
   { id: 'intern', label: 'Intern', note: 'SpeechMind-Team: alle Ziele aller Segmente, Kunden und Noch-nicht-Kunden.' },
+  { id: 'admin', label: 'Admin', note: 'SpeechMind intern: Vertriebspartner anlegen, ihr Segment und Gebiet festlegen, deaktivieren.' },
   { id: 'liste', label: 'Liste', note: 'Alle Ziele als Tabelle. Filtern, suchen, Umkreis wählen; Klick öffnet Empfehlung und E-Mail.' },
   { id: 'empfehlen', label: 'Empfehlen', note: 'Eingeloggte Kunden mit Lizenz: eigener Empfehlungscode, Einladungen und Rabattstand.' },
 ]
 
-const partners = listPartners()
 const tab = ref(readHash())
-const partnerId = ref(partners[0].id)
+
+// Vertriebspartner: gepflegt im Admin-Tab, danach sofort in Partner- und Listenansicht
+const partners = ref([])
+const partnersLoading = ref(true)
+const partnersVersion = ref(0) // Partnerkarte neu laden, wenn sich Gebiet oder Segment ändert
+const partnerId = ref(null)
+const activePartners = computed(() => partners.value.filter((p) => p.active))
+async function loadPartners() {
+  partners.value = await fetchPartners()
+  partnersLoading.value = false
+  partnersVersion.value++
+  if (!activePartners.value.some((p) => p.id === partnerId.value)) partnerId.value = activePartners.value[0]?.id ?? null
+}
+loadPartners()
+function showPartner(id) {
+  partnerId.value = id
+  select('partner')
+}
 const listScope = ref('intern') // 'intern' oder eine Partner-ID
 const openKey = ref(null)
 
 // Startseite je Segment (im Betrieb eigene Seiten, z. B. /stadtwerke)
 const homeSegment = ref('verwaltung')
 const homeWords = computed(() => SEGMENTS[homeSegment.value])
+
+// Angemeldete Kunden mit Organisation sehen über der Karte ihren Einladungslink
+const customerLogins = listCustomerLogins()
+const homeLogin = ref('') // '' = Besucher, nicht angemeldet
 
 // Einladungslink: ?ref=CODE. Mit Referenzfreigabe startet die Karte beim Empfehlenden.
 const invite = ref(null)
@@ -52,7 +75,7 @@ function dismissInvite() {
 // Empfehlen: nur Kunden mit Lizenz können sich im Prototyp "anmelden"
 const referrers = listReferrers()
 const referrerKey = ref(referrers.find((r) => r.name === 'Hoyerswerda')?.key ?? referrers[0]?.key)
-const currentPartner = computed(() => partners.find((p) => p.id === partnerId.value))
+const currentPartner = computed(() => partners.value.find((p) => p.id === partnerId.value))
 
 const current = computed(() => TABS.find((t) => t.id === tab.value))
 const listPartnerId = computed(() => (listScope.value === 'intern' ? null : Number(listScope.value)))
@@ -121,13 +144,28 @@ function onTabKey(e, i) {
         <div class="map-block-head">
           <h2>{{ homeWords.plural }} in Ihrer Nähe</h2>
           <p>Wir ermitteln Ihren ungefähren Standort und zeigen, wer in der Umgebung schon dabei ist.</p>
-          <label class="as as-inline">
-            <span>Startseite für (Prototyp)</span>
-            <select v-model="homeSegment">
-              <option v-for="(s, k) in SEGMENTS" :key="k" :value="k">{{ s.plural }}</option>
-            </select>
-          </label>
+          <div class="as-group">
+            <label class="as">
+              <span>Startseite für (Prototyp)</span>
+              <select v-model="homeSegment">
+                <option v-for="(s, k) in SEGMENTS" :key="k" :value="k">{{ s.plural }}</option>
+              </select>
+            </label>
+            <label class="as">
+              <span>Angemeldet als (Prototyp)</span>
+              <select v-model="homeLogin">
+                <option value="">Besucher, nicht angemeldet</option>
+                <optgroup label="Kunde mit Organisation">
+                  <option v-for="c in customerLogins.filter((c) => c.canRefer)" :key="c.key" :value="c.key">{{ c.name }} ({{ SEGMENTS[c.segment].label }})</option>
+                </optgroup>
+                <optgroup label="Kunde ohne Organisation">
+                  <option v-for="c in customerLogins.filter((c) => !c.canRefer)" :key="c.key" :value="c.key">{{ c.name }} ({{ SEGMENTS[c.segment].label }})</option>
+                </optgroup>
+              </select>
+            </label>
+          </div>
         </div>
+        <ReferralStrip :target-key="homeLogin || null" />
         <!-- Neu mounten, sobald Segment oder Einladung feststehen: Standort und Daten hängen daran -->
         <MunicipalityExplorer
           :key="`home-${homeSegment}-${inviteStart?.key ?? ''}`"
@@ -161,20 +199,34 @@ function onTabKey(e, i) {
         <label class="as">
           <span>Angemeldet als (Prototyp)</span>
           <select v-model.number="partnerId">
-            <option v-for="p in partners" :key="p.id" :value="p.id">{{ p.name }}</option>
+            <option v-for="p in activePartners" :key="p.id" :value="p.id">{{ p.name }}</option>
           </select>
         </label>
       </div>
-      <p v-if="currentPartner" class="partner-line">
-        Segmente: <strong>{{ currentPartner.segments.map((s) => SEGMENTS[s].plural).join(', ') }}</strong>
-        · Ansprechpartner {{ currentPartner.contact.name }}, {{ currentPartner.contact.phone }}, {{ currentPartner.contact.email }}
-      </p>
-      <MunicipalityExplorer :key="`partner-${partnerId}`" audience="partner" :partner-id="partnerId" variant="page" @recommend="openKey = $event" />
+      <template v-if="currentPartner">
+        <p class="partner-line">
+          Segment: <strong>{{ SEGMENTS[currentPartner.segment].plural }}</strong>
+          · Ansprechpartner {{ currentPartner.contact.name }}, {{ currentPartner.contact.phone }}, {{ currentPartner.contact.email }}
+        </p>
+        <MunicipalityExplorer
+          :key="`partner-${partnerId}-${partnersVersion}`"
+          audience="partner"
+          :partner-id="partnerId"
+          variant="page"
+          @recommend="openKey = $event"
+        />
+      </template>
+      <p v-else-if="!partnersLoading" class="partner-line">Kein aktiver Partner. Partner legst du im Tab Admin an.</p>
     </main>
 
     <main v-else-if="tab === 'intern'" role="tabpanel" aria-labelledby="tab-intern" class="app-view">
       <div class="view-bar"><h1>Alle Ziele</h1></div>
       <MunicipalityExplorer audience="intern" variant="page" @recommend="openKey = $event" />
+    </main>
+
+    <main v-else-if="tab === 'admin'" role="tabpanel" aria-labelledby="tab-admin" class="app-view">
+      <div class="view-bar"><h1>Vertriebspartner</h1></div>
+      <PartnerAdmin :partners="partners" :loading="partnersLoading" @saved="loadPartners" @show="showPartner" />
     </main>
 
     <main v-else-if="tab === 'empfehlen'" role="tabpanel" aria-labelledby="tab-empfehlen" class="app-view">
@@ -197,7 +249,7 @@ function onTabKey(e, i) {
           <span>Angemeldet als (Prototyp)</span>
           <select v-model="listScope">
             <option value="intern">SpeechMind intern (alle)</option>
-            <option v-for="p in partners" :key="p.id" :value="String(p.id)">Partner: {{ p.name }}</option>
+            <option v-for="p in activePartners" :key="p.id" :value="String(p.id)">Partner: {{ p.name }}</option>
           </select>
         </label>
       </div>
@@ -279,7 +331,7 @@ body {
 .view-bar h1 { margin: 0; font-size: 1.8rem; }
 .as { display: grid; gap: 4px; }
 .as span { font-size: 0.85rem; color: var(--page-muted); }
-.as-inline { margin-left: auto; }
+.as-group { display: flex; flex-wrap: wrap; gap: 10px 14px; margin-left: auto; }
 .partner-line { margin: -6px 0 14px; color: var(--page-muted); font-size: 0.95rem; }
 .partner-line strong { color: var(--page-text); }
 .as select {

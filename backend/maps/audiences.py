@@ -5,7 +5,7 @@ egal was das Frontend anfragt.
 
 scope
     "radius"     Umkreis um den Standort des Besuchers
-    "territory"  alle Ziele in den PartnerTerritory-Präfixen des Partners, nur deren Segmente
+    "territory"  alle Ziele in den Gebietsregionen des Partners (PartnerTerritory), nur sein Segment
     "all"        ganz Deutschland
 include_prospects
     False: nur Kunden. True: auch Ziele, die noch keine Kunden sind.

@@ -6,6 +6,7 @@ from django.core.exceptions import ValidationError
 
 
 class RegionLevel(models.TextChoices):
+    LAND = "land", "Land"
     GEMEINDE = "gemeinde", "Gemeinde/Stadt"
     VERBAND = "verband", "Amt/Verwaltungsgemeinschaft"
     KREIS = "kreis", "Landkreis/Kreis"
@@ -42,15 +43,17 @@ class Segment(models.TextChoices):
 
 class Region(models.Model):
     """
-    Geo-Referenz: alle Gemeinden, Ämter/VG und Kreise mit Grenzen und Strukturdaten.
+    Geo-Referenz: alle Länder, Kreise, Ämter/VG und Gemeinden mit Grenzen und Strukturdaten.
     Importiert (import_vg250), selten geändert, ohne Kundenbezug. Wer Kunde ist, steht in Target.
     """
 
-    # Gemeinde: AGS (8), Kreis: Kreisschlüssel (5), Amt/VG: Regionalschlüssel des Verbands (9).
-    # Alle beginnen mit dem Länderschlüssel, darauf baut PartnerTerritory auf.
+    # Land: Länderschlüssel (2), Kreis: Kreisschlüssel (5), Gemeinde: AGS (8), Amt/VG: Regionalschlüssel
+    # des Verbands (9). Alle beginnen mit dem Länderschlüssel; Gemeinden beginnen mit dem Schlüssel
+    # ihres Kreises. Darauf baut PartnerTerritory auf.
     key = models.CharField("Schlüssel (AGS/RS)", max_length=12, unique=True)
     level = models.CharField(max_length=10, choices=RegionLevel.choices, default=RegionLevel.GEMEINDE)
     name = models.CharField(max_length=200)
+    kind = models.CharField("Bezeichnung", max_length=60, blank=True, help_text="Aus VG250 (BEZ): Landkreis, Kreisfreie Stadt, Stadt, Gemeinde, …")
     state = models.CharField("Bundesland", max_length=2, choices=State.choices, db_index=True)
     parent = models.ForeignKey(
         "self", on_delete=models.SET_NULL, null=True, blank=True, related_name="children",
@@ -135,13 +138,16 @@ class Target(models.Model):
 
 class SalesPartner(models.Model):
     """
-    Vertriebspartner, gepflegt über eine Liste (import_partners, eine Zeile je Gebiet).
+    Vertriebspartner, angelegt im Admin-Bereich der Karte (nur SpeechMind intern, siehe partner_admin.py).
+    Ein Partner verkauft genau ein Segment und sieht in seinem Gebiet nur dieses. Wer zwei Segmente
+    betreut, wird zweimal angelegt.
     Logins sind User; Kunden, die ein Partner-User anlegt, erkennt man an Organization.creater_user.
     (Organization.is_partner meint API-Partner und spielt hier keine Rolle.)
     """
 
-    external_id = models.CharField("ID aus der Liste", max_length=40, unique=True)
     name = models.CharField(max_length=200)
+    segment = models.CharField(max_length=20, choices=Segment.choices)
+    external_id = models.CharField("ID im CRM", max_length=40, unique=True, null=True, blank=True)
     contact_name = models.CharField("Ansprechpartner", max_length=200, blank=True)
     email = models.EmailField(blank=True)
     phone = models.CharField(max_length=40, blank=True)
@@ -154,38 +160,35 @@ class SalesPartner(models.Model):
         verbose_name_plural = "Vertriebspartner"
 
     def __str__(self):
-        return self.name
+        return f"{self.name} [{self.segment}]"
 
 
 class PartnerTerritory(models.Model):
     """
-    Ein Gebiet eines Partners, für bestimmte Segmente. Präfix des Regionalschlüssels:
-    '14' = ganz Sachsen, '146' = Direktionsbezirk, '14625' = Landkreis Bautzen.
-    Ein Ziel gehört zum Gebiet, wenn sein Regionsschlüssel mit dem Präfix beginnt und
-    sein Segment in segments steht. So kann ein Partner Stadtwerke in ganz Sachsen und
-    Verwaltungen nur in zwei Kreisen betreuen.
+    Ein Stück Gebiet eines Partners: ein Land, ein Kreis oder eine Gemeinde aus der Referenz.
+    Ein Ziel gehört dazu, wenn der Schlüssel seiner Region mit dem Schlüssel dieser Region
+    beginnt (und sein Segment das des Partners ist).
+    Ämter/VG gehen nicht: Ihre Gemeinden tragen den Verbandsschlüssel nicht im AGS.
     """
 
+    ALLOWED_LEVELS = (RegionLevel.LAND, RegionLevel.KREIS, RegionLevel.GEMEINDE)
+
     partner = models.ForeignKey(SalesPartner, on_delete=models.CASCADE, related_name="territories")
-    key_prefix = models.CharField("Schlüssel-Präfix", max_length=12)
-    label = models.CharField("Bezeichnung", max_length=200, blank=True)
-    segments = ArrayField(models.CharField(max_length=20, choices=Segment.choices), default=list)
+    region = models.ForeignKey(Region, on_delete=models.PROTECT, related_name="+")
 
     class Meta:
         verbose_name = "Partnergebiet"
         verbose_name_plural = "Partnergebiete"
         constraints = [
-            models.UniqueConstraint(fields=["partner", "key_prefix"], name="unique_partner_prefix"),
+            models.UniqueConstraint(fields=["partner", "region"], name="unique_partner_region"),
         ]
 
     def __str__(self):
-        return self.label or self.key_prefix
+        return self.region.name
 
     def clean(self):
-        if not (self.key_prefix.isdigit() and len(self.key_prefix) >= 2):
-            raise ValidationError({"key_prefix": "Mindestens der zweistellige Länderschlüssel, nur Ziffern."})
-        if not self.segments or not set(self.segments) <= set(Segment.values):
-            raise ValidationError({"segments": f"Mindestens ein Segment aus {', '.join(Segment.values)}."})
+        if self.region.level not in self.ALLOWED_LEVELS:
+            raise ValidationError({"region": "Nur Land, Kreis oder Gemeinde. Für ein Amt die Gemeinden einzeln wählen."})
 
 
 class ReferralStatus(models.TextChoices):

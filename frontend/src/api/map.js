@@ -1,14 +1,12 @@
 import { REGIONS, REGION_BY_KEY } from '../mocks/regions.js'
 import { EXTRA_TARGETS, SEGMENT_OFFSET } from '../mocks/targets.js'
 import { MOCK_CUSTOMERS } from '../mocks/customers.js'
-import { MOCK_PARTNERS } from '../mocks/partners.js'
+import { SEED_PARTNERS } from '../mocks/partners.js'
 import { MOCK_REFERRALS, REFERRAL_RULES, codeFor } from '../mocks/referrals.js'
-import { SEGMENT_KEYS } from '../lib/segments.js'
+import { SEGMENTS, SEGMENT_KEYS } from '../lib/segments.js'
 import { sizeClassOf } from '../lib/sizeClasses.js'
 import { haversineKm } from '../lib/geo.js'
 import { recommend } from '../mocks/recommendations.js'
-// Vereinigte Kreis-/Landesgrenzen je Mock-Partner (© GeoBasis-DE / BKG 2025, dl-de/by-2-0, vereinfacht)
-import TERRITORIES from '../mocks/territories.json'
 
 const USE_MOCK = import.meta.env.VITE_MAP_USE_MOCK !== 'false'
 const API_BASE = import.meta.env.VITE_API_BASE ?? '/api'
@@ -22,11 +20,12 @@ export const NEW_WITHIN_DAYS = 30
  * properties: key, name, segment, level, state, status ('customer' | 'prospect'), dazu je nach
  * Zielgruppe customer_since, size, licence, postcodes, distance_km.
  *   kunden:  { segment, lat, lng, radiusKm }
- *   partner: { partnerId }   (später aus der Anmeldung); meta.territory = Gebietsfläche als GeoJSON
+ *   partner: { partnerId }   (später aus der Anmeldung); nur das Segment des Partners, meta.territory = Gebietsfläche als GeoJSON
  *   intern:  —
  * segment optional: nur dieses Segment. meta.segments = Segmente, die im Ausschnitt vorkommen dürfen.
  */
 export async function fetchTargets({ audience, segment, lat, lng, radiusKm, partnerId }) {
+  if (USE_MOCK && audience === 'partner') await loadAreas()
   const raw = USE_MOCK
     ? mockTargets({ audience, segment, lat, lng, radiusKm, partnerId })
     : await getJson(`/map/${audience}/targets/`, { segment, lat, lng, radius: radiusKm, partner: partnerId })
@@ -35,6 +34,7 @@ export async function fetchTargets({ audience, segment, lat, lng, radiusKm, part
 
 /** Die zuletzt dazugekommenen Kunden: { days, total, items: [{ key?, name?, segment, level, state, customer_since, lat?, lng? }] } */
 export async function fetchRecent({ audience, segment, partnerId }) {
+  if (USE_MOCK && audience === 'partner') await loadAreas()
   return USE_MOCK
     ? mockRecent({ audience, segment, partnerId })
     : getJson(`/map/${audience}/recent/`, { segment, partner: partnerId })
@@ -52,15 +52,76 @@ export async function fetchRecommendation(key, { audience = 'intern', partnerId 
   return recommend(target, all)
 }
 
-/** Nur im Prototyp: Partner zum Durchschalten. Im Betrieb kommt der Partner aus der Anmeldung. */
-export function listPartners() {
-  return MOCK_PARTNERS.map(({ id, name, contact, territories }) => ({
-    id,
-    name,
-    contact,
-    segments: [...new Set(territories.flatMap((t) => t.segments))],
-    territories: territories.map((t) => t.label),
-  }))
+// ---- Vertriebspartner (Admin, nur SpeechMind intern) ----
+
+/**
+ * Alle Partner mit Gebiet und Abdeckung.
+ * [{ id, name, segment, active, contact: { name, email, phone, website },
+ *    areas: [{ key, name, level, kind }], stats: { targets, customers } }]
+ */
+export async function fetchPartners() {
+  if (!USE_MOCK) return (await getJson('/partners/')).results
+  await loadAreas()
+  return partnerStore.map(partnerOut)
+}
+
+/**
+ * Partner anlegen (ohne id) oder ändern. areas = Liste von Regionsschlüsseln.
+ * Gibt den gespeicherten Partner zurück, bei ungültigen Angaben einen Fehler mit Text.
+ */
+export async function savePartner({ id, name, segment, active, contact, areas }) {
+  const body = { name: name.trim(), segment, active, contact: { ...contact }, areas: [...areas] }
+  if (!USE_MOCK) return sendJson(id ? `/partners/${id}/` : '/partners/', id ? 'PUT' : 'POST', body)
+  await loadAreas()
+  const error = validatePartner(body)
+  if (error) throw new Error(error)
+  const saved = { ...body, id: id ?? Math.max(100, ...partnerStore.map((p) => p.id)) + 1 }
+  partnerStore = id ? partnerStore.map((p) => (p.id === id ? saved : p)) : [...partnerStore, saved]
+  return partnerOut(saved)
+}
+
+/**
+ * Vorschau im Partnerdialog, bevor gespeichert wird: wie viele Ziele im Gebiet liegen und wo es
+ * sich mit anderen Partnern desselben Segments überschneidet.
+ * { targets, customers, overlaps: [{ partner, area, other }] }
+ */
+export async function previewPartner({ id, segment, areas }) {
+  if (!USE_MOCK) return sendJson('/partners/preview/', 'POST', { id, segment, areas })
+  await loadAreas()
+  const overlaps = []
+  for (const other of partnerStore) {
+    if (other.id === id || other.segment !== segment || !other.active) continue
+    for (const a of areas) {
+      const hit = other.areas.find((b) => a.startsWith(b) || b.startsWith(a))
+      if (hit) overlaps.push({ partner: other.name, area: areaName(a), other: areaName(hit) })
+    }
+  }
+  return { ...coverage(segment, areas), overlaps }
+}
+
+/**
+ * Länder und Kreise mit Fläche, für die Karte im Partnerdialog.
+ * [{ key, name, level: 'land' | 'kreis', kind, geometry }]
+ */
+export async function fetchAreaMap() {
+  if (!USE_MOCK) return (await getJson('/geo/areas/', { level: 'land,kreis' })).results
+  const all = await loadAreas()
+  return Object.entries(all).map(([key, a]) => ({ key, ...a }))
+}
+
+/** Gebietssuche: Länder, Kreise und Gemeinden über Name oder Schlüssel. [{ key, name, level, kind, state }] */
+export async function searchAreas(query) {
+  const q = query.trim()
+  if (q.length < 2) return []
+  if (!USE_MOCK) return (await getJson('/geo/areas/', { q })).results
+  await loadAreas()
+  const needle = q.toLowerCase()
+  return areaCatalog()
+    .filter((a) => a.name.toLowerCase().includes(needle) || a.key.startsWith(q))
+    .sort((a, b) => LEVEL_ORDER[a.level] - LEVEL_ORDER[b.level]
+      || Number(!a.name.toLowerCase().startsWith(needle)) - Number(!b.name.toLowerCase().startsWith(needle))
+      || a.name.localeCompare(b.name, 'de'))
+    .slice(0, 10)
 }
 
 // ---- Empfehlungsprogramm ----
@@ -70,6 +131,14 @@ export function listReferrers() {
   return mockAllTargets()
     .filter(canRefer)
     .map(({ key, name, segment }) => ({ key, name, segment }))
+    .sort((a, b) => a.name.localeCompare(b.name, 'de'))
+}
+
+/** Nur im Prototyp: alle Kunden als simulierte Anmeldung. canRefer = mit Organisation und Lizenz. */
+export function listCustomerLogins() {
+  return mockAllTargets()
+    .filter((t) => t.is_customer)
+    .map((t) => ({ key: t.key, name: t.name, segment: t.segment, canRefer: canRefer(t) }))
     .sort((a, b) => a.name.localeCompare(b.name, 'de'))
 }
 
@@ -123,6 +192,22 @@ export async function searchPlaces(query, { signal } = {}) {
   if (USE_MOCK) return mockSearch(q)
   const { results } = await getJson('/geo/search/', { q }, { signal })
   return results
+}
+
+function csrfToken() {
+  return document.cookie.match(/(?:^|; )csrftoken=([^;]*)/)?.[1] ?? ''
+}
+
+async function sendJson(path, method, body) {
+  const res = await fetch(API_BASE + path, {
+    method,
+    headers: { 'Content-Type': 'application/json', Accept: 'application/json', 'X-CSRFToken': csrfToken() },
+    credentials: 'same-origin',
+    body: JSON.stringify(body),
+  })
+  const data = await res.json().catch(() => ({}))
+  if (!res.ok) throw new Error(data.error ?? `Speichern fehlgeschlagen (HTTP ${res.status}).`)
+  return data
 }
 
 async function getJson(path, params, { signal } = {}) {
@@ -200,8 +285,62 @@ export function mockAllTargets() {
   })
 }
 
-const inTerritory = (partner, t) =>
-  partner.territories.some((tt) => t.region_key.startsWith(tt.prefix) && tt.segments.includes(t.segment))
+// ---- Mock: Partner und Gebiete (im Backend SalesPartner, PartnerTerritory, Region) ----
+
+let partnerStore = structuredClone(SEED_PARTNERS) // Änderungen leben bis zum Neuladen der Seite
+
+// Länder und Kreise mit vereinfachter Fläche (© GeoBasis-DE / BKG 2025, dl-de/by-2-0). Groß, daher nachladen.
+let AREAS = null
+const loadAreas = async () => (AREAS ??= (await import('../mocks/areas.json')).default)
+
+const LEVEL_ORDER = { land: 0, kreis: 1, gemeinde: 2 }
+const STATE_NAME = { 11: 'Berlin', 12: 'Brandenburg', 13: 'Mecklenburg-Vorpommern', 14: 'Sachsen', 15: 'Sachsen-Anhalt', 16: 'Thüringen' }
+
+/** Alle wählbaren Gebiete. Kreisfreie Städte (AGS = Kreis + '000') gibt es nur als Kreis. */
+function areaCatalog() {
+  const big = Object.entries(AREAS).map(([key, a]) => ({ key, name: a.name, level: a.level, kind: a.kind ?? null, state: STATE_NAME[key.slice(0, 2)] }))
+  const gemeinden = REGIONS
+    .filter((r) => r.level === 'gemeinde' && !r.key.endsWith('000'))
+    .map((r) => ({ key: r.key, name: r.name, level: 'gemeinde', kind: 'Gemeinde/Stadt', state: r.state }))
+  return [...big, ...gemeinden]
+}
+
+function areaRef(key) {
+  const a = AREAS[key]
+  if (a) return { key, name: a.name, level: a.level, kind: a.kind ?? null }
+  const r = REGION_BY_KEY[key] ?? REGION_BY_KEY[`${key}000`]
+  return r ? { key, name: r.name, level: r.level, kind: 'Gemeinde/Stadt' } : { key, name: key, level: null, kind: null }
+}
+const areaName = (key) => areaRef(key).name
+
+const inPartnerArea = (partner, t) => t.segment === partner.segment && partner.areas.some((a) => t.region_key.startsWith(a))
+
+function coverage(segment, areas) {
+  const rows = mockAllTargets().filter((t) => t.segment === segment && areas.some((a) => t.region_key.startsWith(a)))
+  return { targets: rows.length, customers: rows.filter((t) => t.is_customer).length }
+}
+
+const partnerOut = (p) => ({ ...p, contact: { ...p.contact }, areas: p.areas.map(areaRef), stats: coverage(p.segment, p.areas) })
+
+function validatePartner({ name, segment, areas }) {
+  if (!name) return 'Bitte einen Namen angeben.'
+  if (!SEGMENTS[segment]) return 'Bitte ein Segment wählen.'
+  if (!areas.length) return 'Bitte mindestens ein Gebiet wählen.'
+  const unknown = areas.filter((a) => areaRef(a).level == null)
+  if (unknown.length) return `Unbekannte Gebiete: ${unknown.join(', ')}.`
+  const nested = areas.find((a) => areas.some((b) => b !== a && a.startsWith(b)))
+  if (nested) return `${areaName(nested)} liegt schon in einem anderen Gebiet des Partners.`
+  return null
+}
+
+/** Gebietsfläche als eine MultiPolygon-Geometrie. Gemeinden haben im Mock keine Fläche. */
+function mergedArea(keys) {
+  const polys = keys.flatMap((k) => {
+    const g = AREAS[k]?.geometry
+    return !g ? [] : g.type === 'Polygon' ? [g.coordinates] : g.coordinates
+  })
+  return polys.length ? { type: 'MultiPolygon', coordinates: polys } : null
+}
 
 function scoped(audience, partnerId, segment) {
   const cfg = AUDIENCES[audience]
@@ -209,13 +348,13 @@ function scoped(audience, partnerId, segment) {
   let rows = mockAllTargets()
   const meta = { segments: SEGMENT_KEYS }
   if (cfg.scope === 'territory') {
-    const partner = MOCK_PARTNERS.find((p) => p.id === Number(partnerId))
-    if (!partner) throw new Error('Für diesen Partner ist kein Gebiet hinterlegt.')
-    rows = rows.filter((t) => inTerritory(partner, t))
+    const partner = partnerStore.find((p) => p.id === Number(partnerId) && p.active)
+    if (!partner) throw new Error('Diesen Partner gibt es nicht oder er ist deaktiviert.')
+    rows = rows.filter((t) => inPartnerArea(partner, t))
     meta.partner = partner.name
-    meta.territories = partner.territories.map((t) => t.label)
-    meta.segments = SEGMENT_KEYS.filter((s) => partner.territories.some((t) => t.segments.includes(s)))
-    meta.territory = TERRITORIES[partner.id] ?? null // GeoJSON-Geometrie für die Fläche auf der Karte
+    meta.territories = partner.areas.map(areaName)
+    meta.segments = [partner.segment]
+    meta.territory = mergedArea(partner.areas) // GeoJSON-Geometrie für die Fläche auf der Karte
   }
   if (segment) {
     rows = rows.filter((t) => t.segment === segment)
