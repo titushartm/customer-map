@@ -1,6 +1,6 @@
 <script setup>
 import { computed } from 'vue'
-import { SEGMENTS } from '../../lib/segments.js'
+import { wordsFor } from '../../lib/segments.js'
 
 // Die zuletzt dazugekommenen Kunden. Klein als Zeile auf der Karte, groß als Liste im Panel.
 const props = defineProps({
@@ -31,7 +31,7 @@ const period = computed(() => {
 
 const anonymous = (item) => (item.level === 'kreis'
   ? `Ein Landkreis in ${item.state}`
-  : `${SEGMENTS[item.segment]?.one ?? 'Eine Organisation'} in ${item.state}`)
+  : `${wordsFor(item.segment, item.country)?.one ?? 'Eine Organisation'} in ${item.state}`)
 const label = (item) => item.name ?? anonymous(item)
 
 const compactLine = computed(() => {

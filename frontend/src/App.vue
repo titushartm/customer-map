@@ -1,7 +1,7 @@
 <script setup>
 import { ref, computed, defineAsyncComponent, onMounted, onBeforeUnmount } from 'vue'
 import { fetchPartners, listCustomerLogins, listReferrers, lookupReferral } from './api/map.js'
-import { SEGMENTS } from './lib/segments.js'
+import { SEGMENTS, wordsFor, commonCountry } from './lib/segments.js'
 import ReferralBanner from './components/referral/ReferralBanner.vue'
 import ReferralStrip from './components/referral/ReferralStrip.vue'
 import LicenceAdvisor from './components/licence/LicenceAdvisor.vue'
@@ -158,10 +158,10 @@ function onTabKey(e, i) {
               <select v-model="homeLogin">
                 <option value="">Besucher, nicht angemeldet</option>
                 <optgroup label="Kunde mit Organisation">
-                  <option v-for="c in customerLogins.filter((c) => c.canRefer)" :key="c.key" :value="c.key">{{ c.name }} ({{ SEGMENTS[c.segment].label }})</option>
+                  <option v-for="c in customerLogins.filter((c) => c.canRefer)" :key="c.key" :value="c.key">{{ c.name }} ({{ wordsFor(c.segment, c.country).label }})</option>
                 </optgroup>
                 <optgroup label="Kunde ohne Organisation">
-                  <option v-for="c in customerLogins.filter((c) => !c.canRefer)" :key="c.key" :value="c.key">{{ c.name }} ({{ SEGMENTS[c.segment].label }})</option>
+                  <option v-for="c in customerLogins.filter((c) => !c.canRefer)" :key="c.key" :value="c.key">{{ c.name }} ({{ wordsFor(c.segment, c.country).label }})</option>
                 </optgroup>
               </select>
             </label>
@@ -210,7 +210,7 @@ function onTabKey(e, i) {
       </div>
       <template v-if="currentPartner">
         <p class="partner-line">
-          Segment: <strong>{{ SEGMENTS[currentPartner.segment].plural }}</strong>
+          Segment: <strong>{{ wordsFor(currentPartner.segment, commonCountry(currentPartner.areas)).plural }}</strong>
           · Ansprechpartner {{ currentPartner.contact.name }}, {{ currentPartner.contact.phone }}, {{ currentPartner.contact.email }}
         </p>
         <MunicipalityExplorer

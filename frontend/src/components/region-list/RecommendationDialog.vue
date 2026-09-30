@@ -1,7 +1,7 @@
 <script setup>
 import { ref, watch, nextTick, computed } from 'vue'
 import { fetchRecommendation, fetchReferralAccount } from '../../api/map.js'
-import { SEGMENTS, kindLabel } from '../../lib/segments.js'
+import { SEGMENTS, kindLabel, wordsFor } from '../../lib/segments.js'
 import { STATUS_LABEL } from '../../lib/referral.js'
 
 const props = defineProps({
@@ -49,7 +49,7 @@ watch(() => props.targetKey, async (key) => {
 })
 
 const r = computed(() => data.value?.target)
-const seg = computed(() => SEGMENTS[r.value?.segment] ?? SEGMENTS.verwaltung)
+const seg = computed(() => wordsFor(r.value?.segment, r.value?.country) ?? SEGMENTS.verwaltung)
 
 async function copy(what) {
   const value = what === 'subject' ? subject.value : what === 'body' ? body.value : `${subject.value}\n\n${body.value}`

@@ -184,7 +184,7 @@ export function listReferrers() {
 export function listCustomerLogins() {
   return mockAllTargets()
     .filter((t) => t.is_customer)
-    .map((t) => ({ key: t.key, name: t.name, segment: t.segment, licence: t.licence, canRefer: canRefer(t) }))
+    .map((t) => ({ key: t.key, name: t.name, segment: t.segment, country: t.country, licence: t.licence, canRefer: canRefer(t) }))
     .sort((a, b) => a.name.localeCompare(b.name, 'de'))
 }
 
@@ -199,7 +199,7 @@ export async function fetchReferralAccount(key) {
 
 /**
  * Öffentlich: Code aus einem Einladungslink auflösen.
- * { valid, code, inviteePct, referrer: { name?, segment, level, state, lat?, lng?, key? } }
+ * { valid, code, inviteePct, referrer: { name?, segment, level, state, country, lat?, lng?, key? } }
  */
 export async function lookupReferral(code) {
   if (!USE_MOCK) return getJson(`/referral/${encodeURIComponent(code)}/`)
@@ -658,6 +658,7 @@ function mockLookupReferral(code) {
       segment: me.segment,
       level: me.level,
       state: me.state,
+      country: me.country,
       lat: named ? me.lat : null,
       lng: named ? me.lng : null,
     },

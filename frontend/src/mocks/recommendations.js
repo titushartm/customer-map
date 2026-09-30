@@ -3,7 +3,7 @@
 // hier steht es im Mock, damit sich Inhalt und Ton im Prototyp ausprobieren lassen.
 import { haversineKm } from '../lib/geo.js'
 import { sizeClassOf } from '../lib/sizeClasses.js'
-import { SEGMENTS, withArticle, sizeText } from '../lib/segments.js'
+import { wordsFor, withArticle, sizeText } from '../lib/segments.js'
 
 const NEARBY_KM = 60
 
@@ -70,7 +70,7 @@ export function suggestLicence(target, all) {
  * @param {object[]} all    alle Ziele mit Kundenstatus
  */
 export function recommend(target, all) {
-  const seg = SEGMENTS[target.segment]
+  const seg = wordsFor(target.segment, target.country)
   const others = all.filter((t) => t.key !== target.key)
   const customers = others.filter((t) => t.is_customer)
   const withDistance = (t) => ({ ...t, distance_km: Math.round(haversineKm(target.lat, target.lng, t.lat, t.lng)) })
@@ -102,7 +102,7 @@ export function recommend(target, all) {
 
   return {
     target: {
-      key: target.key, name: target.name, segment: target.segment, level: target.level, state: target.state,
+      key: target.key, name: target.name, segment: target.segment, level: target.level, state: target.state, country: target.country,
       size: target.size, postcodes: target.postcodes, is_customer: target.is_customer,
       customer_since: target.customer_since, licence: target.licence,
     },

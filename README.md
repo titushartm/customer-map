@@ -48,6 +48,8 @@ Empfehlen
 
 Neue Segmente (z. B. Sparkassen) brauchen einen Eintrag in `Segment` (`models.py`) und `SEGMENTS` (`frontend/src/lib/segments.js`: Wörter, Größeneinheit, Sitzungsart für den E-Mail-Text) und eine Liste der Ziele mit Region.
 
+Heißt ein Segment in einem Land anders, bleibt der Schlüssel gleich und nur die Wörter ändern sich: `COUNTRY_WORDS` in `segments.js`, abgerufen mit `wordsFor(segment, land)`. So ist `drk` in Deutschland der DRK-Verband, in Österreich die Rotkreuz-Bezirksstelle, in der Schweiz der SRK-Kantonalverband und in Frankreich die Croix-Rouge-Delegation. Wo das Land bekannt ist (Zeile, Dialog, E-Mail, Partner mit Gebiet in einem Land), steht der Landesname; in gemischten Übersichten (Filter, Segmentauswahl) der deutsche.
+
 ## Vertriebspartner
 
 Partner legt das Team im Tab Admin an, es gibt keine Liste zum Hochladen. Der Dialog hat:
@@ -64,7 +66,7 @@ Im Mock liegen die Partner in `mocks/partners.js`; Änderungen im Dialog leben b
 
 ## Länder
 
-Verkauft wird in Deutschland, Österreich, der Schweiz und Frankreich (Festland, mit Korsika; ohne Überseegebiete). Die Ebenen heißen intern überall gleich, wie sie vor Ort heißen, steht in `Region.kind`:
+Verkauft wird in Deutschland, Österreich, der Schweiz und Frankreich (Festland, mit Korsika; ohne Überseegebiete, so entschieden am 30.09.2026). Die Ebenen heißen intern überall gleich, wie sie vor Ort heißen, steht in `Region.kind`:
 
 | Ebene | DE | AT | CH | FR |
 |---|---|---|---|---|
@@ -76,7 +78,7 @@ Verkauft wird in Deutschland, Österreich, der Schweiz und Frankreich (Festland,
 
 - **Schlüssel:** `<Land>-<Ebene>-<amtlicher Code>`, z. B. `DE-K-14625`, `AT-G-60101`, `CH-G-261`, `FR-K-2A`; der Staat ist nur `AT`. Das Ebenen-Kürzel (L, K, V, G) ist nötig, weil Codes verschiedener Ebenen kollidieren (Région 84 und Département 84, Schweizer Bezirks- und Gemeindenummern).
 - **Enthaltensein:** über `Region.path`, die Schlüssel aller Vorfahren (`/CH/CH-L-1/CH-K-112/CH-G-261/`). „A liegt in B“ heißt: A.path beginnt mit B.path. Das funktioniert unabhängig davon, wie ein Land seine Codes aufbaut (in der Schweiz steckt der Kanton nicht in der Gemeindenummer). `import_regions` setzt `parent`, danach `Region.rebuild_tree` den Pfad, das Land (`state`) und `same_as_parent` (deckungsgleich mit der übergeordneten Region wie kreisfreie Städte, Statutarstädte, Paris; die bietet der Gebietsdialog nicht doppelt an).
-- **Welche Ebenen als Verwaltung verkauft werden** (letzte Zeile der Tabelle), steht in `TARGET_LEVELS` in `import_regions.py`. Österreichische und Schweizer Bezirke sind keine eigenen Gebietskörperschaften, Kantone und Régions verkaufen wir vorerst nicht. Bitte bestätigen.
+- **Welche Ebenen als Verwaltung verkauft werden** (letzte Zeile der Tabelle), steht in `TARGET_LEVELS` in `import_regions.py`. Österreichische und Schweizer Bezirke sind keine eigenen Gebietskörperschaften, Kantone und Régions verkaufen wir vorerst nicht. So entschieden am 30.09.2026.
 
 Quellen, alle frei nutzbar mit Namensnennung (steht in der Kartenattribution):
 
@@ -103,7 +105,7 @@ Länder kommen einzeln dazu, wenn wir dort verkaufen. Es reicht:
 
 Im Mock: das Land in `scripts/build_areas.py` ergänzen und die Datei neu bauen; Beispielgemeinden in `mocks/regions.js` mit `country` und `parent`.
 
-Offen je Land: Sprache der öffentlichen Startseite (Frankreich, Romandie, Tessin) und Segmentnamen (DRK heißt in AT/CH/FR Rotes Kreuz, SRK, Croix-Rouge).
+Sprache: Die Oberfläche ist deutsch. Französisch (Frankreich, Romandie) und Italienisch (Tessin) kommen später über i18n; bis dahin keine Texte je Land duplizieren.
 
 ## Lizenzempfehlung
 

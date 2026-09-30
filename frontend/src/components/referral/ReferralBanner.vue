@@ -1,6 +1,6 @@
 <script setup>
 import { computed } from 'vue'
-import { SEGMENTS } from '../../lib/segments.js'
+import { wordsFor } from '../../lib/segments.js'
 
 // Öffentliche Startseite, wenn jemand über einen Einladungslink (?ref=CODE) kommt.
 const props = defineProps({
@@ -14,7 +14,7 @@ const who = computed(() => {
   const r = props.invite.referrer
   if (!r) return null
   if (r.name) return r.name
-  const one = r.level === 'kreis' ? 'Ein Landkreis' : SEGMENTS[r.segment]?.one ?? 'Eine Organisation'
+  const one = r.level === 'kreis' ? 'Ein Landkreis' : wordsFor(r.segment, r.country)?.one ?? 'Eine Organisation'
   return `${one} aus ${r.state}`
 })
 </script>

@@ -1,7 +1,7 @@
 <script setup>
 import { ref, computed, watch, nextTick, defineAsyncComponent } from 'vue'
 import { fetchAreaMap, previewPartner, savePartner, searchAreas } from '../../api/map.js'
-import { SEGMENTS } from '../../lib/segments.js'
+import { SEGMENTS, wordsFor, commonCountry } from '../../lib/segments.js'
 import { COUNTRIES, COUNTRY_CODES } from '../../lib/countries.js'
 
 const AreaPickerMap = defineAsyncComponent(() => import('./AreaPickerMap.vue'))
@@ -52,6 +52,7 @@ watch(() => props.open, async (open) => {
 })
 
 const keys = computed(() => form.value.areas.map((a) => a.key))
+const segPlural = computed(() => wordsFor(form.value.segment, commonCountry(form.value.areas)).plural)
 const sortedAreas = computed(() => [...form.value.areas].sort((a, b) =>
   COUNTRY_CODES.indexOf(a.country) - COUNTRY_CODES.indexOf(b.country)
   || LEVEL_ORDER[a.level] - LEVEL_ORDER[b.level] || a.name.localeCompare(b.name, 'de')))
@@ -259,7 +260,7 @@ async function save() {
           <section class="pd-card" aria-live="polite">
             <h3>Im Gebiet</h3>
             <p v-if="preview">
-              <strong>{{ numFmt.format(preview.targets) }}</strong> {{ SEGMENTS[form.segment].plural }},
+              <strong>{{ numFmt.format(preview.targets) }}</strong> {{ segPlural }},
               davon <strong>{{ numFmt.format(preview.customers) }}</strong> {{ preview.customers === 1 ? 'Kunde' : 'Kunden' }}
               ({{ preview.targets ? Math.round(100 * preview.customers / preview.targets) : 0 }} %).
             </p>
@@ -268,7 +269,7 @@ async function save() {
               <h3 class="pd-warn-head">Schon vergeben</h3>
               <ul class="pd-warn">
                 <li v-for="(o, i) in preview.overlaps" :key="i">
-                  {{ o.area }}: {{ o.partner }} betreut dort schon {{ SEGMENTS[form.segment].plural }}<template v-if="o.other !== o.area"> ({{ o.other }})</template>.
+                  {{ o.area }}: {{ o.partner }} betreut dort schon {{ segPlural }}<template v-if="o.other !== o.area"> ({{ o.other }})</template>.
                 </li>
               </ul>
               <p class="pd-muted">

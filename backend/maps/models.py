@@ -37,7 +37,11 @@ LEVEL_TAG = {RegionLevel.LAND: "L", RegionLevel.KREIS: "K", RegionLevel.VERBAND:
 
 
 class Segment(models.TextChoices):
-    """Wem wir verkaufen. Gleiche Schlüssel wie frontend/src/lib/segments.js."""
+    """
+    Wem wir verkaufen. Gleiche Schlüssel wie frontend/src/lib/segments.js. Die Schlüssel gelten in allen
+    Ländern; wie ein Segment vor Ort heißt (drk: Rotkreuz-Bezirksstelle in AT, SRK-Kantonalverband in CH,
+    Croix-Rouge-Delegation in FR), steht im Frontend (COUNTRY_WORDS), später in den i18n-Texten.
+    """
 
     VERWALTUNG = "verwaltung", "Verwaltung"
     STADTWERK = "stadtwerk", "Stadtwerk"

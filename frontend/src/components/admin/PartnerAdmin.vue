@@ -1,6 +1,6 @@
 <script setup>
 import { ref, computed } from 'vue'
-import { SEGMENTS } from '../../lib/segments.js'
+import { SEGMENTS, wordsFor, commonCountry } from '../../lib/segments.js'
 import PartnerDialog from './PartnerDialog.vue'
 import { useLazyList } from '../../composables/useLazyList.js'
 
@@ -27,6 +27,8 @@ const { items: shownRows, hasMore, sentinel } = useLazyList(rows, { step: 30 })
 const countBySegment = computed(() => Object.fromEntries(Object.keys(SEGMENTS).map((k) =>
   [k, props.partners.filter((p) => p.segment === k && p.active).length])))
 
+// Partner mit Gebiet in einem Land: Segmentname dieses Landes (Rotkreuz-Bezirksstellen statt DRK-Verbände)
+const plural = (p) => wordsFor(p.segment, commonCountry(p.areas)).plural
 const pct = (s) => (s.targets ? Math.round((100 * s.customers) / s.targets) : 0)
 const areaSummary = (areas) => {
   const names = areas.map((a) => a.name)
@@ -73,9 +75,9 @@ function onSaved(p) {
               <span v-if="!p.active" class="pa-badge">deaktiviert</span>
               <span class="pa-sub">{{ p.contact.name }}<template v-if="p.contact.email"> · {{ p.contact.email }}</template></span>
             </td>
-            <td>{{ SEGMENTS[p.segment].plural }}</td>
+            <td>{{ plural(p) }}</td>
             <td class="pa-areas" :title="p.areas.map((a) => a.name).join(', ')">{{ areaSummary(p.areas) }}</td>
-            <td class="pa-num">{{ numFmt.format(p.stats.targets) }} {{ SEGMENTS[p.segment].plural }}</td>
+            <td class="pa-num">{{ numFmt.format(p.stats.targets) }} {{ plural(p) }}</td>
             <td>
               <span class="pa-cov">
                 <span class="pa-bar-track"><span :style="{ width: `${pct(p.stats)}%` }" /></span>

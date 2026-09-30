@@ -49,5 +49,6 @@ export const MOCK_CUSTOMERS = {
   'drk-DE-K-14625': { since: daysAgo(9), public_reference: true, licence: null },
   'drk-DE-G-12052000': { since: '2026-05-20', public_reference: false, licence: 'Basis · 5 Plätze' },
   'drk-DE-G-14612000': { since: '2025-12-01', public_reference: true, licence: 'Professional · 10 Plätze' },
+  'drk-AT-G-60101': { since: '2026-04-14', public_reference: true, licence: 'Professional · 8 Plätze' }, // Graz
   'drk-DE-G-14713000': { since: '2026-02-11', public_reference: true, licence: 'Professional · 8 Plätze' },
 }
