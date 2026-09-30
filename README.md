@@ -1,8 +1,10 @@
-# Verwaltungen in Ihrer Nähe: Karten-Prototyp
+# SpeechMind-Karte: Prototyp
 
-Eine Vue-3-Komponente, die auf der Startseite als kleine Karte sitzt und sich auf Klick zur großen Ansicht mit Datenspalte öffnet. Dazu GeoDjango-Endpoints für Umkreissuche, Standort → Ort/PLZ, Ortssuche, PLZ-Lookup und IP-Standort.
+Eine Karte, vier Ansichten. Die Daten sind überall dieselben: eine Referenzliste aller Verwaltungen (Gemeinden, Ämter, Landkreise) mit Geo- und Strukturdaten, dazu der Kundenstatus. Die Ansichten unterscheiden sich nur darin, welchen Ausschnitt und welche Felder sie zeigen.
 
-## Schnellstart (nur Frontend, mit Mock-Daten)
+Das ist ein Mock-up. Das Frontend läuft komplett mit Mock-Daten, das Django-Backend unter `backend/maps` ist eine Skizze, wie es später aussehen kann.
+
+## Schnellstart
 
 ```bash
 cd frontend
@@ -10,71 +12,75 @@ npm install
 npm run dev
 ```
 
-Der Mock simuliert einen Standort in Hoyerswerda und etwa 18 Einträge in der Lausitz. Drei davon sind nicht freigegeben und erscheinen deshalb nur als anonyme Zahl. Postleitzahlen zum Testen sind 02977, 01968, 03130, 02943, 01917, 03046, 02625, 02826 und 01067.
+Die Ansichten sind Tabs (`#kunden`, `#partner`, `#intern`, `#liste`). Die Anmeldung ist simuliert: Partner und Scope wählst du oben rechts aus.
 
-## Zwei Zustände
+## Die vier Ansichten
 
-Klein (Startseite)
-: Nur die Karte, in der Größe von `compactHeight`. Oben links steht, wie viele Verwaltungen um welchen Ort gefunden wurden, oben rechts der Button zum Vergrößern. Scroll-Zoom und Zoom-Buttons sind aus, damit die Seite scrollbar bleibt.
+Kunden (öffentliche Startseite)
+: Kleine Karte, groß per Klick. Zeigt Kunden im Umkreis des Besuchers (IP → Browser auf Klick → Ort/PLZ-Suche). Nicht freigegebene Kunden zählen nur als Zahl. Für FOMO: „Neu im letzten Monat“ (deutschlandweit, Anonyme nur mit Bundesland) und „Deutschlandweit arbeiten N Verwaltungen in Ihrer Größenklasse mit SpeechMind“ (erst ab 3).
 
-Groß (Overlay)
-: Die Karte wird per `<Teleport>` an den Body gehängt und legt sich über die Seite. Links erscheinen Headline, Ortssuche, die Postleitzahlen der Umgebung und die Liste der Einträge; die Liste folgt dabei dem Kartenausschnitt. Zurück geht es über denselben Button oben rechts oder mit Esc.
+Partner
+: Vertriebspartner sehen ihr Gebiet (ein oder mehrere Präfixe des Regionalschlüssels: Land, Kreis, …): Kunden als Ortsschild, Noch-nicht-Kunden als Punkt, Abdeckung in Prozent, Einwohner und Lizenz. Cluster zeigen „Kunden/Gesamt“.
 
-Der Standort kommt weiterhin aus der Kaskade IP → Browser (erst auf Klick) → Suche. Zu den Koordinaten holt das Frontend über `/api/geo/reverse/` Gemeinde, PLZ und die Postleitzahlen der Nachbarschaft.
+Intern
+: Wie Partner, aber alle Verwaltungen.
+
+Liste
+: Alle Verwaltungen als Tabelle mit Kunden-Häkchen. Suche nach Name oder PLZ, „In der Nähe von“ mit Umkreis, Filter nach Status, Bundesland, Ebene und Größenklasse, sortierbare Spalten. Klick auf eine Zeile öffnet den Empfehlungsdialog.
+
+## Empfehlungsdialog
+
+Für Noch-nicht-Kunden:
+
+- **Lizenz:** Median der Kunden mit ähnlicher Einwohnerzahl und bekannter Lizenz, sonst eine Faustregel nach Einwohnern.
+- **Hardware:** vorerst eine Faustregel.
+- **Argumente:** Kunden im Umkreis, im Bundesland und in der Größenklasse.
+- **Kontakt:** Platzhalter, bis die Daten aus Organisation/Zoho oder einer Anreicherung kommen.
+- **E-Mail-Entwurf:** editierbar und kopierbar. Er nennt nur Kunden mit Referenzfreigabe.
+- **One-Pager:** druckbar oder als PDF zu sichern.
+
+Für Kunden: die Lizenz (oder den Hinweis, dass noch keine Organisation verknüpft ist) und die Nachbarn, die noch fehlen. Das ist die Vorlage für das geplante Empfehlungsprogramm mit Code und Rabatt.
+
+Die Logik steckt in `frontend/src/mocks/recommendations.js`. Später gehört sie ins Backend.
 
 ## Aufbau
 
 ```
 frontend/src/
+  App.vue                              Tabs, simulierte Anmeldung, gemeinsamer Dialog
   components/municipality-map/
-    MunicipalityExplorer.vue   klein/groß, Panel, Headline, Standortsteuerung, Popup-Inhalt
-    MunicipalityMap.vue        MapLibre, Cluster, Ortsschild-Labels, Popup-Slot
-    PlaceSearch.vue            eine Eingabe für Ortsname und Postleitzahl, mit Vorschlägen
-    signImage.js               dehnbares Ortsschild-Icon (9-Slice, reines WebGL)
-  composables/useUserLocation.js   IP, dann Browser (auf Klick), dann Suche; dazu Ort und PLZ
-  api/municipalities.js            fetch + Mock-Umschaltung (VITE_MAP_USE_MOCK)
-  mocks/entries.js                 Einträge (MOCK_ENTRIES) und Gemeinden (MOCK_PLACES)
-backend/maps/
-  models.py        Municipality (VG250-Referenz) + MapEntry (je Anwendungsfall)
-  use_cases.py     welche properties pro Karte öffentlich sind
-  views.py         /api/map/<use_case>/nearby/
-                   /api/geo/reverse/?lat=&lng=   Koordinaten → Gemeinde, PLZ, Nachbar-PLZ
-                   /api/geo/search/?q=           Ortsname oder beginnende PLZ
-                   /api/geo/plz/<plz>/, /api/geo/ip/
-  management/commands/import_vg250.py
+    MunicipalityExplorer.vue           audience = kunden | partner | intern, variant = teaser | page
+    MunicipalityMap.vue                MapLibre: Ortsschilder (Kunden), Punkte (Noch-nicht-Kunden), Cluster
+    RecentCustomers.vue                "Neu dabei", als Zeile auf der Karte oder als Liste im Panel
+    PlaceSearch.vue                    Ortsname oder PLZ, mit Vorschlägen
+  components/region-list/
+    RegionList.vue                     Tabelle mit Filtern und Umkreis
+    RecommendationDialog.vue           Lizenz, Hardware, Kontakt, E-Mail, One-Pager
+  api/map.js                           fetch + Mock-Backend (VITE_MAP_USE_MOCK)
+  mocks/regions.js                     Referenzliste Ostdeutschland (AGS, Name, Land, Einwohner, PLZ, Koordinaten)
+  mocks/customers.js                   Kundenstatus je Region (neue Kunden meist ohne Orga/Lizenz)
+  mocks/partners.js                    Vertriebspartner und ihre Gebiete (erfunden)
+  mocks/recommendations.js             Empfehlungslogik
+  lib/sizeClasses.js, lib/geo.js
+backend/maps/                          Skizze
+  models.py        Region (Referenzliste + Kundenstatus), PartnerTerritory (Gebiet je Partner-User)
+  audiences.py     was jede Ansicht sehen darf
+  views.py         /api/map/<audience>/regions/, /api/map/<audience>/recent/, /api/geo/…
 ```
 
-## Integration ins bestehende Vue-Frontend
+## Datenmodell (Skizze)
 
-1. Kopiere `components/municipality-map`, `composables/useUserLocation.js` und `api/municipalities.js`. Installiere dann `maplibre-gl`.
-2. MapLibre ist groß, etwa 250 kB gzip. Lade die Komponente deshalb lazy:
-   `const MunicipalityExplorer = defineAsyncComponent(() => import('.../MunicipalityExplorer.vue'))`
-3. Pro Seite konfigurierst du den Explorer über Props:
-   ```vue
-   <MunicipalityExplorer
-     use-case="referenzen"
-     :radius-km="60"
-     compact-height="360px"
-     :fields="[
-       { key: 'created_at', label: 'Kunde seit', format: 'month' },
-       { key: 'kind', label: 'Art', format: 'text' },
-       { key: 'bodies', label: 'Gremien mit SpeechMind', format: 'number' },
-     ]"
-   />
-   ```
-   `compactHeight` bestimmt die Höhe auf der Startseite, `startExpanded` lässt die Komponente gleich groß starten (für eine eigene Kartenseite). Texte wie Headline oder Leerzustand kommen über die Prop `copy`, Farben und Schrift über die CSS-Variablen `--mm-*` auf `.mm`.
-4. Für ein neues Zusatzfeld sind zwei Schritte nötig: Trage den Wert in `MapEntry.properties` ein und gib den Key in `use_cases.py` frei. Danach kannst du ihn in `fields` verwenden. Eine Migration braucht es dafür nicht.
+- `Region` ist eine eigene Tabelle, unabhängig von `Organization`. **Kunde = `customer_since` gesetzt.** `organization` ist optional und wird verknüpft, sobald es sie gibt. Neue Kunden haben oft noch keine Organisation und damit keine Lizenz.
+- `key` ist der AGS (8 Stellen) bei Gemeinden, der Kreisschlüssel (5) bei Kreisen und der Verbandsschlüssel (9) bei Ämtern/VG. Alle beginnen mit dem Länderschlüssel.
+- Vertriebspartner sind vorerst User. Ihre Kunden erkennt man an `Organization.creater_user`. `Organization.is_partner` meint API-Partner und spielt hier keine Rolle. Das Gebiet steht in `PartnerTerritory.key_prefix`.
 
-## Backend
+## Noch offen
 
-1. PostGIS und GDAL installieren. Die Engine setzt du auf `django.contrib.gis.db.backends.postgis`. Außerdem kommen `django.contrib.gis` und `maps` in `INSTALLED_APPS`.
-   Auf RDS führst du einmal `CREATE EXTENSION postgis;` als Master-User aus.
-2. `python manage.py makemigrations maps && python manage.py migrate`
-3. Lade VG250 beim BKG herunter (Shape, UTM32) und importiere es:
-   `python manage.py import_vg250 VG250_GEM.shp --plz-csv plz_ags.csv`
-   Die PLZ-Zuordnung lässt sich aus der OpenPLZ API erzeugen. Für die Quellenangabe gilt: VG250 steht unter der Lizenz dl-de/by-2-0 („© GeoBasis-DE / BKG“), OSM-basierte PLZ-Daten unter ODbL.
-4. Der IP-Standort ist optional. Dafür brauchst du `pip install geoip2`, die Datei GeoLite2-City.mmdb von MaxMind (kostenloses Konto) und `GEOIP_PATH` in den Settings. Ohne diese Einrichtung liefert der Endpoint 404, und das Frontend fällt auf die PLZ-Eingabe zurück.
-5. Setze im Frontend `VITE_MAP_USE_MOCK=false`.
+- Echte Referenzliste: Die Werte in `mocks/regions.js` sind aus dem Gedächtnis zusammengestellt und gerundet. Einige kleine AGS sind nur illustrativ.
+- Welche Felder die Karten der Partner und Intern zeigen, und woher Lizenz- und Hardwaredaten kommen.
+- Kontaktdaten der Noch-nicht-Kunden (Telefon, E-Mail, Website).
+- Empfehlungsprogramm: Codes, Rabatt, und ob die Kunden-Karte dann auch Noch-nicht-Kunden zeigt (`include_prospects` in `audiences.py`).
+- Anmeldung: Bis dahin wählt der Prototyp den Partner per Parameter. Das Backend erlaubt das nur mit `MAP_ALLOW_PARTNER_PARAM` (Default: `DEBUG`).
 
 ## Kartenstil und Datenschutz
 
@@ -89,5 +95,4 @@ Standortdaten werden im Browser und auf dem Server auf zwei Nachkommastellen ger
 
 ## Freigaben
 
-`MapEntry.public_reference` steht standardmäßig auf `False`. Nicht freigegebene Verwaltungen zählen nur anonym in der Headline mit. Lege das Flag erst nach einer schriftlichen Referenzfreigabe um.
-# customer-map
+`Region.public_reference` steht standardmäßig auf `False`. Nicht freigegebene Kunden zählen auf der öffentlichen Karte nur anonym mit, in „Neu dabei“ erscheinen sie ohne Namen und ohne Koordinaten. E-Mail-Entwurf und One-Pager nennen nur freigegebene Kunden. Lege das Flag erst nach einer schriftlichen Referenzfreigabe um.

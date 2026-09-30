@@ -1,0 +1,250 @@
+<script setup>
+import { ref, computed, defineAsyncComponent, onMounted, onBeforeUnmount } from 'vue'
+import { listPartners } from './api/map.js'
+
+// MapLibre ist groß (~250 kB gzip). Auf der Startseite deshalb nachladen.
+const MunicipalityExplorer = defineAsyncComponent(() => import('./components/municipality-map/MunicipalityExplorer.vue'))
+const RegionList = defineAsyncComponent(() => import('./components/region-list/RegionList.vue'))
+const RecommendationDialog = defineAsyncComponent(() => import('./components/region-list/RecommendationDialog.vue'))
+
+// Prototyp: Die Anmeldung wird simuliert. Tabs und Partnerauswahl stehen für "wer ist eingeloggt".
+const TABS = [
+  { id: 'kunden', label: 'Kunden', note: 'Öffentliche Startseite. Besucher sehen Kunden im Umkreis, nicht freigegebene nur als Zahl.' },
+  { id: 'partner', label: 'Partner', note: 'Vertriebspartner sehen ihr Gebiet: Kunden und Noch-nicht-Kunden, mit Einwohnern und Lizenz.' },
+  { id: 'intern', label: 'Intern', note: 'SpeechMind-Team: alle Verwaltungen der Referenzliste, Kunden und Noch-nicht-Kunden.' },
+  { id: 'liste', label: 'Liste', note: 'Alle Verwaltungen als Tabelle. Filtern, suchen, Umkreis wählen; Klick öffnet Empfehlung und E-Mail.' },
+]
+
+const partners = listPartners()
+const tab = ref(readHash())
+const partnerId = ref(partners[0].id)
+const listScope = ref('intern') // 'intern' oder eine Partner-ID
+const openKey = ref(null)
+
+const current = computed(() => TABS.find((t) => t.id === tab.value))
+const listPartnerId = computed(() => (listScope.value === 'intern' ? null : Number(listScope.value)))
+const dialogAudience = computed(() => (tab.value === 'partner' || (tab.value === 'liste' && listPartnerId.value) ? 'partner' : 'intern'))
+const dialogPartnerId = computed(() => (tab.value === 'partner' ? partnerId.value : listPartnerId.value))
+
+function readHash() {
+  const id = window.location.hash.slice(1)
+  return TABS.some((t) => t.id === id) ? id : 'kunden'
+}
+function select(id) {
+  tab.value = id
+  history.replaceState(null, '', `#${id}`)
+}
+const onHash = () => { tab.value = readHash() }
+onMounted(() => window.addEventListener('hashchange', onHash))
+onBeforeUnmount(() => window.removeEventListener('hashchange', onHash))
+
+function onTabKey(e, i) {
+  const dir = e.key === 'ArrowRight' ? 1 : e.key === 'ArrowLeft' ? -1 : 0
+  if (!dir) return
+  const next = TABS[(i + dir + TABS.length) % TABS.length]
+  select(next.id)
+  document.getElementById(`tab-${next.id}`)?.focus()
+}
+</script>
+
+<template>
+  <div class="page">
+    <header class="top">
+      <span class="brand">SpeechMind</span>
+      <nav class="tabs" role="tablist" aria-label="Ansicht">
+        <button
+          v-for="(t, i) in TABS"
+          :id="`tab-${t.id}`"
+          :key="t.id"
+          type="button"
+          role="tab"
+          :aria-selected="tab === t.id"
+          :tabindex="tab === t.id ? 0 : -1"
+          @click="select(t.id)"
+          @keydown="onTabKey($event, i)"
+        >{{ t.label }}</button>
+      </nav>
+    </header>
+    <p class="tab-note"><span class="tab-note-tag">Ansicht {{ current.label }}</span> {{ current.note }}</p>
+
+    <!-- Kunden: die Karte als Baustein der Startseite -->
+    <main v-if="tab === 'kunden'" role="tabpanel" aria-labelledby="tab-kunden">
+      <section class="hero">
+        <h1>Protokolle, die sich selbst schreiben</h1>
+        <p>
+          SpeechMind nimmt Ihre Sitzung auf, ordnet die Wortbeiträge den Tagesordnungspunkten zu
+          und legt Ihnen den Entwurf noch am selben Abend vor.
+        </p>
+        <div class="hero-actions">
+          <a class="cta" href="#kunden">Termin vereinbaren</a>
+          <a class="cta cta-quiet" href="#kunden">Produkt ansehen</a>
+        </div>
+      </section>
+
+      <section class="map-block">
+        <div class="map-block-head">
+          <h2>Verwaltungen in Ihrer Nähe</h2>
+          <p>Wir ermitteln Ihren ungefähren Standort und zeigen, wer in der Umgebung schon dabei ist.</p>
+        </div>
+        <MunicipalityExplorer audience="kunden" :radius-km="60" compact-height="360px" />
+      </section>
+
+      <section class="cards">
+        <article>
+          <h3>DSGVO-konform</h3>
+          <p>Verarbeitung in deutschen Rechenzentren, Auftragsverarbeitung inklusive.</p>
+        </article>
+        <article>
+          <h3>Vorlagen je Gremium</h3>
+          <p>Verlaufs-, Ergebnis- oder Beschlussprotokoll, genau nach Ihrer Geschäftsordnung.</p>
+        </article>
+        <article>
+          <h3>In zwei Wochen startklar</h3>
+          <p>Einrichtung, Schulung und erste Sitzung begleiten wir gemeinsam.</p>
+        </article>
+      </section>
+    </main>
+
+    <main v-else-if="tab === 'partner'" role="tabpanel" aria-labelledby="tab-partner" class="app-view">
+      <div class="view-bar">
+        <h1>Ihr Gebiet</h1>
+        <label class="as">
+          <span>Angemeldet als (Prototyp)</span>
+          <select v-model.number="partnerId">
+            <option v-for="p in partners" :key="p.id" :value="p.id">{{ p.name }}</option>
+          </select>
+        </label>
+      </div>
+      <MunicipalityExplorer :key="`partner-${partnerId}`" audience="partner" :partner-id="partnerId" variant="page" @recommend="openKey = $event" />
+    </main>
+
+    <main v-else-if="tab === 'intern'" role="tabpanel" aria-labelledby="tab-intern" class="app-view">
+      <div class="view-bar"><h1>Alle Verwaltungen</h1></div>
+      <MunicipalityExplorer audience="intern" variant="page" @recommend="openKey = $event" />
+    </main>
+
+    <main v-else role="tabpanel" aria-labelledby="tab-liste" class="app-view">
+      <div class="view-bar">
+        <h1>Liste</h1>
+        <label class="as">
+          <span>Angemeldet als (Prototyp)</span>
+          <select v-model="listScope">
+            <option value="intern">SpeechMind intern (alle)</option>
+            <option v-for="p in partners" :key="p.id" :value="String(p.id)">Partner: {{ p.name }}</option>
+          </select>
+        </label>
+      </div>
+      <RegionList :partner-id="listPartnerId" @open="openKey = $event" />
+    </main>
+
+    <RecommendationDialog
+      :region-key="openKey"
+      :audience="dialogAudience"
+      :partner-id="dialogPartnerId"
+      @close="openKey = null"
+    />
+
+    <footer>© SpeechMind · Prototyp mit Mock-Daten</footer>
+  </div>
+</template>
+
+<style>
+:root {
+  --page-bg: #0C1A20;
+  --page-surface: #12272F;
+  --page-line: #2C4A55;
+  --page-text: #E6EEF0;
+  --page-muted: #9DB4BB;
+  --page-accent: #F5C400;
+}
+html, body, #app { margin: 0; background: var(--page-bg); }
+body {
+  color: var(--page-text);
+  font-family: 'Barlow Semi Condensed', 'DIN Alternate', 'Arial Narrow', system-ui, sans-serif;
+}
+</style>
+
+<style scoped>
+.page { max-width: 1080px; margin: 0 auto; padding: 0 24px 64px; }
+.page:has(.app-view) { max-width: 1440px; }
+
+.top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+  padding: 20px 0;
+  border-bottom: 1px solid var(--page-line);
+}
+.brand { font-size: 1.25rem; font-weight: 700; letter-spacing: 0.02em; }
+.tabs { display: flex; flex-wrap: wrap; gap: 4px; }
+.tabs button {
+  font: inherit;
+  font-size: 1.02rem;
+  font-weight: 600;
+  padding: 7px 14px;
+  border-radius: 4px;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--page-muted);
+  cursor: pointer;
+}
+.tabs button:hover { color: var(--page-text); }
+.tabs button[aria-selected='true'] { color: #000; background: var(--page-accent); }
+.tabs button:focus-visible { outline: 2px solid var(--page-accent); outline-offset: 2px; }
+
+.tab-note { margin: 10px 0 0; font-size: 0.9rem; color: var(--page-muted); }
+.tab-note-tag {
+  display: inline-block;
+  margin-right: 6px;
+  padding: 1px 7px;
+  border-radius: 3px;
+  border: 1px solid var(--page-line);
+  color: var(--page-text);
+  font-size: 0.8rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.app-view { padding-top: 24px; }
+.view-bar { display: flex; flex-wrap: wrap; align-items: end; justify-content: space-between; gap: 12px 24px; margin-bottom: 16px; }
+.view-bar h1 { margin: 0; font-size: 1.8rem; }
+.as { display: grid; gap: 4px; }
+.as span { font-size: 0.85rem; color: var(--page-muted); }
+.as select {
+  font: inherit;
+  padding: 7px 10px;
+  border-radius: 4px;
+  border: 1px solid var(--page-line);
+  background: var(--page-surface);
+  color: var(--page-text);
+}
+
+.hero { padding: 48px 0 40px; max-width: 42rem; }
+.hero h1 { margin: 0 0 16px; font-size: clamp(2.2rem, 5vw, 3.2rem); line-height: 1.08; text-wrap: balance; }
+.hero p { margin: 0; font-size: 1.15rem; line-height: 1.5; color: var(--page-muted); }
+.hero-actions { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 28px; }
+.cta {
+  font-weight: 600;
+  text-decoration: none;
+  padding: 10px 18px;
+  border-radius: 4px;
+  border: 1.5px solid #000;
+  background: var(--page-accent);
+  color: #000;
+}
+.cta-quiet { background: transparent; color: var(--page-text); border-color: var(--page-line); }
+
+.map-block { margin-top: 24px; }
+.map-block-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 16px; margin-bottom: 14px; }
+.map-block-head h2 { margin: 0; font-size: 1.5rem; }
+.map-block-head p { margin: 0; color: var(--page-muted); }
+
+.cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 16px; margin-top: 56px; }
+.cards article { padding: 20px; border: 1px solid var(--page-line); border-radius: 8px; background: var(--page-surface); }
+.cards h3 { margin: 0 0 8px; font-size: 1.15rem; }
+.cards p { margin: 0; color: var(--page-muted); line-height: 1.45; }
+
+footer { margin-top: 56px; padding-top: 20px; border-top: 1px solid var(--page-line); color: var(--page-muted); font-size: 0.92rem; }
+</style>

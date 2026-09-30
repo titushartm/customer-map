@@ -1,0 +1,53 @@
+# ---- Frontend (Node, Vite) ----
+node_modules/
+dist/
+dist-ssr/
+.vite/
+*.local
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# ---- Backend (Python, Django) ----
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+env/
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+db.sqlite3
+media/
+staticfiles/
+
+# ---- Umgebung und Geheimnisse (.env.example bleibt im Repo) ----
+.env
+.env.*
+!.env.example
+
+# ---- Geodaten: groß, extern bezogen, nicht einchecken ----
+# VG250-Shapes vom BKG, GeoLite2 von MaxMind (Lizenz verbietet Weitergabe), PLZ-Exporte
+*.shp
+*.shx
+*.dbf
+*.prj
+*.cpg
+*.qmd
+*.mmdb
+*.pmtiles
+*.gpkg
+/data/
+
+# ---- Editor und Betriebssystem ----
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/*
+!.vscode/extensions.json
+*.swp
+*.log
