@@ -177,7 +177,7 @@ function onClose() {
                 <div><dt>E-Mail</dt><dd class="rd-muted">noch nicht hinterlegt</dd></div>
                 <div><dt>Website</dt><dd class="rd-muted">noch nicht hinterlegt</dd></div>
               </dl>
-              <p class="rd-muted">Kommt aus der Organisation (Zoho) oder einer späteren Anreicherung der Liste.</p>
+              <p class="rd-muted">Liegt noch nicht vor. Später eventuell per Anreicherung über die Website der Verwaltung (Impressum).</p>
             </section>
           </div>
 

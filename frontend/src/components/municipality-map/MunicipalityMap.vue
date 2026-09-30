@@ -23,6 +23,12 @@ const props = defineProps({
   /** Cluster als "Kunden/Gesamt" beschriften (sinnvoll, sobald Noch-nicht-Kunden dabei sind) */
   clusterRatio: { type: Boolean, default: false },
   prospectColor: { type: String, default: '#9DB4BB' },
+  /** Graues Ortsschild für Verwaltungen, die noch keine Kunden sind */
+  prospectFill: { type: String, default: '#C9D3D6' },
+  prospectInk: { type: String, default: '#1E2E34' },
+  /** Hervorgehobene Fläche, z. B. das Partnergebiet: GeoJSON-Geometrie (Polygon/MultiPolygon) */
+  area: { type: Object, default: null },
+  areaAttribution: { type: String, default: '© GeoBasis-DE / BKG 2025' },
 })
 const emit = defineEmits(['update:selectedId', 'update:hoveredId', 'bounds-change'])
 
@@ -93,6 +99,10 @@ function addImages() {
   const active = createSignImage({ fill: props.signInk, ink: props.signFill })
   map.addImage('mm-sign', normal.image, normal.options)
   map.addImage('mm-sign-active', active.image, active.options)
+  const prospect = createSignImage({ fill: props.prospectFill, ink: props.prospectInk })
+  const prospectActive = createSignImage({ fill: props.prospectInk, ink: props.prospectFill })
+  map.addImage('mm-sign-prospect', prospect.image, prospect.options)
+  map.addImage('mm-sign-prospect-active', prospectActive.image, prospectActive.options)
 }
 
 function addLayers() {
@@ -107,6 +117,28 @@ function addLayers() {
     },
   })
   map.addSource('mm-user', { type: 'geojson', data: emptyFc() })
+  map.addSource('mm-area', { type: 'geojson', data: areaFc(), attribution: props.areaAttribution })
+
+  // Partnergebiet: leicht getönte Fläche und klarer Umriss, ganz unten unter allen Markern
+  map.addLayer({
+    id: 'mm-area-fill',
+    type: 'fill',
+    source: 'mm-area',
+    paint: { 'fill-color': props.signFill, 'fill-opacity': 0.07 },
+  })
+  map.addLayer({
+    id: 'mm-area-glow',
+    type: 'line',
+    source: 'mm-area',
+    paint: { 'line-color': props.signFill, 'line-width': 8, 'line-opacity': 0.12, 'line-blur': 4 },
+  })
+  map.addLayer({
+    id: 'mm-area-line',
+    type: 'line',
+    source: 'mm-area',
+    layout: { 'line-join': 'round' },
+    paint: { 'line-color': props.signFill, 'line-width': 2, 'line-opacity': 0.9 },
+  })
 
   const notCluster = ['!', ['has', 'point_count']]
   const isCustomer = ['==', ['get', 'status'], 'customer']
@@ -117,10 +149,19 @@ function addLayers() {
     '\n', {},
     ['concat', 'seit ', ['get', 'since_label']], { 'font-scale': 0.78 },
   ]
-  const signLayout = (image) => ({
+  // Noch keine Kunden: Name, darunter die Einwohner (nur wo das Backend sie liefert)
+  const prospectLabel = [
+    'format',
+    ['get', 'name'], {},
+    ...[['has', 'population']].flatMap((has) => [
+      ['case', has, '\n', ''], {},
+      ['case', has, ['concat', ['number-format', ['get', 'population'], { locale: 'de-DE' }], ' Einw.'], ''], { 'font-scale': 0.78 },
+    ]),
+  ]
+  const signLayout = (image, field = label) => ({
     'icon-image': image,
     'icon-text-fit': 'both',
-    'text-field': label,
+    'text-field': field,
     'text-font': props.labelFont,
     'text-size': 13,
     'text-line-height': 1.15,
@@ -155,41 +196,26 @@ function addLayers() {
     paint: { 'text-color': ['case', ['>', ['get', 'customers'], 0], props.signFill, props.prospectColor] },
   })
 
-  // Noch keine Kunden: ruhiger Punkt, Name erst beim Hineinzoomen
+  // Noch keine Kunden: graues Ortsschild. Liegt unter den Kundenschildern, damit die bei
+  // Überschneidung gewinnen; der kleine Punkt darunter bleibt dann als Hinweis sichtbar.
+  map.addLayer({
+    id: 'mm-prospect-dots',
+    type: 'circle',
+    source: SRC,
+    filter: ['all', notCluster, isProspect],
+    paint: { 'circle-radius': 3.5, 'circle-color': props.prospectFill, 'circle-stroke-color': props.signInk, 'circle-stroke-width': 1 },
+  })
   map.addLayer({
     id: 'mm-prospects',
-    type: 'circle',
-    source: SRC,
-    filter: ['all', notCluster, isProspect],
-    paint: {
-      'circle-radius': ['case', ['==', ['get', 'level'], 'kreis'], 7, 5],
-      'circle-color': props.signInk,
-      'circle-stroke-color': props.prospectColor,
-      'circle-stroke-width': 2,
-    },
-  })
-  map.addLayer({
-    id: 'mm-prospect-labels',
     type: 'symbol',
     source: SRC,
-    minzoom: 8,
     filter: ['all', notCluster, isProspect],
     layout: {
-      'text-field': ['get', 'name'],
-      'text-font': props.labelFont,
+      ...signLayout('mm-sign-prospect', prospectLabel),
       'text-size': 12,
-      'text-offset': [0, 1.1],
-      'text-anchor': 'top',
-      'text-optional': true,
+      'symbol-sort-key': ['-', 0, ['coalesce', ['get', 'population'], 0]],
     },
-    paint: { 'text-color': props.prospectColor, 'text-halo-color': props.signInk, 'text-halo-width': 1.2 },
-  })
-  map.addLayer({
-    id: 'mm-prospects-active',
-    type: 'circle',
-    source: SRC,
-    filter: ['in', ['get', 'key'], ['literal', []]],
-    paint: { 'circle-radius': 8, 'circle-color': props.signFill, 'circle-stroke-color': props.signInk, 'circle-stroke-width': 2 },
+    paint: { 'text-color': props.prospectInk },
   })
 
   // Neue Einträge bekommen einen ruhigen Lichthof
@@ -223,6 +249,14 @@ function addLayers() {
     layout: { ...signLayout('mm-sign-active'), 'icon-allow-overlap': true, 'text-allow-overlap': true },
     paint: { 'text-color': props.signFill },
   })
+  map.addLayer({
+    id: 'mm-prospects-active',
+    type: 'symbol',
+    source: SRC,
+    filter: ['in', ['get', 'key'], ['literal', []]],
+    layout: { ...signLayout('mm-sign-prospect-active', prospectLabel), 'text-size': 12, 'icon-allow-overlap': true, 'text-allow-overlap': true },
+    paint: { 'text-color': props.prospectFill },
+  })
 
   map.addLayer({
     id: 'mm-user',
@@ -238,11 +272,11 @@ function addLayers() {
 }
 
 function bindEvents() {
-  for (const layer of ['mm-signs', 'mm-signs-active', 'mm-clusters', 'mm-prospects', 'mm-prospects-active']) {
+  for (const layer of ['mm-signs', 'mm-signs-active', 'mm-clusters', 'mm-prospects', 'mm-prospects-active', 'mm-prospect-dots']) {
     map.on('mouseenter', layer, () => { map.getCanvas().style.cursor = 'pointer' })
     map.on('mouseleave', layer, () => { map.getCanvas().style.cursor = '' })
   }
-  for (const layer of ['mm-signs', 'mm-prospects']) {
+  for (const layer of ['mm-signs', 'mm-prospects', 'mm-prospect-dots']) {
     map.on('mousemove', layer, (e) => emit('update:hoveredId', e.features[0].properties.key))
     map.on('mouseleave', layer, () => emit('update:hoveredId', null))
     map.on('click', layer, (e) => emit('update:selectedId', e.features[0].properties.key))
@@ -265,6 +299,23 @@ function syncData() {
   fitToData()
 }
 
+function syncArea() {
+  if (!ready) return
+  map.getSource('mm-area').setData(areaFc())
+  fitToData()
+}
+
+function areaFc() {
+  return props.area ? { type: 'FeatureCollection', features: [{ type: 'Feature', geometry: props.area, properties: {} }] } : emptyFc()
+}
+
+function areaCoords() {
+  const g = props.area
+  if (!g) return []
+  const polys = g.type === 'Polygon' ? [g.coordinates] : g.type === 'MultiPolygon' ? g.coordinates : []
+  return polys.flatMap((rings) => rings[0]) // Außenringe reichen für die Ausdehnung
+}
+
 function syncUser() {
   if (!ready) return
   const u = props.userLocation
@@ -274,7 +325,9 @@ function syncUser() {
 }
 
 function fitToData({ duration = 900 } = {}) {
-  const coords = props.data.features.map((f) => f.geometry.coordinates)
+  // Mit Gebiet: das ganze Gebiet zeigen, nicht nur die Einträge darin
+  const area = areaCoords()
+  const coords = area.length ? area : props.data.features.map((f) => f.geometry.coordinates)
   if (props.userLocation) coords.push([props.userLocation.lng, props.userLocation.lat])
   if (!coords.length) return
   // Erst die neue Fläche übernehmen: fitBounds rechnet sonst mit der alten Canvas-Größe
@@ -328,6 +381,7 @@ watch(() => props.navigation, syncNavigation)
 watch(() => props.scrollZoom, syncScrollZoom)
 watch(() => props.data, syncData)
 watch(() => props.userLocation, syncUser)
+watch(() => props.area, syncArea)
 watch(() => [props.hoveredId, props.selectedId], syncHighlight)
 watch(() => props.selectedId, syncPopup)
 

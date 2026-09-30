@@ -26,6 +26,8 @@ AUDIENCES = {
         "max_radius_km": 150,
         "limit": 300,
         "recent_named_only": True,
+        # Öffentlich wirkt "1 neue Verwaltung" eher mager: erst ab 3, notfalls längerer Zeitraum
+        "recent_min": 3,
     },
     "partner": {
         "scope": "territory",
@@ -34,6 +36,7 @@ AUDIENCES = {
         "fields": ["customer_since", "population", "licence", "postcodes"],
         "limit": 20_000,
         "recent_named_only": False,
+        "recent_min": 1,
     },
     "intern": {
         "scope": "all",
@@ -42,9 +45,11 @@ AUDIENCES = {
         "fields": ["customer_since", "population", "licence", "postcodes"],
         "limit": 20_000,
         "recent_named_only": False,
+        "recent_min": 1,
     },
 }
 
-# "Neu dabei"-Leiste
-RECENT_DAYS = 30
+# "Neu dabei"-Leiste: der erste Zeitraum, in dem mindestens recent_min Kunden dazukamen.
+# Reicht keiner, bleibt die Leiste leer.
+RECENT_WINDOWS_DAYS = (30, 90)
 RECENT_LIMIT = 5

@@ -352,6 +352,7 @@ function itemMeta(p) {
           :navigation="expanded"
           :scroll-zoom="expanded"
           :cluster-ratio="!isRadius"
+          :area="meta.territory ?? null"
           @bounds-change="bounds = $event"
         >
           <template #popup="{ feature }">

@@ -18,12 +18,15 @@ const notFound = ref(false)
 
 let timer = null
 let controller = null
+let chosenLabel = null
 
 watch(query, (q) => {
   notFound.value = false
   active.value = -1
   clearTimeout(timer)
   controller?.abort()
+  if (q === chosenLabel) return // Text der gerade gewählten Auswahl, keine neue Suche
+  chosenLabel = null
   if (q.trim().length < 2) {
     results.value = []
     open.value = false
@@ -50,7 +53,8 @@ async function run() {
 
 function choose(hit) {
   emit('select', hit)
-  query.value = hit.plz ? `${hit.name} (${hit.plz})` : hit.name
+  chosenLabel = hit.plz ? `${hit.name} (${hit.plz})` : hit.name
+  query.value = chosenLabel
   clearTimeout(timer)
   results.value = []
   open.value = false

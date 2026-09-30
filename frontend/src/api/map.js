@@ -4,6 +4,8 @@ import { MOCK_PARTNERS } from '../mocks/partners.js'
 import { sizeClassOf } from '../lib/sizeClasses.js'
 import { haversineKm } from '../lib/geo.js'
 import { recommend } from '../mocks/recommendations.js'
+// Vereinigte Kreis-/Landesgrenzen je Mock-Partner (© GeoBasis-DE / BKG 2025, dl-de/by-2-0, vereinfacht)
+import TERRITORIES from '../mocks/territories.json'
 
 const USE_MOCK = import.meta.env.VITE_MAP_USE_MOCK !== 'false'
 const API_BASE = import.meta.env.VITE_API_BASE ?? '/api'
@@ -16,7 +18,7 @@ export const NEW_WITHIN_DAYS = 30
  * properties: key, name, level, state, status ('customer' | 'prospect'), dazu je nach
  * Zielgruppe customer_since, population, licence, distance_km.
  *   kunden:  { lat, lng, radiusKm }
- *   partner: { partnerId }   (später aus der Anmeldung)
+ *   partner: { partnerId }   (später aus der Anmeldung); meta.territory = Gebietsfläche als GeoJSON
  *   intern:  —
  */
 export async function fetchRegions({ audience, lat, lng, radiusKm, partnerId }) {
@@ -118,10 +120,13 @@ function normalize(fc) {
 
 // Spiegel von backend/maps/audiences.py
 const AUDIENCES = {
-  kunden: { scope: 'radius', includeProspects: false, namedOnly: true, fields: ['customer_since'] },
-  partner: { scope: 'territory', includeProspects: true, namedOnly: false, fields: ['customer_since', 'population', 'licence', 'postcodes'] },
-  intern: { scope: 'all', includeProspects: true, namedOnly: false, fields: ['customer_since', 'population', 'licence', 'postcodes'] },
+  kunden: { scope: 'radius', includeProspects: false, namedOnly: true, fields: ['customer_since'], recentMin: 3 },
+  partner: { scope: 'territory', includeProspects: true, namedOnly: false, fields: ['customer_since', 'population', 'licence', 'postcodes'], recentMin: 1 },
+  intern: { scope: 'all', includeProspects: true, namedOnly: false, fields: ['customer_since', 'population', 'licence', 'postcodes'], recentMin: 1 },
 }
+
+// "Neu dabei": der erste Zeitraum mit mindestens recentMin Kunden, sonst leer
+const RECENT_WINDOWS_DAYS = [30, 90]
 
 /** Alle Regionen mit Kundenstatus, ohne Zielgruppen-Filter. Nur für Mock und die interne Liste. */
 export function mockAllRegions() {
@@ -148,6 +153,7 @@ function scoped(audience, partnerId) {
     rows = rows.filter((r) => partner.territories.some((t) => r.key.startsWith(t.prefix)))
     meta.partner = partner.name
     meta.territories = partner.territories.map((t) => t.label)
+    meta.territory = TERRITORIES[partner.id] ?? null // GeoJSON-Geometrie für die Fläche auf der Karte
   }
   return { cfg, rows, meta }
 }
@@ -209,13 +215,18 @@ function peers(all, lat, lng) {
 function mockRecent({ audience, partnerId }) {
   // Bei "kunden" deutschlandweit, damit die Leiste nie leer ist
   const { cfg, rows } = scoped(audience, partnerId)
-  const since = Date.now() - NEW_WITHIN_DAYS * 86_400_000
-  const recent = rows
-    .filter((r) => r.is_customer && new Date(r.customer_since).getTime() >= since)
-    .sort((a, b) => b.customer_since.localeCompare(a.customer_since))
+  const customers = rows.filter((r) => r.is_customer).sort((a, b) => b.customer_since.localeCompare(a.customer_since))
+  let days = RECENT_WINDOWS_DAYS[0]
+  let recent = []
+  for (days of RECENT_WINDOWS_DAYS) {
+    const since = Date.now() - days * 86_400_000
+    recent = customers.filter((r) => new Date(r.customer_since).getTime() >= since)
+    if (recent.length >= cfg.recentMin) break
+  }
+  if (recent.length < cfg.recentMin) return { days, total: 0, items: [] }
 
   return {
-    days: NEW_WITHIN_DAYS,
+    days,
     total: recent.length,
     items: recent.slice(0, 5).map((r) => {
       const named = r.public_reference || !cfg.namedOnly

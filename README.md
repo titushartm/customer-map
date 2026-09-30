@@ -17,10 +17,10 @@ Die Ansichten sind Tabs (`#kunden`, `#partner`, `#intern`, `#liste`). Die Anmeld
 ## Die vier Ansichten
 
 Kunden (öffentliche Startseite)
-: Kleine Karte, groß per Klick. Zeigt Kunden im Umkreis des Besuchers (IP → Browser auf Klick → Ort/PLZ-Suche). Nicht freigegebene Kunden zählen nur als Zahl. Für FOMO: „Neu im letzten Monat“ (deutschlandweit, Anonyme nur mit Bundesland) und „Deutschlandweit arbeiten N Verwaltungen in Ihrer Größenklasse mit SpeechMind“ (erst ab 3).
+: Kleine Karte, groß per Klick. Zeigt Kunden im Umkreis des Besuchers (IP → Browser auf Klick → Ort/PLZ-Suche). Nicht freigegebene Kunden zählen nur als Zahl. Für FOMO: „Neu im letzten Monat“ (deutschlandweit, Anonyme nur mit Bundesland; erst ab 3 Kunden, sonst „in den letzten drei Monaten“, sonst ausgeblendet) und „Deutschlandweit arbeiten N Verwaltungen in Ihrer Größenklasse mit SpeechMind“ (erst ab 3).
 
 Partner
-: Vertriebspartner sehen ihr Gebiet (ein oder mehrere Präfixe des Regionalschlüssels: Land, Kreis, …): Kunden als Ortsschild, Noch-nicht-Kunden als Punkt, Abdeckung in Prozent, Einwohner und Lizenz. Cluster zeigen „Kunden/Gesamt“.
+: Vertriebspartner sehen ihr Gebiet (ein oder mehrere Präfixe des Regionalschlüssels: Land, Kreis, …). Das Gebiet ist auf der Karte gelb umrandet und leicht getönt. Kunden sind gelbe Ortsschilder, Noch-nicht-Kunden graue (mit Einwohnerzahl). Dazu die Abdeckung in Prozent und die Lizenz. Cluster zeigen „Kunden/Gesamt“.
 
 Intern
 : Wie Partner, aber alle Verwaltungen.
@@ -60,6 +60,7 @@ frontend/src/
   mocks/regions.js                     Referenzliste Ostdeutschland (AGS, Name, Land, Einwohner, PLZ, Koordinaten)
   mocks/customers.js                   Kundenstatus je Region (neue Kunden meist ohne Orga/Lizenz)
   mocks/partners.js                    Vertriebspartner und ihre Gebiete (erfunden)
+  mocks/territories.json               Gebietsflächen je Mock-Partner (aus scripts/build_territories.py)
   mocks/recommendations.js             Empfehlungslogik
   lib/sizeClasses.js, lib/geo.js
 backend/maps/                          Skizze
@@ -74,11 +75,13 @@ backend/maps/                          Skizze
 - `key` ist der AGS (8 Stellen) bei Gemeinden, der Kreisschlüssel (5) bei Kreisen und der Verbandsschlüssel (9) bei Ämtern/VG. Alle beginnen mit dem Länderschlüssel.
 - Vertriebspartner sind vorerst User. Ihre Kunden erkennt man an `Organization.creater_user`. `Organization.is_partner` meint API-Partner und spielt hier keine Rolle. Das Gebiet steht in `PartnerTerritory.key_prefix`.
 
+Die Gebietsflächen im Mock stammen aus den Kreisgrenzen des BKG (VG250, Stand 2025, über opendatasoft; Lizenz dl-de/by-2-0, „© GeoBasis-DE / BKG“, steht in der Kartenattribution). Wenn sich die Mock-Partner ändern, baut `scripts/build_territories.py` sie neu. Im Betrieb liefert das Backend die Fläche als Vereinigung von `Region.boundary`.
+
 ## Noch offen
 
 - Echte Referenzliste: Die Werte in `mocks/regions.js` sind aus dem Gedächtnis zusammengestellt und gerundet. Einige kleine AGS sind nur illustrativ.
 - Welche Felder die Karten der Partner und Intern zeigen, und woher Lizenz- und Hardwaredaten kommen.
-- Kontaktdaten der Noch-nicht-Kunden (Telefon, E-Mail, Website).
+- Kontaktdaten der Noch-nicht-Kunden liegen nicht vor. Eventuell per Anreicherung über die Website der Verwaltung (Impressum).
 - Empfehlungsprogramm: Codes, Rabatt, und ob die Kunden-Karte dann auch Noch-nicht-Kunden zeigt (`include_prospects` in `audiences.py`).
 - Anmeldung: Bis dahin wählt der Prototyp den Partner per Parameter. Das Backend erlaubt das nur mit `MAP_ALLOW_PARTNER_PARAM` (Default: `DEBUG`).
 

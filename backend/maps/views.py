@@ -1,9 +1,11 @@
+import json
 import re
 from datetime import date, timedelta
 from functools import reduce
 from operator import or_
 
 from django.conf import settings
+from django.contrib.gis.db.models import Union
 from django.contrib.gis.db.models.functions import Distance
 from django.contrib.gis.geos import Point
 from django.contrib.gis.measure import D
@@ -12,7 +14,7 @@ from django.http import Http404, JsonResponse
 from django.views.decorators.cache import cache_control
 from django.views.decorators.http import require_GET
 
-from .audiences import AUDIENCES, RECENT_DAYS, RECENT_LIMIT
+from .audiences import AUDIENCES, RECENT_LIMIT, RECENT_WINDOWS_DAYS
 from .models import PartnerTerritory, Region, RegionLevel, State
 
 
@@ -60,9 +62,15 @@ def _scoped(request, cfg):
         territories = list(PartnerTerritory.objects.filter(partner_id=_partner_id(request)).select_related("partner"))
         if not territories:
             raise Http404("Für diesen Partner ist kein Gebiet hinterlegt")
-        qs = qs.filter(reduce(or_, (Q(key__startswith=t.key_prefix) for t in territories)))
+        in_territory = reduce(or_, (Q(key__startswith=t.key_prefix) for t in territories))
+        qs = qs.filter(in_territory)
         meta["partner"] = territories[0].partner.get_full_name() or territories[0].partner.get_username()
         meta["territories"] = [str(t) for t in territories]
+        # Fläche fürs Hervorheben: Vereinigung der Kreisgrenzen (kreisfreie Städte sind als Kreis importiert).
+        # Im Betrieb vorberechnen oder cachen, ST_Union über viele Kreise ist nicht billig.
+        area = (Region.objects.filter(in_territory, level=RegionLevel.KREIS, boundary__isnull=False)
+                .aggregate(u=Union("boundary"))["u"])
+        meta["territory"] = json.loads(area.simplify(0.003, preserve_topology=True).geojson) if area else None
 
     return qs, meta
 
@@ -193,14 +201,20 @@ def regions(request, audience):
 def recent(request, audience):
     """
     Die zuletzt dazugekommenen Kunden. Bei "kunden" deutschlandweit, damit die Leiste
-    nie leer ist; nicht freigegebene erscheinen dort nur mit Bundesland.
+    nie leer ist; nicht freigegebene erscheinen dort nur mit Bundesland. Unter recent_min
+    Kunden im Zeitraum wird der nächste Zeitraum versucht, danach bleibt die Liste leer.
     """
     cfg = _audience(audience)
     qs, _ = _scoped(request, {**cfg, "scope": "all" if cfg["scope"] == "radius" else cfg["scope"]})
 
-    since = date.today() - timedelta(days=RECENT_DAYS)
-    qs = qs.filter(customer_since__isnull=False, customer_since__gte=since)
-    total = qs.count()
+    customers = qs.filter(customer_since__isnull=False)
+    for days in RECENT_WINDOWS_DAYS:
+        qs = customers.filter(customer_since__gte=date.today() - timedelta(days=days))
+        total = qs.count()
+        if total >= cfg["recent_min"]:
+            break
+    else:
+        return JsonResponse({"days": days, "total": 0, "items": []})
 
     items = []
     for r in qs.order_by("-customer_since").only(
@@ -218,7 +232,7 @@ def recent(request, audience):
             "lng": round(r.location.x, 2) if named else None,
         })
 
-    return JsonResponse({"days": RECENT_DAYS, "total": total, "items": items})
+    return JsonResponse({"days": days, "total": total, "items": items})
 
 
 @require_GET

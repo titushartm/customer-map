@@ -19,6 +19,13 @@ function ago(iso) {
   return days < 7 ? rtf.format(-days, 'day') : rtf.format(-Math.round(days / 7), 'week')
 }
 
+// 30 → "im letzten Monat", 90 → "in den letzten drei Monaten"
+const period = computed(() => {
+  const days = props.recent?.days ?? 30
+  const months = Math.round(days / 30)
+  return months <= 1 ? 'im letzten Monat' : `in den letzten ${['', '', 'zwei', 'drei', 'vier', 'fünf', 'sechs'][months] ?? months} Monaten`
+})
+
 const anonymous = (item) => (item.level === 'kreis' ? `Ein Landkreis in ${item.state}` : `Eine Verwaltung in ${item.state}`)
 const label = (item) => item.name ?? anonymous(item)
 
@@ -33,14 +40,14 @@ const compactLine = computed(() => {
 <template>
   <p v-if="compact && total" class="mm-recent-line">
     <span class="mm-recent-dot" aria-hidden="true" />
-    <span><strong>Neu im letzten Monat:</strong> {{ compactLine }}</span>
+    <span><strong>Neu {{ period }}:</strong> {{ compactLine }}</span>
   </p>
 
   <section v-else-if="!compact && total" class="mm-recent" aria-label="Neu dabei">
     <p class="mm-recent-head">
       <span class="mm-recent-dot" aria-hidden="true" />
       <strong>{{ total }} {{ total === 1 ? 'Verwaltung' : 'Verwaltungen' }}</strong>
-      in den letzten {{ recent.days }} Tagen dazugekommen
+      {{ period }} dazugekommen
     </p>
     <ul>
       <li v-for="(item, i) in items" :key="item.key ?? `anon-${i}`">
