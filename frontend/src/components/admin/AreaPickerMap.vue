@@ -4,7 +4,7 @@ import maplibregl from 'maplibre-gl'
 import 'maplibre-gl/dist/maplibre-gl.css'
 
 // Karte im Partnerdialog: alle Kreise anklickbar. Gelb = im Gebiet dieses Partners,
-// blaugrau = schon bei einem anderen Partner desselben Segments.
+// hell = vergeben an einen anderen Partner desselben Segments (je Segment exklusiv).
 const props = defineProps({
   /** Länder und Kreise mit Fläche: [{ key, name, level: 'land' | 'kreis', kind, geometry }] */
   areas: { type: Array, required: true },
@@ -91,7 +91,7 @@ onMounted(() => {
       map.setFeatureState({ source: 'ap-kreise', id: hoveredId }, { hover: true })
       map.getCanvas().style.cursor = 'pointer'
       const { name, selected, owner } = f.properties
-      hover.value = { name, note: selected ? 'im Gebiet, Klick entfernt' : owner ? `bei ${owner}` : 'Klick fügt hinzu' }
+      hover.value = { name, note: selected ? 'im Gebiet, Klick entfernt' : owner ? `vergeben an ${owner}` : 'Klick fügt hinzu' }
     })
     map.on('mouseleave', 'ap-fill', () => {
       if (hoveredId !== null) map.setFeatureState({ source: 'ap-kreise', id: hoveredId }, { hover: false })
@@ -123,7 +123,7 @@ watch(() => [props.selected, props.taken, props.areas], () => {
     </p>
     <ul class="ap-legend">
       <li><span class="ap-swatch" :style="{ background: fill }" /> Gebiet dieses Partners</li>
-      <li><span class="ap-swatch" :style="{ background: takenFill }" /> anderer Partner, gleiches Segment</li>
+      <li><span class="ap-swatch" :style="{ background: takenFill }" /> vergeben an anderen Partner (gleiches Segment)</li>
     </ul>
   </div>
 </template>

@@ -169,6 +169,8 @@ class PartnerTerritory(models.Model):
     Ein Ziel gehört dazu, wenn der Schlüssel seiner Region mit dem Schlüssel dieser Region
     beginnt (und sein Segment das des Partners ist).
     Ämter/VG gehen nicht: Ihre Gemeinden tragen den Verbandsschlüssel nicht im AGS.
+    Je Segment exklusiv: Überschneidungen zwischen aktiven Partnern desselben Segments verhindert
+    partner_admin._save (Präfix-Überschneidung lässt sich nicht als DB-Constraint ausdrücken).
     """
 
     ALLOWED_LEVELS = (RegionLevel.LAND, RegionLevel.KREIS, RegionLevel.GEMEINDE)

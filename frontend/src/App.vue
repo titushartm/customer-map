@@ -242,7 +242,7 @@ function onTabKey(e, i) {
       <ReferralView :target-key="referrerKey" />
     </main>
 
-    <main v-else role="tabpanel" aria-labelledby="tab-liste" class="app-view">
+    <main v-else role="tabpanel" aria-labelledby="tab-liste" class="app-view list-view">
       <div class="view-bar">
         <h1>Liste</h1>
         <label class="as">
@@ -253,7 +253,7 @@ function onTabKey(e, i) {
           </select>
         </label>
       </div>
-      <RegionList :partner-id="listPartnerId" @open="openKey = $event" />
+      <RegionList class="list-fill" :partner-id="listPartnerId" @open="openKey = $event" />
     </main>
 
     <RecommendationDialog
@@ -327,6 +327,16 @@ body {
 }
 
 .app-view { padding-top: 24px; }
+
+/* Liste: Seite genau so hoch wie das Fenster, nur die Tabelle scrollt */
+.page:has(.list-view) { height: 100dvh; display: flex; flex-direction: column; padding-bottom: 16px; box-sizing: border-box; }
+.page:has(.list-view) footer { display: none; }
+.list-view { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+.list-fill { flex: 1; min-height: 0; }
+@media (max-width: 700px), (max-height: 560px) {
+  /* Zu wenig Platz für feste Höhe: normal scrollen */
+  .page:has(.list-view) { height: auto; display: block; }
+}
 .view-bar { display: flex; flex-wrap: wrap; align-items: end; justify-content: space-between; gap: 12px 24px; margin-bottom: 16px; }
 .view-bar h1 { margin: 0; font-size: 1.8rem; }
 .as { display: grid; gap: 4px; }

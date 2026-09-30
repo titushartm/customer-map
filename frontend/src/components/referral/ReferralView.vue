@@ -3,6 +3,7 @@ import { ref, computed, watch } from 'vue'
 import { fetchReferralAccount } from '../../api/map.js'
 import { SEGMENTS, kindLabel, sizeText } from '../../lib/segments.js'
 import { STATUS_LABEL, draftInvitation } from '../../lib/referral.js'
+import { useLazyList } from '../../composables/useLazyList.js'
 
 // Empfehlungsbereich eines angemeldeten Kunden. Nur mit Lizenz gibt es einen Code.
 const props = defineProps({
@@ -45,6 +46,8 @@ async function copy(what, value) {
     copied.value = 'error'
   }
 }
+
+const { items: shownReferrals, hasMore: moreReferrals, sentinel } = useLazyList(() => account.value?.referrals ?? [], { step: 25 })
 
 const progress = computed(() => (account.value?.eligible ? account.value.earnedPct / account.value.rules.referrerCapPct : 0))
 const dateFmt = new Intl.DateTimeFormat('de-DE', { dateStyle: 'medium' })
@@ -131,7 +134,7 @@ const dateFmt = new Intl.DateTimeFormat('de-DE', { dateStyle: 'medium' })
         <table v-if="account.referrals.length" class="rf-table">
           <thead><tr><th scope="col">Eingeladen</th><th scope="col">Art</th><th scope="col">Status</th><th scope="col">Seit</th></tr></thead>
           <tbody>
-            <tr v-for="x in account.referrals" :key="x.key">
+            <tr v-for="x in shownReferrals" :key="x.key">
               <td class="rf-name">{{ x.name }}</td>
               <td>{{ kindLabel(x) }}</td>
               <td><span class="rf-status" :class="`is-${x.status}`">{{ STATUS_LABEL[x.status] }}</span></td>
@@ -139,6 +142,7 @@ const dateFmt = new Intl.DateTimeFormat('de-DE', { dateStyle: 'medium' })
             </tr>
           </tbody>
         </table>
+        <p v-if="moreReferrals" ref="sentinel" class="rf-muted">Weitere werden geladen …</p>
         <p v-else class="rf-muted">Noch keine Empfehlungen. Der erste Nachbar bringt Ihnen {{ account.rules.referrerPctPerWin }} %.</p>
       </section>
     </template>

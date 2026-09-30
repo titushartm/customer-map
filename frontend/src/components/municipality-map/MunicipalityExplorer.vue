@@ -4,6 +4,7 @@ import MunicipalityMap from './MunicipalityMap.vue'
 import PlaceSearch from './PlaceSearch.vue'
 import RecentCustomers from './RecentCustomers.vue'
 import { useUserLocation } from '../../composables/useUserLocation.js'
+import { useLazyList } from '../../composables/useLazyList.js'
 import { fetchTargets, fetchRecent } from '../../api/map.js'
 import { SEGMENTS, sizeText, kindLabel } from '../../lib/segments.js'
 
@@ -266,6 +267,8 @@ const visible = computed(() => {
   const [w, s, e, n] = bounds.value
   return list.filter(({ geometry: { coordinates: [x, y] } }) => x >= w && x <= e && y >= s && y <= n)
 })
+// Intern sind das Tausende: stückweise rendern, beim Scrollen der Liste mehr
+const { items: visibleItems, hasMore: moreVisible, sentinel: listSentinel } = useLazyList(visible, { step: 50 })
 
 const dateFmt = new Intl.DateTimeFormat('de-DE', { dateStyle: 'long' })
 const monthFmt = new Intl.DateTimeFormat('de-DE', { month: 'long', year: 'numeric' })
@@ -370,7 +373,7 @@ function itemMeta(p) {
         </header>
 
         <ol v-if="visible.length" class="mm-list">
-          <li v-for="f in visible" :key="f.properties.key">
+          <li v-for="f in visibleItems" :key="f.properties.key">
             <button
               type="button"
               class="mm-item"
@@ -389,6 +392,7 @@ function itemMeta(p) {
               <span v-if="f.properties.is_new" class="mm-new">Neu dabei</span>
             </button>
           </li>
+          <li v-if="moreVisible" ref="listSentinel" class="mm-more" aria-hidden="true">Weitere werden geladen …</li>
         </ol>
         <p v-else-if="ready && !loading && shown.features.length" class="mm-empty">{{ text.emptyArea }}</p>
       </aside>
@@ -587,6 +591,7 @@ function itemMeta(p) {
 .mm-error { margin: 12px 0 0; color: #FFB4A8; font-size: 0.95rem; }
 
 .mm-list { list-style: none; margin: 0; padding: 8px 12px 24px; overflow-y: auto; flex: 1; }
+.mm-more { padding: 10px 12px; color: var(--mm-muted); font-size: 0.9rem; }
 .mm-item {
   display: grid;
   grid-template-columns: 1fr auto;

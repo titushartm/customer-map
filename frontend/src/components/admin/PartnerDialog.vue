@@ -10,7 +10,7 @@ const props = defineProps({
   open: { type: Boolean, default: false },
   /** Zu bearbeitender Partner, null = neuer Partner */
   partner: { type: Object, default: null },
-  /** Alle Partner, für Überschneidungen auf der Karte */
+  /** Alle Partner: Gebiete sind je Segment exklusiv, vergebene zeigt die Karte an */
   partners: { type: Array, default: () => [] },
 })
 const emit = defineEmits(['close', 'saved'])
@@ -20,7 +20,7 @@ const form = ref(blank())
 const areaMap = ref(null) // Länder und Kreise mit Fläche, einmal geladen
 const query = ref('')
 const hits = ref([])
-const notice = ref(null)
+const notice = ref(null) // { text, warn }
 const error = ref(null)
 const saving = ref(false)
 const preview = ref(null)
@@ -53,6 +53,7 @@ watch(() => props.open, async (open) => {
 const keys = computed(() => form.value.areas.map((a) => a.key))
 const sortedAreas = computed(() => [...form.value.areas].sort((a, b) =>
   LEVEL_ORDER[a.level] - LEVEL_ORDER[b.level] || a.name.localeCompare(b.name, 'de')))
+// Regionen aktiver Partner desselben Segments. Andere Segmente dürfen dieselbe Region haben.
 const taken = computed(() => props.partners
   .filter((p) => p.id !== form.value.id && p.active && p.segment === form.value.segment)
   .flatMap((p) => p.areas.map((a) => ({ key: a.key, partner: p.name }))))
@@ -61,16 +62,44 @@ const areaByKey = computed(() => Object.fromEntries((areaMap.value ?? []).map((a
 const toRef = (a) => ({ key: a.key, name: a.name, level: a.level, kind: a.kind ?? null })
 const kindText = (a) => (a.level === 'land' ? 'Land' : a.level === 'gemeinde' ? 'Gemeinde' : a.kind ?? 'Kreis')
 
-/** Gebiet aufnehmen. Liegt es schon in einem größeren, passiert nichts; kleinere darin fallen weg. */
+/** Vergebene Regionen, die sich mit key überschneiden: darüber (Land hat den Kreis) oder darin (Kreis im Land) */
+const conflictsOf = (key) => taken.value.filter((t) => key.startsWith(t.key) || t.key.startsWith(key))
+const owners = (conflicts) => [...new Set(conflicts.map((t) => t.partner))].join(', ')
+/** Für die Suchliste: 'vergeben an …' oder 'teilweise vergeben' */
+function takenNote(key) {
+  const c = conflictsOf(key)
+  if (!c.length) return null
+  const owner = c.find((t) => key.startsWith(t.key))
+  return owner ? `vergeben an ${owner.partner}` : `teilweise vergeben an ${owners(c)}`
+}
+
+/**
+ * Gebiet aufnehmen. Liegt es schon in einem größeren, passiert nichts; kleinere darin fallen weg.
+ * Vergebene Regionen (gleiches Segment) gehen nicht; bei einem teilweise vergebenen Land kommen die freien Kreise.
+ */
 function add(area) {
   const parent = form.value.areas.find((a) => area.key !== a.key && area.key.startsWith(a.key))
   if (keys.value.includes(area.key) || parent) {
-    notice.value = `${area.name} gehört schon zum Gebiet${parent ? ` (liegt in ${parent.name})` : ''}.`
+    notice.value = { text: `${area.name} gehört schon zum Gebiet${parent ? ` (liegt in ${parent.name})` : ''}.` }
+    return
+  }
+  const conflicts = conflictsOf(area.key)
+  if (conflicts.length) {
+    const owner = conflicts.find((t) => area.key.startsWith(t.key))
+    const free = area.level === 'land' && !owner
+      ? areaMap.value.filter((a) => a.level === 'kreis' && a.key.startsWith(area.key) && !conflictsOf(a.key).length && !keys.value.some((k) => a.key.startsWith(k)))
+      : []
+    if (!free.length) {
+      notice.value = { warn: true, text: `${area.name} ist schon vergeben an ${owner?.partner ?? owners(conflicts)}. Je Segment betreut nur ein Partner eine Region.` }
+      return
+    }
+    form.value.areas = [...form.value.areas.filter((a) => !a.key.startsWith(area.key)), ...free.map(toRef)]
+    notice.value = { text: `${area.name} ist teilweise vergeben (${owners(conflicts)}). Übernommen: die ${free.length} freien Kreise.` }
     return
   }
   const inside = form.value.areas.filter((a) => a.key.startsWith(area.key))
   form.value.areas = [...form.value.areas.filter((a) => !a.key.startsWith(area.key)), toRef(area)]
-  notice.value = inside.length ? `${area.name} ersetzt ${inside.map((a) => a.name).join(', ')}.` : null
+  notice.value = inside.length ? { text: `${area.name} ersetzt ${inside.map((a) => a.name).join(', ')}.` } : null
 }
 
 function remove(key) {
@@ -86,7 +115,7 @@ function toggleKreis(key) {
     const rest = areaMap.value.filter((a) => a.level === 'kreis' && a.key.startsWith(land.key) && a.key !== key)
     form.value.areas = [...form.value.areas.filter((a) => a.key !== land.key), ...rest.map(toRef)]
     const k = areaByKey.value[key]
-    notice.value = `${land.name} ohne ${kindText(k)} ${k.name}: jetzt ${rest.length} einzelne Kreise.`
+    notice.value = { text: `${land.name} ohne ${kindText(k)} ${k.name}: jetzt ${rest.length} einzelne Kreise.` }
     return
   }
   add(areaByKey.value[key])
@@ -113,6 +142,9 @@ watch(() => [props.open, form.value.segment, keys.value.join(',')], async () => 
     : null
   if (seq === previewSeq) preview.value = res
 })
+
+// Gebiet kollidiert mit einem aktiven Partner desselben Segments: aktiv speichern geht nicht
+const blocked = computed(() => form.value.active && Boolean(preview.value?.overlaps.length))
 
 async function save() {
   error.value = null
@@ -148,7 +180,7 @@ async function save() {
 
           <fieldset class="pd-field">
             <legend>Segment</legend>
-            <p class="pd-hint">Ein Partner verkauft genau ein Segment und sieht nur dieses. Für ein zweites Segment einen weiteren Partner anlegen.</p>
+            <p class="pd-hint">Ein Partner verkauft genau ein Segment und sieht nur dieses. Für ein zweites Segment einen weiteren Partner anlegen. Je Segment gehört jede Region nur einem Partner.</p>
             <div class="pd-seg">
               <label v-for="(s, k) in SEGMENTS" :key="k" :class="{ 'is-on': form.segment === k }">
                 <input v-model="form.segment" type="radio" name="pd-segment" :value="k">
@@ -172,12 +204,15 @@ async function save() {
                 <li v-for="h in hits" :key="h.key">
                   <button type="button" @click="pick(h)">
                     <span>{{ h.name }}</span>
-                    <span class="pd-muted">{{ kindText(h) }}<template v-if="h.level !== 'land'"> · {{ h.state }}</template></span>
+                    <span class="pd-muted">
+                      {{ kindText(h) }}<template v-if="h.level !== 'land'"> · {{ h.state }}</template>
+                      <span v-if="takenNote(h.key)" class="pd-taken"> · {{ takenNote(h.key) }}</span>
+                    </span>
                   </button>
                 </li>
               </ul>
             </div>
-            <p v-if="notice" class="pd-notice" role="status">{{ notice }}</p>
+            <p v-if="notice" class="pd-notice" :class="{ 'is-warn': notice.warn }" role="status">{{ notice.text }}</p>
             <ul v-if="sortedAreas.length" class="pd-areas">
               <li v-for="a in sortedAreas" :key="a.key">
                 <span class="pd-area-name">{{ a.name }}</span>
@@ -215,13 +250,16 @@ async function save() {
             </p>
             <p v-else class="pd-muted">Sobald ein Gebiet gewählt ist, steht hier, wie viele Ziele darin liegen.</p>
             <template v-if="preview?.overlaps.length">
-              <h3 class="pd-warn-head">Überschneidungen</h3>
+              <h3 class="pd-warn-head">Schon vergeben</h3>
               <ul class="pd-warn">
                 <li v-for="(o, i) in preview.overlaps" :key="i">
                   {{ o.area }}: {{ o.partner }} betreut dort schon {{ SEGMENTS[form.segment].plural }}<template v-if="o.other !== o.area"> ({{ o.other }})</template>.
                 </li>
               </ul>
-              <p class="pd-muted">Speichern geht trotzdem; beide Partner sehen die Ziele dann.</p>
+              <p class="pd-muted">
+                <template v-if="form.active">Je Segment betreut nur ein Partner eine Region. Diese Gebiete entfernen oder den Partner als inaktiv speichern.</template>
+                <template v-else>Inaktiv lässt sich speichern. Aktivieren geht erst, wenn das Gebiet frei ist.</template>
+              </p>
             </template>
           </section>
         </div>
@@ -230,7 +268,7 @@ async function save() {
       <footer class="pd-foot">
         <p v-if="error" class="pd-error" role="alert">{{ error }}</p>
         <button type="button" class="pd-btn-quiet" @click="emit('close')">Abbrechen</button>
-        <button type="submit" class="pd-btn" :disabled="saving">{{ saving ? 'Speichert …' : 'Speichern' }}</button>
+        <button type="submit" class="pd-btn" :disabled="saving || blocked">{{ saving ? 'Speichert …' : 'Speichern' }}</button>
       </footer>
     </form>
   </dialog>
@@ -290,6 +328,7 @@ async function save() {
 }
 .pd-hits button:hover, .pd-hits button:focus-visible { background: var(--page-bg); }
 .pd-notice { margin: 0; font-size: 0.9rem; color: var(--page-accent); }
+.pd-notice.is-warn, .pd-taken { color: #FFB4A8; }
 
 .pd-areas { display: flex; flex-wrap: wrap; gap: 6px; margin: 0; padding: 0; list-style: none; }
 .pd-areas li {

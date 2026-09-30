@@ -9,7 +9,8 @@ from django.contrib.gis.db.models import Union
 from django.contrib.gis.db.models.functions import Distance
 from django.contrib.gis.geos import Point
 from django.contrib.gis.measure import D
-from django.db.models import Case, Func, IntegerField, Q, TextField, Value, When
+from django.core.paginator import Paginator
+from django.db.models import Case, Count, F, Func, IntegerField, Q, TextField, Value, When
 from django.http import Http404, JsonResponse
 from django.views.decorators.cache import cache_control
 from django.views.decorators.http import require_GET
@@ -207,6 +208,95 @@ def targets(request, audience):
         "type": "FeatureCollection",
         "features": [_feature(t, cfg["fields"]) for t in rows],
         "meta": meta,
+    })
+
+
+LIST_PAGE_SIZES = (25, 50, 100)
+# Sortierbare Spalten der Liste -> ORM-Ausdruck
+LIST_SORT = {
+    "name": "name",
+    "size": "size",
+    "state": "region__state",
+    "customer_since": "customer_since",
+    "status": "customer_since",  # Kunden zuerst bzw. zuletzt
+    "distance_km": "distance",
+}
+
+
+@require_GET
+@cache_control(private=True, max_age=60)
+def target_list(request, audience):
+    """
+    Eine Seite der Zieltabelle (Tab Liste), nur intern und partner. Filtern, Sortieren und Blättern hier,
+    damit das Frontend nie alle Ziele lädt.
+    ?q= (Name oder PLZ-Anfang) &status=customer|prospect &state=<Name> &kind=stadtwerk|verwaltung:kreis
+    &size_class=<Index> &lat=&lng=&radius= &sort=<Spalte> &dir=asc|desc &page= &page_size=25|50|100
+    """
+    cfg = _audience(audience)
+    if cfg["scope"] == "radius":
+        raise Http404("Die Liste gibt es nur intern und für Partner")
+    scope, meta = _scoped(request, cfg)
+    qs = scope
+
+    if q := request.GET.get("q", "").strip():
+        if q.isdigit():
+            qs = qs.annotate(plz_text=ArrayToString("region__postcodes", Value(","))).filter(plz_text__regex=r"(^|,)" + re.escape(q))
+        else:
+            qs = qs.filter(name__icontains=q)
+    if (status := request.GET.get("status")) in ("customer", "prospect"):
+        qs = qs.filter(customer_since__isnull=(status == "prospect"))
+    if state := request.GET.get("state"):
+        qs = qs.filter(region__state={n: c for c, n in State.choices}.get(state, state))
+    if kind := request.GET.get("kind"):
+        seg, _, lvl = kind.partition(":")
+        qs = qs.filter(segment=seg, **({"region__level": lvl} if lvl else {}))
+    if (size_class := request.GET.get("size_class", "")).isdigit() and int(size_class) < len(SIZE_CLASSES):
+        lo, hi = SIZE_CLASSES[int(size_class)]
+        qs = qs.filter(segment=Segment.VERWALTUNG, size__gte=lo, **({"size__lt": hi} if hi else {}))
+    point = None
+    if coords := _coords(request, required=False):
+        point = Point(coords[1], coords[0], srid=4326)
+        try:
+            radius_km = min(float(request.GET.get("radius", 25)), 200)
+        except ValueError:
+            radius_km = 25
+        qs = qs.filter(location__dwithin=(point, D(km=radius_km))).annotate(distance=Distance("location", point))
+
+    sort = request.GET.get("sort", "size")
+    if sort not in LIST_SORT or (sort == "distance_km" and point is None):
+        sort = "size"
+    desc = request.GET.get("dir", "desc") == "desc"
+    if sort == "status":
+        desc = not desc  # "Kunde" aufsteigend = Kunden zuerst = customer_since vorhanden zuerst
+    field = F(LIST_SORT[sort])
+    qs = qs.order_by(field.desc(nulls_last=True) if desc else field.asc(nulls_last=True), "name", "pk")
+
+    try:
+        page_size = int(request.GET.get("page_size", 50))
+    except ValueError:
+        page_size = 50
+    page_size = page_size if page_size in LIST_PAGE_SIZES else 50
+    counts = qs.aggregate(count=Count("pk"), customers=Count("pk", filter=Q(customer_since__isnull=False)))
+    paginator = Paginator(qs.select_related("region", "organization"), page_size)
+    page = paginator.get_page(request.GET.get("page", 1))  # außerhalb des Bereichs: letzte bzw. erste Seite
+
+    def row(t):
+        return {**_properties(t, cfg["fields"]), "lat": round(t.location.y, 5), "lng": round(t.location.x, 5)}
+
+    return JsonResponse({
+        "count": counts["count"],
+        "customers": counts["customers"],
+        "prospects": counts["count"] - counts["customers"],
+        "page": page.number,
+        "pages": paginator.num_pages,
+        "page_size": page_size,
+        "results": [row(t) for t in page.object_list],
+        "meta": {
+            "partner": meta.get("partner"),
+            # Auswahl für die Filter: aus dem ganzen Ausschnitt, nicht nur aus den Treffern
+            "states": sorted({State(s).label for s in scope.values_list("region__state", flat=True).distinct()}),
+            "segments": [s for s in Segment.values if scope.filter(segment=s).exists()],
+        },
     })
 
 

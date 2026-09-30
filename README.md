@@ -29,7 +29,9 @@ Admin
 : Nur SpeechMind intern: Liste aller Vertriebspartner mit Segment, Gebiet und Abdeckung. „Neuer Partner“ und „Bearbeiten“ öffnen einen Dialog, siehe [Vertriebspartner](#vertriebspartner). „Karte“ springt in die Partneransicht.
 
 Liste
-: Alle Ziele als Tabelle mit Kunden-Häkchen. Suche nach Name oder PLZ, „In der Nähe von“ mit Umkreis, Filter nach Status, Bundesland, Art (Segment bzw. Ebene) und Einwohnerklasse, sortierbare Spalten. Klick auf eine Zeile öffnet den Empfehlungsdialog.
+: Alle Ziele als Tabelle mit Kunden-Häkchen. Suche nach Name oder PLZ, „In der Nähe von“ mit Umkreis, Filter nach Status, Bundesland, Art (Segment bzw. Ebene) und Einwohnerklasse, sortierbare Spalten. Klick auf eine Zeile öffnet den Empfehlungsdialog. Filtern, Sortieren und Blättern macht der Server (`/api/map/<audience>/list/`, 25/50/100 je Seite); geladen wird immer nur eine Seite. Nur die Tabelle scrollt, Filter und Blätterleiste bleiben stehen.
+
+Lange Listen in den anderen Tabs (Liste neben der Karte, Partner im Admin, Einladungen) rendern stückweise und laden beim Scrollen nach (`composables/useLazyList.js`).
 
 Empfehlen
 : Für eingeloggte Kunden mit Lizenz: eigener Code und Einladungslink, Einladungstext, Vorschläge aus der Nachbarschaft (auch andere Segmente, z. B. die eigenen Stadtwerke), Status der Einladungen und Rabattstand bis zum Deckel.
@@ -53,9 +55,10 @@ Partner legt das Team im Tab Admin an, es gibt keine Liste zum Hochladen. Der Di
 - **Stammdaten:** Name, Ansprechpartner, E-Mail, Telefon, Website, aktiv ja/nein. Deaktivierte Partner behalten ihr Gebiet, ihre Logins sehen aber keine Karte mehr.
 - **Genau ein Segment.** Der Partner sieht in seinem Gebiet nur dieses. Wer Verwaltungen und Stadtwerke verkauft, wird zweimal angelegt.
 - **Gebiet:** Länder, Kreise und Gemeinden aus der Referenz (`Region`), per Suche oder per Klick auf einen Kreis in der Karte. Liegt ein Kreis in einem gewählten Land, teilt der Klick das Land in seine übrigen Kreise auf („Sachsen ohne Leipzig“). Ein größeres Gebiet ersetzt die kleineren darin.
-- **Vorschau:** Wie viele Ziele des Segments im Gebiet liegen, wie viele davon Kunden sind, und wo sich das Gebiet mit anderen aktiven Partnern desselben Segments überschneidet (auf der Karte hell getönt). Überschneidungen sind erlaubt, der Dialog warnt nur.
+- **Je Segment exklusiv:** Eine Region gehört pro Segment höchstens einem aktiven Partner. Ein Stadtwerke-Partner darf denselben Kreis haben wie ein Verwaltungs-Partner, zwei Verwaltungs-Partner nicht. Vergebene Regionen sind auf der Karte hell getönt und in der Suche markiert; wählt man ein teilweise vergebenes Land, kommen nur die freien Kreise. Inaktive Partner blockieren nichts; beim Aktivieren wird neu geprüft.
+- **Vorschau:** Wie viele Ziele des Segments im Gebiet liegen und wie viele davon Kunden sind. Kollidiert das Gebiet (z. B. nach einem Segmentwechsel), lässt es sich nur inaktiv speichern.
 
-Im Backend sind das `SalesPartner` (mit `segment`) und je Gebietsregion ein `PartnerTerritory` (FK auf `Region`), gepflegt über `backend/maps/partner_admin.py` (nur `is_staff`). Ein Ziel gehört zum Gebiet, wenn der Schlüssel seiner Region mit dem Schlüssel einer Gebietsregion beginnt und sein Segment das des Partners ist. Ämter/VG gehen als Gebiet nicht, weil ihre Gemeinden den Verbandsschlüssel nicht im AGS tragen.
+Im Backend sind das `SalesPartner` (mit `segment`) und je Gebietsregion ein `PartnerTerritory` (FK auf `Region`), gepflegt über `backend/maps/partner_admin.py` (nur `is_staff`). Die Exklusivität prüft `_save` unter Sperre der Partner des Segments (409 bei Konflikt), weil sich Präfix-Überschneidungen nicht als DB-Constraint ausdrücken lassen. Ein Ziel gehört zum Gebiet, wenn der Schlüssel seiner Region mit dem Schlüssel einer Gebietsregion beginnt und sein Segment das des Partners ist. Ämter/VG gehen als Gebiet nicht, weil ihre Gemeinden den Verbandsschlüssel nicht im AGS tragen.
 
 Im Mock liegen die Partner in `mocks/partners.js`; Änderungen im Dialog leben bis zum Neuladen der Seite.
 
@@ -96,6 +99,7 @@ frontend/src/
     PartnerDialog.vue                  Partner anlegen/bearbeiten: Segment, Gebiet, Vorschau
     AreaPickerMap.vue                  Karte der Kreise zum Anklicken
   api/map.js                           fetch + Mock-Backend (VITE_MAP_USE_MOCK)
+  composables/useLazyList.js           lange Listen stückweise rendern (Nachladen beim Scrollen)
   mocks/regions.js                     Geo-Referenz Ostdeutschland (AGS, Name, Land, Einwohner, PLZ, Koordinaten)
   mocks/targets.js                     Stadtwerke und DRK-Verbände je Region (Verwaltungen = alle Regionen)
   mocks/customers.js                   Kundenstatus je Ziel (neue Kunden meist ohne Orga/Lizenz)
@@ -111,7 +115,7 @@ backend/maps/                          Skizze
                    ReferralCode + Referral
   audiences.py     was jede Ansicht sehen darf
   referrals.py     Rabattregeln, Code-Erzeugung
-  views.py         /api/map/<audience>/targets/, /api/map/<audience>/recent/, /api/referral/<code>/, /api/geo/…
+  views.py         /api/map/<audience>/targets/, /api/map/<audience>/list/ (Seiten), /api/map/<audience>/recent/, /api/referral/<code>/, /api/geo/…
   partner_admin.py /api/partners/…, /api/geo/areas/ (Admin-Tab, nur is_staff)
   management/commands/import_vg250.py
 ```
@@ -132,7 +136,6 @@ Die Flächen im Mock (`mocks/areas.json`, gebaut mit `scripts/build_areas.py`) s
 - Kontaktdaten der Noch-nicht-Kunden liegen nicht vor. Eventuell per Anreicherung über die Website der Verwaltung (Impressum).
 - Empfehlungsprogramm: endgültige Prozente und Deckel, rechtliche Prüfung, Auszahlung/Verrechnung, Empfehlungskonto im Backend (`/referral/me/`, braucht die Anmeldung).
 - Listen für Stadtwerke, DRK und weitere Segmente, inklusive Größe (Mitarbeitende).
-- Gebiete exklusiv? Im Moment dürfen sich zwei Partner desselben Segments überschneiden (der Dialog warnt nur). Wenn Gebiete exklusiv sein sollen, wird aus der Warnung ein Fehler.
 - Anmeldung: Bis dahin wählt der Prototyp den Partner per Parameter. Das Backend erlaubt das nur mit `MAP_ALLOW_PARTNER_PARAM` (Default: `DEBUG`).
 
 ## Kartenstil und Datenschutz

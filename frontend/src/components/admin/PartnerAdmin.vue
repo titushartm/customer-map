@@ -2,6 +2,7 @@
 import { ref, computed } from 'vue'
 import { SEGMENTS } from '../../lib/segments.js'
 import PartnerDialog from './PartnerDialog.vue'
+import { useLazyList } from '../../composables/useLazyList.js'
 
 // Admin-Bereich (SpeechMind intern): Vertriebspartner anlegen, Segment und Gebiet festlegen, deaktivieren.
 const props = defineProps({
@@ -22,6 +23,7 @@ const rows = computed(() => {
     .filter((p) => !q || p.name.toLowerCase().includes(q) || p.areas.some((a) => a.name.toLowerCase().includes(q)))
     .sort((a, b) => Number(b.active) - Number(a.active) || a.name.localeCompare(b.name, 'de'))
 })
+const { items: shownRows, hasMore, sentinel } = useLazyList(rows, { step: 30 })
 const countBySegment = computed(() => Object.fromEntries(Object.keys(SEGMENTS).map((k) =>
   [k, props.partners.filter((p) => p.segment === k && p.active).length])))
 
@@ -59,13 +61,13 @@ function onSaved(p) {
             <th scope="col">Partner</th>
             <th scope="col">Segment</th>
             <th scope="col">Gebiet</th>
-            <th scope="col" class="pa-num">Ziele</th>
-            <th scope="col">Kunden</th>
+            <th scope="col" class="pa-num" title="Alle Organisationen des Segments im Gebiet, Kunden und Noch-nicht-Kunden">Im Gebiet</th>
+            <th scope="col">Davon Kunden</th>
             <th scope="col"><span class="pa-sr">Aktionen</span></th>
           </tr>
         </thead>
         <tbody>
-          <tr v-for="p in rows" :key="p.id" :class="{ 'is-inactive': !p.active }">
+          <tr v-for="p in shownRows" :key="p.id" :class="{ 'is-inactive': !p.active }">
             <td>
               <span class="pa-name">{{ p.name }}</span>
               <span v-if="!p.active" class="pa-badge">deaktiviert</span>
@@ -73,7 +75,7 @@ function onSaved(p) {
             </td>
             <td>{{ SEGMENTS[p.segment].plural }}</td>
             <td class="pa-areas" :title="p.areas.map((a) => a.name).join(', ')">{{ areaSummary(p.areas) }}</td>
-            <td class="pa-num">{{ numFmt.format(p.stats.targets) }}</td>
+            <td class="pa-num">{{ numFmt.format(p.stats.targets) }} {{ SEGMENTS[p.segment].plural }}</td>
             <td>
               <span class="pa-cov">
                 <span class="pa-bar-track"><span :style="{ width: `${pct(p.stats)}%` }" /></span>
@@ -87,6 +89,7 @@ function onSaved(p) {
           </tr>
         </tbody>
       </table>
+      <p v-if="hasMore" ref="sentinel" class="pa-empty">Weitere werden geladen …</p>
       <p v-if="!loading && !rows.length" class="pa-empty">Keine Partner{{ query || segment !== 'all' ? ' für diese Auswahl' : '' }}.</p>
     </div>
 

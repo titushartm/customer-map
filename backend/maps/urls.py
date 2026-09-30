@@ -8,6 +8,7 @@ app_name = "maps"
 urlpatterns = [
     path("map/<slug:audience>/targets/", views.targets, name="targets"),
     path("map/<slug:audience>/recent/", views.recent, name="recent"),
+    path("map/<slug:audience>/list/", views.target_list, name="list"),
     path("referral/<str:code>/", views.referral_lookup, name="referral"),
     path("geo/plz/<str:plz>/", views.postcode_location, name="postcode"),
     path("geo/ip/", views.ip_location, name="ip"),

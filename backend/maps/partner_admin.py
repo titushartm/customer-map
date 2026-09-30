@@ -3,6 +3,10 @@ Admin-Bereich der Karte: Vertriebspartner anlegen und bearbeiten (nur SpeechMind
 Das Frontend (PartnerAdmin.vue, PartnerDialog.vue) spricht diese Endpoints; die Gebiete wählt es aus
 der Referenz (Region), es gibt keine Liste zum Hochladen.
 
+Gebiete sind je Segment exklusiv: Eine Region (samt allem darin) gehört pro Segment höchstens einem
+aktiven Partner. Ein Stadtwerke-Partner darf also denselben Kreis haben wie ein Verwaltungs-Partner,
+zwei Verwaltungs-Partner nicht. Inaktive Partner blockieren nichts; beim Aktivieren wird neu geprüft.
+
     GET  /api/partners/            alle Partner mit Gebiet und Abdeckung
     POST /api/partners/            neuer Partner
     PUT  /api/partners/<id>/       Partner ändern (Gebiet wird ersetzt)
@@ -64,6 +68,27 @@ def _partner(p):
     }
 
 
+def _overlaps(segment, keys, exclude_id=None):
+    """Regionen aktiver Partner desselben Segments, die sich mit keys überschneiden (Land ⊃ Kreis ⊃ Gemeinde)."""
+    names = dict(Region.objects.filter(key__in=keys).values_list("key", "name"))
+    others = (PartnerTerritory.objects
+              .filter(partner__segment=segment, partner__active=True)
+              .exclude(partner_id=exclude_id)
+              .select_related("partner", "region"))
+    return [
+        {"partner": t.partner.name, "area": names.get(k, k), "other": t.region.name}
+        for t in others for k in keys
+        if k.startswith(t.region.key) or t.region.key.startswith(k)
+    ]
+
+
+def _overlap_error(overlaps):
+    if not overlaps:
+        return None
+    taken = ", ".join(f"{o['area']} ({o['partner']})" for o in overlaps)
+    return f"Gebiet schon vergeben: {taken}. Je Segment betreut nur ein Partner eine Region."
+
+
 def _body(request):
     try:
         return json.loads(request.body or b"{}")
@@ -104,8 +129,19 @@ def _validate(data):
     return fields, regions, None
 
 
+class Conflict(Exception):
+    pass
+
+
 def _save(partner, fields, regions):
     with transaction.atomic():
+        if fields["active"]:
+            # Alle Partner des Segments sperren, damit zwei gleichzeitige Speichervorgänge nicht
+            # dieselbe Region bekommen. Dann erst prüfen.
+            list(SalesPartner.objects.select_for_update().filter(segment=fields["segment"]).values_list("pk", flat=True))
+            error = _overlap_error(_overlaps(fields["segment"], [r.key for r in regions], exclude_id=partner.pk))
+            if error:
+                raise Conflict(error)
         for k, v in fields.items():
             setattr(partner, k, v)
         partner.save()
@@ -123,7 +159,10 @@ def partners(request):
     fields, regions, error = _validate(_body(request))
     if error:
         return JsonResponse({"error": error}, status=400)
-    return JsonResponse(_save(SalesPartner(), fields, regions), status=201)
+    try:
+        return JsonResponse(_save(SalesPartner(), fields, regions), status=201)
+    except Conflict as e:
+        return JsonResponse({"error": str(e)}, status=409)
 
 
 @staff_only
@@ -135,30 +174,22 @@ def partner_detail(request, pk):
     fields, regions, error = _validate(_body(request))
     if error:
         return JsonResponse({"error": error}, status=400)
-    return JsonResponse(_save(partner, fields, regions))
+    try:
+        return JsonResponse(_save(partner, fields, regions))
+    except Conflict as e:
+        return JsonResponse({"error": str(e)}, status=409)
 
 
 @staff_only
 @require_http_methods(["POST"])
 def partner_preview(request):
-    """Wie viele Ziele liegen im Gebiet, und wo überschneidet es sich mit aktiven Partnern desselben Segments?"""
+    """Wie viele Ziele liegen im Gebiet, und wo ist es schon an einen aktiven Partner desselben Segments vergeben?"""
     data = _body(request) or {}
     segment = data.get("segment")
     keys = [k for k in data.get("areas") or [] if isinstance(k, str) and k.isdigit()]
     if segment not in Segment.values:
         return JsonResponse({"error": "Unbekanntes Segment."}, status=400)
-    names = dict(Region.objects.filter(key__in=keys).values_list("key", "name"))
-
-    overlaps = []
-    others = (PartnerTerritory.objects
-              .filter(partner__segment=segment, partner__active=True)
-              .exclude(partner_id=data.get("id"))
-              .select_related("partner", "region"))
-    for t in others:
-        for k in keys:
-            if k.startswith(t.region.key) or t.region.key.startswith(k):
-                overlaps.append({"partner": t.partner.name, "area": names.get(k, k), "other": t.region.name})
-    return JsonResponse({**_coverage(segment, keys), "overlaps": overlaps})
+    return JsonResponse({**_coverage(segment, keys), "overlaps": _overlaps(segment, keys, exclude_id=data.get("id"))})
 
 
 @staff_only

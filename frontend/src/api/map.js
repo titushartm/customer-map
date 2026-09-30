@@ -4,7 +4,7 @@ import { MOCK_CUSTOMERS } from '../mocks/customers.js'
 import { SEED_PARTNERS } from '../mocks/partners.js'
 import { MOCK_REFERRALS, REFERRAL_RULES, codeFor } from '../mocks/referrals.js'
 import { SEGMENTS, SEGMENT_KEYS } from '../lib/segments.js'
-import { sizeClassOf } from '../lib/sizeClasses.js'
+import { sizeClassOf, SIZE_CLASSES } from '../lib/sizeClasses.js'
 import { haversineKm } from '../lib/geo.js'
 import { recommend } from '../mocks/recommendations.js'
 
@@ -30,6 +30,30 @@ export async function fetchTargets({ audience, segment, lat, lng, radiusKm, part
     ? mockTargets({ audience, segment, lat, lng, radiusKm, partnerId })
     : await getJson(`/map/${audience}/targets/`, { segment, lat, lng, radius: radiusKm, partner: partnerId })
   return normalize(raw)
+}
+
+/**
+ * Eine Seite der Zieltabelle (Tab Liste). Filtern, Sortieren und Blättern macht der Server,
+ * damit nie alle Ziele auf einmal geladen werden.
+ *   audience 'intern' | 'partner' (+ partnerId)
+ *   filters: { q (Name oder PLZ-Anfang), status ('customer' | 'prospect'), state (Name), kind ('stadtwerk' | 'verwaltung:kreis'),
+ *              sizeClass (Index in SIZE_CLASSES), near: { lat, lng }, radiusKm }
+ *   sort: Feldname, dir: 1 | -1, page (ab 1), pageSize
+ * Rückgabe: { count, customers, prospects, page, pages, page_size, results: [Zeile], meta: { partner, states, segments } }
+ * Zeile = properties wie bei fetchTargets plus lat, lng, distance_km (nur mit near).
+ */
+export async function fetchTargetPage({ audience, partnerId, filters = {}, sort = 'size', dir = -1, page = 1, pageSize = 50 }) {
+  if (!USE_MOCK) {
+    const f = filters
+    return getJson(`/map/${audience}/list/`, {
+      partner: partnerId, q: f.q, status: f.status, state: f.state, kind: f.kind, size_class: f.sizeClass,
+      lat: f.near?.lat, lng: f.near?.lng, radius: f.near ? f.radiusKm : null,
+      sort, dir: dir === 1 ? 'asc' : 'desc', page, page_size: pageSize,
+    })
+  }
+  if (audience === 'partner') await loadAreas()
+  await new Promise((r) => setTimeout(r, 120)) // wie ein Request, damit Ladezustände sichtbar sind
+  return mockTargetPage({ audience, partnerId, filters, sort, dir, page, pageSize })
 }
 
 /** Die zuletzt dazugekommenen Kunden: { days, total, items: [{ key?, name?, segment, level, state, customer_since, lat?, lng? }] } */
@@ -67,13 +91,15 @@ export async function fetchPartners() {
 
 /**
  * Partner anlegen (ohne id) oder ändern. areas = Liste von Regionsschlüsseln.
+ * Gebiete sind je Segment exklusiv: Ein aktiver Partner darf keine Region haben, die sich mit einem
+ * anderen aktiven Partner desselben Segments überschneidet. Andere Segmente dürfen dieselbe Region haben.
  * Gibt den gespeicherten Partner zurück, bei ungültigen Angaben einen Fehler mit Text.
  */
 export async function savePartner({ id, name, segment, active, contact, areas }) {
   const body = { name: name.trim(), segment, active, contact: { ...contact }, areas: [...areas] }
   if (!USE_MOCK) return sendJson(id ? `/partners/${id}/` : '/partners/', id ? 'PUT' : 'POST', body)
   await loadAreas()
-  const error = validatePartner(body)
+  const error = validatePartner(body) ?? (body.active ? overlapError(overlapsFor(id, segment, body.areas)) : null)
   if (error) throw new Error(error)
   const saved = { ...body, id: id ?? Math.max(100, ...partnerStore.map((p) => p.id)) + 1 }
   partnerStore = id ? partnerStore.map((p) => (p.id === id ? saved : p)) : [...partnerStore, saved]
@@ -82,21 +108,13 @@ export async function savePartner({ id, name, segment, active, contact, areas })
 
 /**
  * Vorschau im Partnerdialog, bevor gespeichert wird: wie viele Ziele im Gebiet liegen und wo es
- * sich mit anderen Partnern desselben Segments überschneidet.
+ * mit aktiven Partnern desselben Segments kollidiert (dann lässt es sich nicht speichern).
  * { targets, customers, overlaps: [{ partner, area, other }] }
  */
 export async function previewPartner({ id, segment, areas }) {
   if (!USE_MOCK) return sendJson('/partners/preview/', 'POST', { id, segment, areas })
   await loadAreas()
-  const overlaps = []
-  for (const other of partnerStore) {
-    if (other.id === id || other.segment !== segment || !other.active) continue
-    for (const a of areas) {
-      const hit = other.areas.find((b) => a.startsWith(b) || b.startsWith(a))
-      if (hit) overlaps.push({ partner: other.name, area: areaName(a), other: areaName(hit) })
-    }
-  }
-  return { ...coverage(segment, areas), overlaps }
+  return { ...coverage(segment, areas), overlaps: overlapsFor(id, segment, areas) }
 }
 
 /**
@@ -333,6 +351,23 @@ function validatePartner({ name, segment, areas }) {
   return null
 }
 
+/** Regionen, die ein anderer aktiver Partner desselben Segments schon hat (in beide Richtungen: Land ⊃ Kreis). */
+function overlapsFor(id, segment, areas) {
+  const overlaps = []
+  for (const other of partnerStore) {
+    if (other.id === id || other.segment !== segment || !other.active) continue
+    for (const a of areas) {
+      const hit = other.areas.find((b) => a.startsWith(b) || b.startsWith(a))
+      if (hit) overlaps.push({ partner: other.name, area: areaName(a), other: areaName(hit) })
+    }
+  }
+  return overlaps
+}
+
+const overlapError = (overlaps) => (overlaps.length
+  ? `Gebiet schon vergeben: ${overlaps.map((o) => `${o.area} (${o.partner})`).join(', ')}. Je Segment betreut nur ein Partner eine Region.`
+  : null)
+
 /** Gebietsfläche als eine MultiPolygon-Geometrie. Gemeinden haben im Mock keine Fläche. */
 function mergedArea(keys) {
   const polys = keys.flatMap((k) => {
@@ -406,6 +441,51 @@ function mockTargets({ audience, segment, lat, lng, radiusKm, partnerId }) {
   }))
 
   return { type: 'FeatureCollection', features, meta }
+}
+
+function mockTargetPage({ audience, partnerId, filters: f, sort, dir, page, pageSize }) {
+  const { collection, meta } = normalize(mockTargets({ audience, partnerId }))
+  const all = collection.features.map((ft) => ({ ...ft.properties, lng: ft.geometry.coordinates[0], lat: ft.geometry.coordinates[1] }))
+  const needle = (f.q ?? '').trim().toLowerCase()
+  const isPlz = /^\d+$/.test(needle)
+  const cls = f.sizeClass == null || f.sizeClass === '' ? null : SIZE_CLASSES[f.sizeClass]
+  const [seg, lvl] = (f.kind ?? '').split(':')
+
+  const rows = all
+    .map((r) => (f.near ? { ...r, distance_km: Math.round(haversineKm(f.near.lat, f.near.lng, r.lat, r.lng)) } : r))
+    .filter((r) => {
+      if (needle && !(isPlz ? (r.postcodes ?? []).some((p) => p.startsWith(needle)) : r.name.toLowerCase().includes(needle))) return false
+      if (f.status && r.status !== f.status) return false
+      if (f.state && r.state !== f.state) return false
+      if (seg && (r.segment !== seg || (lvl && r.level !== lvl))) return false
+      if (cls && !(r.segment === 'verwaltung' && r.size >= cls.min && r.size < cls.max)) return false
+      if (f.near && r.distance_km > f.radiusKm) return false
+      return true
+    })
+    .sort((a, b) => {
+      const va = a[sort] ?? ''
+      const vb = b[sort] ?? ''
+      if (typeof va === 'number' && typeof vb === 'number') return (va - vb) * dir
+      return String(va).localeCompare(String(vb), 'de') * dir
+    })
+
+  const customers = rows.filter((r) => r.status === 'customer').length
+  const pages = Math.max(1, Math.ceil(rows.length / pageSize))
+  const current = Math.min(Math.max(1, page), pages)
+  return {
+    count: rows.length,
+    customers,
+    prospects: rows.length - customers,
+    page: current,
+    pages,
+    page_size: pageSize,
+    results: rows.slice((current - 1) * pageSize, current * pageSize),
+    meta: {
+      partner: meta.partner ?? null,
+      states: [...new Set(all.map((r) => r.state))].sort((a, b) => a.localeCompare(b, 'de')),
+      segments: SEGMENT_KEYS.filter((k) => all.some((r) => r.segment === k)),
+    },
+  }
 }
 
 /** Verwaltungs-Kunden in der Größenklasse der Gemeinde am Standort, deutschlandweit, ohne sie selbst. */
