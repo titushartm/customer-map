@@ -4,6 +4,7 @@ import PlaceSearch from '../municipality-map/PlaceSearch.vue'
 import { fetchTargetPage } from '../../api/map.js'
 import { SEGMENTS, sizeText, kindLabel } from '../../lib/segments.js'
 import { SIZE_CLASSES } from '../../lib/sizeClasses.js'
+import { COUNTRIES, COUNTRY_CODES } from '../../lib/countries.js'
 
 // Alle Ziele (Verwaltungen, Stadtwerke, DRK, …) als Tabelle. Intern: alles, als Partner: nur das eigene Gebiet.
 // Filtern, Sortieren und Blättern macht der Server; geladen wird immer nur eine Seite.
@@ -136,6 +137,11 @@ const rangeText = computed(() => {
   return `${numFmt.format(from)}–${numFmt.format(Math.min(count, from + pageSize.value - 1))} von ${numFmt.format(count)}`
 })
 
+// Filter "Land/Region": je Staat eine Gruppe
+const stateGroups = computed(() => COUNTRY_CODES
+  .map((cc) => ({ cc, states: result.value.meta.states.filter((s) => s.country === cc) }))
+  .filter((g) => g.states.length))
+
 const numFmt = new Intl.NumberFormat('de-DE')
 const monthFmt = new Intl.DateTimeFormat('de-DE', { month: 'short', year: 'numeric' })
 </script>
@@ -170,10 +176,12 @@ const monthFmt = new Intl.DateTimeFormat('de-DE', { month: 'short', year: 'numer
         </select>
       </label>
       <label class="rl-field">
-        <span>Bundesland</span>
+        <span>Land/Region</span>
         <select v-model="state">
           <option value="">Alle</option>
-          <option v-for="s in result.meta.states" :key="s" :value="s">{{ s }}</option>
+          <optgroup v-for="g in stateGroups" :key="g.cc" :label="COUNTRIES[g.cc].name">
+            <option v-for="s in g.states" :key="s.name" :value="s.name">{{ s.name }}</option>
+          </optgroup>
         </select>
       </label>
       <label class="rl-field">
@@ -217,7 +225,7 @@ const monthFmt = new Intl.DateTimeFormat('de-DE', { month: 'short', year: 'numer
             <th scope="col" :aria-sort="ariaSort('status')"><button type="button" @click="sortBy('status')">Kunde</button></th>
             <th scope="col" :aria-sort="ariaSort('name')"><button type="button" @click="sortBy('name')">Name</button></th>
             <th scope="col">Art</th>
-            <th scope="col" :aria-sort="ariaSort('state')"><button type="button" @click="sortBy('state')">Bundesland</button></th>
+            <th scope="col" :aria-sort="ariaSort('state')"><button type="button" @click="sortBy('state')">Land/Region</button></th>
             <th scope="col">PLZ</th>
             <th scope="col" class="num" :aria-sort="ariaSort('size')"><button type="button" @click="sortBy('size')">Größe</button></th>
             <th scope="col" :aria-sort="ariaSort('customer_since')"><button type="button" @click="sortBy('customer_since')">Kunde seit</button></th>
@@ -241,7 +249,7 @@ const monthFmt = new Intl.DateTimeFormat('de-DE', { month: 'short', year: 'numer
             </td>
             <td class="rl-name">{{ r.name }}<span v-if="r.is_new" class="rl-new">Neu</span></td>
             <td>{{ kindLabel(r) }}</td>
-            <td>{{ r.state }}</td>
+            <td>{{ r.state }} <span class="rl-muted">{{ r.country }}</span></td>
             <td class="rl-plz">{{ (r.postcodes ?? [])[0] ?? '–' }}<span v-if="(r.postcodes ?? []).length > 1" class="rl-muted"> +{{ r.postcodes.length - 1 }}</span></td>
             <td class="num">{{ sizeText(r.segment, r.size) ?? '–' }}</td>
             <td>{{ r.customer_since ? monthFmt.format(new Date(r.customer_since)) : '–' }}</td>

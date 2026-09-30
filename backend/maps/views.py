@@ -17,7 +17,7 @@ from django.views.decorators.http import require_GET
 
 from . import referrals as rules
 from .audiences import AUDIENCES, RECENT_LIMIT, RECENT_WINDOWS_DAYS
-from .models import ReferralCode, Region, RegionLevel, SalesPartner, Segment, State, Target
+from .models import Country, ReferralCode, Region, RegionLevel, SalesPartner, Segment, Target
 
 
 def _coords(request, required=True):
@@ -29,8 +29,9 @@ def _coords(request, required=True):
         if not required:
             return None
         raise Http404("lat und lng sind erforderlich")
-    if not (47 <= lat <= 55.5 and 5.5 <= lng <= 15.5):
-        raise Http404("Koordinaten außerhalb Deutschlands")
+    # Festland DE, AT, CH, FR (mit Korsika). Neue Länder: Rahmen hier erweitern.
+    if not (41 <= lat <= 55.5 and -5.5 <= lng <= 17.5):
+        raise Http404("Koordinaten außerhalb unserer Länder")
     return lat, lng
 
 
@@ -71,11 +72,11 @@ def _scoped(request, cfg, segment=None):
         partner = SalesPartner.objects.filter(pk=_partner_id(request), active=True).first()
         if partner is None:
             raise Http404("Diesen Partner gibt es nicht oder er ist deaktiviert")
-        regions = [t.region for t in partner.territories.select_related("region")]
+        regions = [t.region for t in partner.territories.select_related("region")]  # Staat, Land, Kreis oder Gemeinde
         if not regions:
             raise Http404("Für diesen Partner ist kein Gebiet hinterlegt")
         # Nur das Segment des Partners, in einer seiner Regionen (Land, Kreis oder Gemeinde)
-        qs = qs.filter(reduce(or_, (Q(region__key__startswith=r.key) for r in regions)), segment=partner.segment)
+        qs = qs.filter(reduce(or_, (Q(region__path__startswith=r.path) for r in regions)), segment=partner.segment)
         meta["partner"] = partner.name
         meta["territories"] = [r.name for r in regions]
         meta["segments"] = [partner.segment]
@@ -90,6 +91,11 @@ def _scoped(request, cfg, segment=None):
     return qs, meta
 
 
+def _state_name(region):
+    """Name des Landes/Kantons/der Région (Region.state, von rebuild_tree gesetzt). Braucht select_related("…state")."""
+    return region.state.name if region.state_id else None
+
+
 def _licence(org):
     # Platzhalter, bis feststeht, woher die Lizenzdaten kommen (Zoho, LizenzTask, ...).
     parts = [org.customer_type, f"{org.amount_seats} Plätze" if org.amount_seats else None]
@@ -102,7 +108,8 @@ def _properties(t, fields):
         "name": t.name,
         "segment": t.segment,
         "level": t.region.level if t.segment == Segment.VERWALTUNG else None,
-        "state": t.region.get_state_display(),
+        "state": _state_name(t.region),
+        "country": t.region.country,
         "status": "customer" if t.is_customer else "prospect",
     }
     if "customer_since" in fields and t.customer_since:
@@ -139,19 +146,19 @@ def _size_label(lo, hi):
 
 
 def _peers(point):
-    """Verwaltungs-Kunden in der Größenklasse der Gemeinde am Standort, deutschlandweit, ohne sie selbst."""
+    """Verwaltungs-Kunden in der Größenklasse der Gemeinde am Standort, im selben Staat, ohne sie selbst."""
     here = (Region.objects.filter(level=RegionLevel.GEMEINDE)
             .annotate(distance=Distance("location", point)).order_by("distance").first())
     if here is None or here.population is None:
         return None
     lo, hi = next((lo, hi) for lo, hi in SIZE_CLASSES if here.population >= lo and (hi is None or here.population < hi))
     qs = Target.objects.filter(
-        segment=Segment.VERWALTUNG, region__level=RegionLevel.GEMEINDE,
+        segment=Segment.VERWALTUNG, region__level=RegionLevel.GEMEINDE, region__country=here.country,
         customer_since__isnull=False, size__gte=lo,
     ).exclude(region=here)
     if hi is not None:
         qs = qs.filter(size__lt=hi)
-    return {"label": _size_label(lo, hi), "count": qs.count(), "place": here.name}
+    return {"label": _size_label(lo, hi), "count": qs.count(), "place": here.name, "country": here.country}
 
 
 @require_GET
@@ -181,7 +188,7 @@ def targets(request, audience):
             meta["peers"] = _peers(point)
 
     if state := request.GET.get("state"):
-        qs = qs.filter(region__state=state)
+        qs = qs.filter(region__state__key=state)  # Schlüssel des Landes/Kantons, z. B. AT-L-6
 
     if not cfg["include_prospects"]:
         qs = qs.filter(customer_since__isnull=False)
@@ -194,7 +201,7 @@ def targets(request, audience):
     else:
         meta["hidden_count"] = 0
 
-    qs = qs.select_related("region", "organization")
+    qs = qs.select_related("region__state", "organization")
     if point is not None:
         qs = qs.annotate(distance=Distance("location", point)).order_by("distance")
     else:
@@ -216,7 +223,7 @@ LIST_PAGE_SIZES = (25, 50, 100)
 LIST_SORT = {
     "name": "name",
     "size": "size",
-    "state": "region__state",
+    "state": "region__state__name",
     "customer_since": "customer_since",
     "status": "customer_since",  # Kunden zuerst bzw. zuletzt
     "distance_km": "distance",
@@ -246,7 +253,7 @@ def target_list(request, audience):
     if (status := request.GET.get("status")) in ("customer", "prospect"):
         qs = qs.filter(customer_since__isnull=(status == "prospect"))
     if state := request.GET.get("state"):
-        qs = qs.filter(region__state={n: c for c, n in State.choices}.get(state, state))
+        qs = qs.filter(region__state__name=state)
     if kind := request.GET.get("kind"):
         seg, _, lvl = kind.partition(":")
         qs = qs.filter(segment=seg, **({"region__level": lvl} if lvl else {}))
@@ -277,7 +284,7 @@ def target_list(request, audience):
         page_size = 50
     page_size = page_size if page_size in LIST_PAGE_SIZES else 50
     counts = qs.aggregate(count=Count("pk"), customers=Count("pk", filter=Q(customer_since__isnull=False)))
-    paginator = Paginator(qs.select_related("region", "organization"), page_size)
+    paginator = Paginator(qs.select_related("region__state", "organization"), page_size)
     page = paginator.get_page(request.GET.get("page", 1))  # außerhalb des Bereichs: letzte bzw. erste Seite
 
     def row(t):
@@ -294,7 +301,9 @@ def target_list(request, audience):
         "meta": {
             "partner": meta.get("partner"),
             # Auswahl für die Filter: aus dem ganzen Ausschnitt, nicht nur aus den Treffern
-            "states": sorted({State(s).label for s in scope.values_list("region__state", flat=True).distinct()}),
+            # [{name, country}] je Land/Kanton/Région im Ausschnitt; das Frontend gruppiert nach Staat
+            "states": [{"name": n, "country": c} for n, c in scope.filter(region__state__isnull=False)
+                       .values_list("region__state__name", "region__country").distinct().order_by("region__country", "region__state__name")],
             "segments": [s for s in Segment.values if scope.filter(segment=s).exists()],
         },
     })
@@ -321,14 +330,15 @@ def recent(request, audience):
         return JsonResponse({"days": days, "total": 0, "items": []})
 
     items = []
-    for t in qs.select_related("region").order_by("-customer_since")[:RECENT_LIMIT]:
+    for t in qs.select_related("region__state").order_by("-customer_since")[:RECENT_LIMIT]:
         named = t.public_reference or not cfg["recent_named_only"]
         items.append({
             "key": t.key if named else None,
             "name": t.name if named else None,
             "segment": t.segment,
             "level": t.region.level if t.segment == Segment.VERWALTUNG else None,
-            "state": t.region.get_state_display(),
+            "state": _state_name(t.region),
+        "country": t.region.country,
             "customer_since": t.customer_since.isoformat(),
             # Anonyme bekommen keine Koordinaten: sonst wäre das Ziel trotzdem erkennbar
             "lat": round(t.location.y, 2) if named else None,
@@ -346,7 +356,7 @@ def referral_lookup(request, code):
     Das Empfehlungskonto (/referral/me/) braucht die Anmeldung und fehlt in dieser Skizze.
     """
     rc = (ReferralCode.objects.filter(code=code.strip().upper(), active=True)
-          .select_related("target__region").first())
+          .select_related("target__region__state").first())
     if rc is None or not rc.target.can_refer:
         return JsonResponse({"valid": False, "code": code.upper()})
     t = rc.target
@@ -360,7 +370,8 @@ def referral_lookup(request, code):
             "name": t.name if named else None,
             "segment": t.segment,
             "level": t.region.level if t.segment == Segment.VERWALTUNG else None,
-            "state": t.region.get_state_display(),
+            "state": _state_name(t.region),
+        "country": t.region.country,
             "lat": round(t.location.y, 2) if named else None,
             "lng": round(t.location.x, 2) if named else None,
         },
@@ -370,11 +381,16 @@ def referral_lookup(request, code):
 @require_GET
 @cache_control(public=True, max_age=86400)
 def postcode_location(request, plz):
-    if not (len(plz) == 5 and plz.isdigit()):
+    """DE/FR fünf-, AT/CH vierstellig. Vierstellige gibt es in AT und CH doppelt: ?country=AT entscheidet, sonst das erste Land."""
+    if not (len(plz) in (4, 5) and plz.isdigit()):
         raise Http404
-    hits = list(Region.objects.filter(postcodes__contains=[plz]).only("name", "location"))
+    qs = Region.objects.filter(postcodes__contains=[plz]).only("name", "country", "location")
+    if (country := request.GET.get("country")) in Country.values:
+        qs = qs.filter(country=country)
+    hits = list(qs)
     if not hits:
         raise Http404("PLZ unbekannt")
+    hits = [h for h in hits if h.country == hits[0].country]
     # Mehrere Gemeinden pro PLZ: einfacher Mittelwert reicht für den Umkreis
     lat = sum(h.location.y for h in hits) / len(hits)
     lng = sum(h.location.x for h in hits) / len(hits)
@@ -426,14 +442,15 @@ def _place(r, plz=None):
         "key": r.key,
         "name": r.name,
         "level": r.level,
-        "state": r.get_state_display(),
+        "state": _state_name(r),
+        "country": r.country,
         "plz": plz or (r.postcodes[0] if r.postcodes else None),
         "lat": round(r.location.y, 2),
         "lng": round(r.location.x, 2),
     }
 
 
-PLACE_FIELDS = ("key", "name", "level", "state", "postcodes", "location")
+PLACE_FIELDS = ("key", "name", "level", "country", "state__name", "postcodes", "location")
 
 
 @require_GET
@@ -442,7 +459,7 @@ def reverse_location(request):
     """Zu Koordinaten die Gemeinde, ihre PLZ und die PLZ der Nachbarschaft."""
     lat, lng = _coords(request)
     point = Point(lng, lat, srid=4326)
-    gemeinden = Region.objects.filter(level=RegionLevel.GEMEINDE).only(*PLACE_FIELDS)
+    gemeinden = Region.objects.filter(level=RegionLevel.GEMEINDE).select_related("state").only(*PLACE_FIELDS)
 
     around = list(
         gemeinden.filter(location__dwithin=(point, D(km=SURROUNDING_PLZ_RADIUS_KM)))
@@ -480,7 +497,7 @@ def place_search(request):
     if len(q) < 2:
         return JsonResponse({"results": []})
 
-    base = Region.objects.only(*PLACE_FIELDS)
+    base = Region.objects.select_related("state").only(*PLACE_FIELDS)
     results = []
 
     if q.isdigit():
@@ -502,4 +519,6 @@ def place_search(request):
 @require_GET
 @cache_control(public=True, max_age=86400)
 def states(request):
-    return JsonResponse({"results": [{"code": c, "name": n} for c, n in State.choices]})
+    """Alle Länder/Kantone/Régions, nach Staat: [{key, name, country}]"""
+    rows = Region.objects.filter(level=RegionLevel.LAND).order_by("country", "name").values("key", "name", "country")
+    return JsonResponse({"results": list(rows)})

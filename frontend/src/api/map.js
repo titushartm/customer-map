@@ -6,7 +6,7 @@ import { MOCK_REFERRALS, REFERRAL_RULES, codeFor } from '../mocks/referrals.js'
 import { SEGMENTS, SEGMENT_KEYS } from '../lib/segments.js'
 import { sizeClassOf, SIZE_CLASSES } from '../lib/sizeClasses.js'
 import { haversineKm } from '../lib/geo.js'
-import { recommend } from '../mocks/recommendations.js'
+import { recommend, suggestLicence } from '../mocks/recommendations.js'
 
 const USE_MOCK = import.meta.env.VITE_MAP_USE_MOCK !== 'false'
 const API_BASE = import.meta.env.VITE_API_BASE ?? '/api'
@@ -76,6 +76,32 @@ export async function fetchRecommendation(key, { audience = 'intern', partnerId 
   return recommend(target, all)
 }
 
+/**
+ * Öffentlich: welche Lizenz zu einer Organisation passt, nur aus ihren Merkmalen.
+ *   Verwaltung: { segment: 'verwaltung', key } (Region aus der Ortssuche; Einwohner und Ebene kommen von dort)
+ *   sonst:      { segment, size } (Mitarbeitende, vom Besucher angegeben)
+ * Rückgabe: { place: { key, name, level, country, size } | null, segment, size, sizeClass, tier, seats, sets,
+ *             basis: 'similar' | 'rule', similarCount }
+ */
+export async function fetchLicenceSuggestion({ segment, key, size }) {
+  if (!USE_MOCK) return getJson('/licence/suggest/', { segment, key, size })
+  const all = mockAllTargets()
+  let target
+  let place = null
+  if (segment === 'verwaltung') {
+    const r = REGION_BY_KEY[key]
+    if (!r) throw new Error('Diese Verwaltung kennen wir noch nicht.')
+    target = { key: r.key, segment, level: r.level, size: r.population, lat: r.lat, lng: r.lng }
+    place = { key: r.key, name: r.name, level: r.level, country: r.country, size: r.population }
+  } else {
+    const n = Number(size)
+    if (!(n > 0)) throw new Error('Bitte die Zahl der Mitarbeitenden angeben.')
+    target = { key: null, segment, level: null, size: n }
+  }
+  const cls = segment === 'verwaltung' && target.level === 'gemeinde' ? sizeClassOf(target.size) : null
+  return { place, segment, size: target.size, sizeClass: cls?.label ?? null, ...suggestLicence(target, all) }
+}
+
 // ---- Vertriebspartner (Admin, nur SpeechMind intern) ----
 
 /**
@@ -118,16 +144,18 @@ export async function previewPartner({ id, segment, areas }) {
 }
 
 /**
- * Länder und Kreise mit Fläche, für die Karte im Partnerdialog.
- * [{ key, name, level: 'land' | 'kreis', kind, geometry }]
+ * Staaten, Länder/Kantone/Régions und Kreise/Bezirke/Départements mit Fläche, für die Karte im Partnerdialog.
+ * [{ key, name, level: 'staat' | 'land' | 'kreis', kind, country, parent, path, geometry }]
+ * path = Schlüssel aller übergeordneten Regionen und der Region selbst ('/AT/AT-L-6/AT-K-601/').
+ * "A liegt in B" heißt: A.path beginnt mit B.path. Das gilt in jedem Land, egal wie die amtlichen Codes aufgebaut sind.
  */
 export async function fetchAreaMap() {
-  if (!USE_MOCK) return (await getJson('/geo/areas/', { level: 'land,kreis' })).results
-  const all = await loadAreas()
-  return Object.entries(all).map(([key, a]) => ({ key, ...a }))
+  if (!USE_MOCK) return (await getJson('/geo/areas/', { level: 'staat,land,kreis' })).results
+  await loadAreas()
+  return Object.entries(AREAS).map(([key, a]) => ({ key, ...a, path: pathOf(key) }))
 }
 
-/** Gebietssuche: Länder, Kreise und Gemeinden über Name oder Schlüssel. [{ key, name, level, kind, state }] */
+/** Gebietssuche über Name oder Schlüssel, alle Länder und Ebenen bis zur Gemeinde. [{ key, name, level, kind, country, state, path }] */
 export async function searchAreas(query) {
   const q = query.trim()
   if (q.length < 2) return []
@@ -135,7 +163,7 @@ export async function searchAreas(query) {
   await loadAreas()
   const needle = q.toLowerCase()
   return areaCatalog()
-    .filter((a) => a.name.toLowerCase().includes(needle) || a.key.startsWith(q))
+    .filter((a) => a.name.toLowerCase().includes(needle) || a.key.toLowerCase() === needle || a.key.toLowerCase().endsWith(`-${needle}`))
     .sort((a, b) => LEVEL_ORDER[a.level] - LEVEL_ORDER[b.level]
       || Number(!a.name.toLowerCase().startsWith(needle)) - Number(!b.name.toLowerCase().startsWith(needle))
       || a.name.localeCompare(b.name, 'de'))
@@ -156,7 +184,7 @@ export function listReferrers() {
 export function listCustomerLogins() {
   return mockAllTargets()
     .filter((t) => t.is_customer)
-    .map((t) => ({ key: t.key, name: t.name, segment: t.segment, canRefer: canRefer(t) }))
+    .map((t) => ({ key: t.key, name: t.name, segment: t.segment, licence: t.licence, canRefer: canRefer(t) }))
     .sort((a, b) => a.name.localeCompare(b.name, 'de'))
 }
 
@@ -279,13 +307,13 @@ const RECENT_WINDOWS_DAYS = [30, 90]
  */
 export function mockAllTargets() {
   const verwaltungen = REGIONS.map((r) => ({
-    key: r.key, segment: 'verwaltung', region_key: r.key, name: r.name, level: r.level,
+    key: r.key, segment: 'verwaltung', region_key: r.key, name: r.name, level: r.level, country: r.country,
     size: r.population, lat: r.lat, lng: r.lng,
   }))
   const others = EXTRA_TARGETS.map((t) => {
     const r = REGION_BY_KEY[t.region]
     const [dLat, dLng] = SEGMENT_OFFSET[t.segment] ?? [0, 0]
-    return { key: t.key, segment: t.segment, region_key: t.region, name: t.name, level: null, size: t.size, lat: r.lat + dLat, lng: r.lng + dLng }
+    return { key: t.key, segment: t.segment, region_key: t.region, name: t.name, level: null, country: r.country, size: t.size, lat: r.lat + dLat, lng: r.lng + dLng }
   })
   return [...verwaltungen, ...others].map((t) => {
     const r = REGION_BY_KEY[t.region_key]
@@ -307,34 +335,63 @@ export function mockAllTargets() {
 
 let partnerStore = structuredClone(SEED_PARTNERS) // Änderungen leben bis zum Neuladen der Seite
 
-// Länder und Kreise mit vereinfachter Fläche (© GeoBasis-DE / BKG 2025, dl-de/by-2-0). Groß, daher nachladen.
+// Staaten, Länder und Kreise mit vereinfachter Fläche (DE © GeoBasis-DE / BKG, AT © Statistik Austria,
+// CH © BFS/swisstopo, FR © IGN; Quellen in scripts/build_areas.py). Groß, daher nachladen.
 let AREAS = null
 const loadAreas = async () => (AREAS ??= (await import('../mocks/areas.json')).default)
 
-const LEVEL_ORDER = { land: 0, kreis: 1, gemeinde: 2 }
-const STATE_NAME = { 11: 'Berlin', 12: 'Brandenburg', 13: 'Mecklenburg-Vorpommern', 14: 'Sachsen', 15: 'Sachsen-Anhalt', 16: 'Thüringen' }
+const LEVEL_ORDER = { staat: 0, land: 1, kreis: 2, gemeinde: 3 }
+const COUNTRY_ORDER = ['DE', 'AT', 'CH', 'FR']
 
-/** Alle wählbaren Gebiete. Kreisfreie Städte (AGS = Kreis + '000') gibt es nur als Kreis. */
+// Pfad einer Region: ihre Vorfahren und sie selbst, z. B. '/CH/CH-L-1/CH-K-112/CH-G-261/'.
+// Im Backend steht er als Region.path in der Datenbank.
+const pathCache = new Map()
+function pathOf(key) {
+  if (!pathCache.has(key)) {
+    const parent = AREAS[key]?.parent ?? REGION_BY_KEY[key]?.parent ?? null
+    pathCache.set(key, `${parent ? pathOf(parent) : '/'}${key}/`)
+  }
+  return pathCache.get(key)
+}
+/** Liegt Region a in Region b (oder ist sie b)? */
+const within = (a, b) => pathOf(a).startsWith(pathOf(b))
+const overlaps = (a, b) => within(a, b) || within(b, a)
+
+/** Name des Landes/Kantons/der Région, in der eine Region liegt */
+function stateName(key) {
+  for (let k = key; k; k = AREAS[k]?.parent ?? REGION_BY_KEY[k]?.parent) {
+    if (AREAS[k]?.level === 'land') return AREAS[k].name
+  }
+  return null
+}
+
+/** Alle wählbaren Gebiete. Gemeinden, die sich mit ihrem Kreis decken (kreisfreie Stadt, Statutarstadt, Paris), nur als Kreis. */
 function areaCatalog() {
-  const big = Object.entries(AREAS).map(([key, a]) => ({ key, name: a.name, level: a.level, kind: a.kind ?? null, state: STATE_NAME[key.slice(0, 2)] }))
-  const gemeinden = REGIONS
-    .filter((r) => r.level === 'gemeinde' && !r.key.endsWith('000'))
-    .map((r) => ({ key: r.key, name: r.name, level: 'gemeinde', kind: 'Gemeinde/Stadt', state: r.state }))
+  const big = Object.keys(AREAS).map(areaRef)
+  const gemeinden = REGIONS.filter((r) => r.level === 'gemeinde' && !r.sameAsParent).map((r) => areaRef(r.key))
   return [...big, ...gemeinden]
 }
 
 function areaRef(key) {
   const a = AREAS[key]
-  if (a) return { key, name: a.name, level: a.level, kind: a.kind ?? null }
-  const r = REGION_BY_KEY[key] ?? REGION_BY_KEY[`${key}000`]
-  return r ? { key, name: r.name, level: r.level, kind: 'Gemeinde/Stadt' } : { key, name: key, level: null, kind: null }
+  const r = a ? null : REGION_BY_KEY[key]
+  if (!a && !r) return { key, name: key, level: null, kind: null, country: null, path: null }
+  return {
+    key,
+    name: (a ?? r).name,
+    level: a ? a.level : 'gemeinde',
+    kind: a ? a.kind : 'Gemeinde',
+    country: (a ?? r).country,
+    state: a?.level === 'land' || a?.level === 'staat' ? null : stateName(key),
+    path: pathOf(key),
+  }
 }
 const areaName = (key) => areaRef(key).name
 
-const inPartnerArea = (partner, t) => t.segment === partner.segment && partner.areas.some((a) => t.region_key.startsWith(a))
+const inPartnerArea = (partner, t) => t.segment === partner.segment && partner.areas.some((a) => within(t.region_key, a))
 
 function coverage(segment, areas) {
-  const rows = mockAllTargets().filter((t) => t.segment === segment && areas.some((a) => t.region_key.startsWith(a)))
+  const rows = mockAllTargets().filter((t) => t.segment === segment && areas.some((a) => within(t.region_key, a)))
   return { targets: rows.length, customers: rows.filter((t) => t.is_customer).length }
 }
 
@@ -346,26 +403,26 @@ function validatePartner({ name, segment, areas }) {
   if (!areas.length) return 'Bitte mindestens ein Gebiet wählen.'
   const unknown = areas.filter((a) => areaRef(a).level == null)
   if (unknown.length) return `Unbekannte Gebiete: ${unknown.join(', ')}.`
-  const nested = areas.find((a) => areas.some((b) => b !== a && a.startsWith(b)))
+  const nested = areas.find((a) => areas.some((b) => b !== a && within(a, b)))
   if (nested) return `${areaName(nested)} liegt schon in einem anderen Gebiet des Partners.`
   return null
 }
 
 /** Regionen, die ein anderer aktiver Partner desselben Segments schon hat (in beide Richtungen: Land ⊃ Kreis). */
 function overlapsFor(id, segment, areas) {
-  const overlaps = []
+  const found = []
   for (const other of partnerStore) {
     if (other.id === id || other.segment !== segment || !other.active) continue
     for (const a of areas) {
-      const hit = other.areas.find((b) => a.startsWith(b) || b.startsWith(a))
-      if (hit) overlaps.push({ partner: other.name, area: areaName(a), other: areaName(hit) })
+      const hit = other.areas.find((b) => overlaps(a, b))
+      if (hit) found.push({ partner: other.name, area: areaName(a), other: areaName(hit) })
     }
   }
-  return overlaps
+  return found
 }
 
-const overlapError = (overlaps) => (overlaps.length
-  ? `Gebiet schon vergeben: ${overlaps.map((o) => `${o.area} (${o.partner})`).join(', ')}. Je Segment betreut nur ein Partner eine Region.`
+const overlapError = (found) => (found.length
+  ? `Gebiet schon vergeben: ${found.map((o) => `${o.area} (${o.partner})`).join(', ')}. Je Segment betreut nur ein Partner eine Region.`
   : null)
 
 /** Gebietsfläche als eine MultiPolygon-Geometrie. Gemeinden haben im Mock keine Fläche. */
@@ -431,6 +488,7 @@ function mockTargets({ audience, segment, lat, lng, radiusKm, partnerId }) {
       segment: t.segment,
       level: t.level,
       state: t.state,
+      country: t.country,
       status: t.is_customer ? 'customer' : 'prospect',
       ...(cfg.fields.includes('customer_since') && t.customer_since ? { customer_since: t.customer_since } : {}),
       ...(cfg.fields.includes('size') ? { size: t.size } : {}),
@@ -482,20 +540,22 @@ function mockTargetPage({ audience, partnerId, filters: f, sort, dir, page, page
     results: rows.slice((current - 1) * pageSize, current * pageSize),
     meta: {
       partner: meta.partner ?? null,
-      states: [...new Set(all.map((r) => r.state))].sort((a, b) => a.localeCompare(b, 'de')),
+      // [{ name, country }], nach Land und Name sortiert, für den Filter mit Gruppen je Land
+      states: [...new Map(all.map((r) => [r.state, { name: r.state, country: r.country }])).values()]
+        .sort((a, b) => COUNTRY_ORDER.indexOf(a.country) - COUNTRY_ORDER.indexOf(b.country) || a.name.localeCompare(b.name, 'de')),
       segments: SEGMENT_KEYS.filter((k) => all.some((r) => r.segment === k)),
     },
   }
 }
 
-/** Verwaltungs-Kunden in der Größenklasse der Gemeinde am Standort, deutschlandweit, ohne sie selbst. */
+/** Verwaltungs-Kunden in der Größenklasse der Gemeinde am Standort, im selben Staat, ohne sie selbst. */
 function peers(verwaltungen, lat, lng) {
   const here = nearestRegion(lat, lng)
   const cls = here?.population != null ? sizeClassOf(here.population) : null
   if (!cls) return null
   const count = verwaltungen.filter((t) => t.level === 'gemeinde' && t.is_customer && t.key !== here.key
-    && t.size >= cls.min && t.size < cls.max).length
-  return { label: cls.label, count, place: here.name }
+    && t.country === here.country && t.size >= cls.min && t.size < cls.max).length
+  return { label: cls.label, count, place: here.name, country: here.country }
 }
 
 function mockRecent({ audience, segment, partnerId }) {
@@ -522,6 +582,7 @@ function mockRecent({ audience, segment, partnerId }) {
         segment: t.segment,
         level: t.level,
         state: t.state,
+        country: t.country,
         customer_since: t.customer_since,
         // Anonyme bekommen keine Koordinaten: sonst wäre das Ziel trotzdem erkennbar
         lat: named ? t.lat : null,

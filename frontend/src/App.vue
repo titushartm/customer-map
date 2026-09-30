@@ -4,6 +4,7 @@ import { fetchPartners, listCustomerLogins, listReferrers, lookupReferral } from
 import { SEGMENTS } from './lib/segments.js'
 import ReferralBanner from './components/referral/ReferralBanner.vue'
 import ReferralStrip from './components/referral/ReferralStrip.vue'
+import LicenceAdvisor from './components/licence/LicenceAdvisor.vue'
 
 // MapLibre ist groß (~250 kB gzip). Auf der Startseite deshalb nachladen.
 const MunicipalityExplorer = defineAsyncComponent(() => import('./components/municipality-map/MunicipalityExplorer.vue'))
@@ -51,6 +52,7 @@ const homeWords = computed(() => SEGMENTS[homeSegment.value])
 // Angemeldete Kunden mit Organisation sehen über der Karte ihren Einladungslink
 const customerLogins = listCustomerLogins()
 const homeLogin = ref('') // '' = Besucher, nicht angemeldet
+const homeCustomer = computed(() => customerLogins.find((c) => c.key === homeLogin.value) ?? null)
 
 // Einladungslink: ?ref=CODE. Mit Referenzfreigabe startet die Karte beim Empfehlenden.
 const invite = ref(null)
@@ -176,6 +178,9 @@ function onTabKey(e, i) {
           compact-height="360px"
         />
       </section>
+
+      <!-- Lizenzempfehlung aus den Merkmalen der Verwaltung (bzw. Mitarbeitende bei Stadtwerken, DRK) -->
+      <LicenceAdvisor :segment="homeSegment" :me="homeCustomer" />
 
       <section class="cards">
         <article>

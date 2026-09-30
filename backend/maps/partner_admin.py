@@ -3,6 +3,8 @@ Admin-Bereich der Karte: Vertriebspartner anlegen und bearbeiten (nur SpeechMind
 Das Frontend (PartnerAdmin.vue, PartnerDialog.vue) spricht diese Endpoints; die Gebiete wählt es aus
 der Referenz (Region), es gibt keine Liste zum Hochladen.
 
+Gebiete gehen über alle Länder (DE, AT, CH, FR, …); "liegt in" prüft Region.path, nicht die Codes.
+
 Gebiete sind je Segment exklusiv: Eine Region (samt allem darin) gehört pro Segment höchstens einem
 aktiven Partner. Ein Stadtwerke-Partner darf also denselben Kreis haben wie ein Verwaltungs-Partner,
 zwei Verwaltungs-Partner nicht. Inaktive Partner blockieren nichts; beim Aktivieren wird neu geprüft.
@@ -26,7 +28,7 @@ from django.views.decorators.http import require_GET, require_http_methods
 from .models import PartnerTerritory, Region, RegionLevel, SalesPartner, Segment, Target
 
 AREA_LEVELS = PartnerTerritory.ALLOWED_LEVELS
-AREA_FIELDS = ("key", "name", "level", "kind", "state")
+AREA_FIELDS = ("key", "name", "level", "kind", "country", "path", "parent_id", "state_id")
 MAP_TOLERANCE = 0.003  # Grad, etwa 200-300 m: reicht für die Übersicht im Dialog
 
 
@@ -40,17 +42,26 @@ def staff_only(view):
 
 
 def _area(r):
-    return {"key": r.key, "name": r.name, "level": r.level, "kind": r.kind or None}
+    """path: Schlüssel aller Vorfahren und der Region selbst. Das Frontend prüft damit "liegt in"."""
+    return {
+        "key": r.key, "name": r.name, "level": r.level, "kind": r.kind or None, "country": r.country, "path": r.path,
+        "state": r.state.name if r.state_id and r.state_id != r.pk else None,
+    }
 
 
-def _in_areas(keys):
-    return reduce(or_, (Q(region__key__startswith=k) for k in keys))
+def _in_areas(regions):
+    """Ziele, deren Region in einer der Regionen liegt. Präfix auf path, egal wie die Codes im Land aufgebaut sind."""
+    return reduce(or_, (Q(region__path__startswith=r.path) for r in regions))
 
 
-def _coverage(segment, keys):
-    if not keys:
+def _overlap(a, b):
+    return a.path.startswith(b.path) or b.path.startswith(a.path)
+
+
+def _coverage(segment, regions):
+    if not regions:
         return {"targets": 0, "customers": 0}
-    return Target.objects.filter(_in_areas(keys), segment=segment).aggregate(
+    return Target.objects.filter(_in_areas(regions), segment=segment).aggregate(
         targets=Count("id"), customers=Count("id", filter=Q(customer_since__isnull=False)),
     )
 
@@ -64,21 +75,20 @@ def _partner(p):
         "active": p.active,
         "contact": {"name": p.contact_name, "email": p.email, "phone": p.phone, "website": p.website},
         "areas": [_area(r) for r in regions],
-        "stats": _coverage(p.segment, [r.key for r in regions]),
+        "stats": _coverage(p.segment, regions),
     }
 
 
-def _overlaps(segment, keys, exclude_id=None):
-    """Regionen aktiver Partner desselben Segments, die sich mit keys überschneiden (Land ⊃ Kreis ⊃ Gemeinde)."""
-    names = dict(Region.objects.filter(key__in=keys).values_list("key", "name"))
+def _overlaps(segment, regions, exclude_id=None):
+    """Regionen aktiver Partner desselben Segments, die sich mit regions überschneiden (Staat ⊃ Land ⊃ Kreis ⊃ Gemeinde)."""
     others = (PartnerTerritory.objects
               .filter(partner__segment=segment, partner__active=True)
               .exclude(partner_id=exclude_id)
               .select_related("partner", "region"))
     return [
-        {"partner": t.partner.name, "area": names.get(k, k), "other": t.region.name}
-        for t in others for k in keys
-        if k.startswith(t.region.key) or t.region.key.startswith(k)
+        {"partner": t.partner.name, "area": r.name, "other": t.region.name}
+        for t in others for r in regions
+        if _overlap(r, t.region)
     ]
 
 
@@ -113,7 +123,7 @@ def _validate(data):
     unknown = set(keys) - {r.key for r in regions}
     if unknown:
         return None, None, f"Unbekannte Gebiete: {', '.join(sorted(unknown))}."
-    nested = next((r for r in regions if any(o.key != r.key and r.key.startswith(o.key) for o in regions)), None)
+    nested = next((r for r in regions if any(o.pk != r.pk and r.path.startswith(o.path) for o in regions)), None)
     if nested:
         return None, None, f"{nested.name} liegt schon in einem anderen Gebiet des Partners."
     contact = data.get("contact") or {}
@@ -139,7 +149,7 @@ def _save(partner, fields, regions):
             # Alle Partner des Segments sperren, damit zwei gleichzeitige Speichervorgänge nicht
             # dieselbe Region bekommen. Dann erst prüfen.
             list(SalesPartner.objects.select_for_update().filter(segment=fields["segment"]).values_list("pk", flat=True))
-            error = _overlap_error(_overlaps(fields["segment"], [r.key for r in regions], exclude_id=partner.pk))
+            error = _overlap_error(_overlaps(fields["segment"], regions, exclude_id=partner.pk))
             if error:
                 raise Conflict(error)
         for k, v in fields.items():
@@ -147,14 +157,14 @@ def _save(partner, fields, regions):
         partner.save()
         partner.territories.all().delete()
         PartnerTerritory.objects.bulk_create(PartnerTerritory(partner=partner, region=r) for r in regions)
-    return _partner(SalesPartner.objects.prefetch_related("territories__region").get(pk=partner.pk))
+    return _partner(SalesPartner.objects.prefetch_related("territories__region__state").get(pk=partner.pk))
 
 
 @staff_only
 @require_http_methods(["GET", "POST"])
 def partners(request):
     if request.method == "GET":
-        qs = SalesPartner.objects.prefetch_related("territories__region").order_by("name")
+        qs = SalesPartner.objects.prefetch_related("territories__region__state").order_by("name")
         return JsonResponse({"results": [_partner(p) for p in qs]})
     fields, regions, error = _validate(_body(request))
     if error:
@@ -186,33 +196,39 @@ def partner_preview(request):
     """Wie viele Ziele liegen im Gebiet, und wo ist es schon an einen aktiven Partner desselben Segments vergeben?"""
     data = _body(request) or {}
     segment = data.get("segment")
-    keys = [k for k in data.get("areas") or [] if isinstance(k, str) and k.isdigit()]
+    keys = [k for k in data.get("areas") or [] if isinstance(k, str)]
     if segment not in Segment.values:
         return JsonResponse({"error": "Unbekanntes Segment."}, status=400)
-    return JsonResponse({**_coverage(segment, keys), "overlaps": _overlaps(segment, keys, exclude_id=data.get("id"))})
+    regions = list(Region.objects.filter(key__in=keys, level__in=AREA_LEVELS).only("pk", "key", "name", "path"))
+    return JsonResponse({**_coverage(segment, regions), "overlaps": _overlaps(segment, regions, exclude_id=data.get("id"))})
 
 
 @staff_only
 @require_GET
 def areas(request):
     """
-    ?level=land,kreis: alle Länder und Kreise mit vereinfachter Fläche (für die Karte im Dialog).
-    ?q=…: Suche über Name oder Schlüssel, auch Gemeinden, ohne Fläche.
-    Kreisfreie Städte gibt es nur als Kreis: Ihre Gemeinde (AGS = Kreis + '000') fällt heraus.
+    ?level=staat,land,kreis: alle Flächen dieser Ebenen, vereinfacht (für die Karte im Dialog), mit parent und path.
+    ?q=…: Suche über Name oder Code, alle Länder und Ebenen bis zur Gemeinde, ohne Fläche.
+    Regionen, die sich mit ihrer übergeordneten decken (kreisfreie Stadt, Statutarstadt, Paris), fallen heraus.
     """
-    base = Region.objects.filter(level__in=AREA_LEVELS).exclude(level=RegionLevel.GEMEINDE, key__endswith="000")
+    base = (Region.objects.filter(level__in=AREA_LEVELS, same_as_parent=False)
+            .select_related("state", "parent").only(*AREA_FIELDS, "state__name", "parent__key"))
     q = request.GET.get("q", "").strip()
     if q:
         if len(q) < 2:
             return JsonResponse({"results": []})
-        hits = base.filter(Q(name__icontains=q) | Q(key__startswith=q)).only(*AREA_FIELDS)
-        order = {RegionLevel.LAND: 0, RegionLevel.KREIS: 1, RegionLevel.GEMEINDE: 2}
-        hits = sorted(hits, key=lambda r: (order[r.level], not r.name.lower().startswith(q.lower()), r.name))[:10]
-        return JsonResponse({"results": [{**_area(r), "state": r.get_state_display()} for r in hits]})
+        hits = base.filter(Q(name__icontains=q) | Q(code__iexact=q) | Q(key__iexact=q))
+        if country := request.GET.get("country"):
+            hits = hits.filter(country=country)
+        order = {RegionLevel.STAAT: 0, RegionLevel.LAND: 1, RegionLevel.KREIS: 2, RegionLevel.GEMEINDE: 3}
+        hits = sorted(hits[:200], key=lambda r: (order[r.level], not r.name.lower().startswith(q.lower()), r.name))[:10]
+        return JsonResponse({"results": [_area(r) for r in hits]})
 
-    levels = [lv for lv in request.GET.get("level", "land,kreis").split(",") if lv in (RegionLevel.LAND, RegionLevel.KREIS)]
-    rows = base.filter(level__in=levels, boundary__isnull=False).only(*AREA_FIELDS, "boundary")
+    wanted = {RegionLevel.STAAT, RegionLevel.LAND, RegionLevel.KREIS}
+    levels = [lv for lv in request.GET.get("level", "staat,land,kreis").split(",") if lv in wanted]
+    rows = base.filter(level__in=levels, boundary__isnull=False).only(*AREA_FIELDS, "state__name", "parent__key", "boundary")
     return JsonResponse({"results": [
-        {**_area(r), "geometry": json.loads(r.boundary.simplify(MAP_TOLERANCE, preserve_topology=True).geojson)}
+        {**_area(r), "parent": r.parent.key if r.parent_id else None,
+         "geometry": json.loads(r.boundary.simplify(MAP_TOLERANCE, preserve_topology=True).geojson)}
         for r in rows
     ]})

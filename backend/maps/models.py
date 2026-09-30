@@ -5,32 +5,35 @@ from django.contrib.postgres.indexes import GinIndex
 from django.core.exceptions import ValidationError
 
 
+class Country(models.TextChoices):
+    """Länder, in denen wir verkaufen (ISO 3166-1). Gleiche Codes wie frontend/src/lib/countries.js."""
+
+    DE = "DE", "Deutschland"
+    AT = "AT", "Österreich"
+    CH = "CH", "Schweiz"
+    FR = "FR", "Frankreich"
+
+
 class RegionLevel(models.TextChoices):
-    LAND = "land", "Land"
-    GEMEINDE = "gemeinde", "Gemeinde/Stadt"
+    """
+    Ebenen, in allen Ländern gleich benannt. Wie sie vor Ort heißen, steht in Region.kind.
+      staat     DE, AT, CH, FR
+      land      Bundesland (DE, AT), Kanton (CH), Région (FR)
+      kreis     Landkreis/kreisfreie Stadt (DE), Bezirk/Statutarstadt (AT), Bezirk (CH), Département (FR)
+      verband   Amt/Verwaltungsgemeinschaft (DE)
+      gemeinde  Gemeinde/Stadt (DE, AT, CH), Commune (FR)
+    """
+
+    STAAT = "staat", "Staat"
+    LAND = "land", "Land/Kanton/Région"
+    KREIS = "kreis", "Kreis/Bezirk/Département"
     VERBAND = "verband", "Amt/Verwaltungsgemeinschaft"
-    KREIS = "kreis", "Landkreis/Kreis"
+    GEMEINDE = "gemeinde", "Gemeinde"
 
 
-class State(models.TextChoices):
-    """Länderschlüssel = die ersten zwei Stellen jedes AGS."""
-
-    SH = "01", "Schleswig-Holstein"
-    HH = "02", "Hamburg"
-    NI = "03", "Niedersachsen"
-    HB = "04", "Bremen"
-    NW = "05", "Nordrhein-Westfalen"
-    HE = "06", "Hessen"
-    RP = "07", "Rheinland-Pfalz"
-    BW = "08", "Baden-Württemberg"
-    BY = "09", "Bayern"
-    SL = "10", "Saarland"
-    BE = "11", "Berlin"
-    BB = "12", "Brandenburg"
-    MV = "13", "Mecklenburg-Vorpommern"
-    SN = "14", "Sachsen"
-    ST = "15", "Sachsen-Anhalt"
-    TH = "16", "Thüringen"
+# Kürzel im Schlüssel, damit Codes verschiedener Ebenen nicht kollidieren
+# (Région 84 ≠ Département 84 in FR, Bezirk 2225 ≠ Gemeinde 2225 in CH)
+LEVEL_TAG = {RegionLevel.LAND: "L", RegionLevel.KREIS: "K", RegionLevel.VERBAND: "V", RegionLevel.GEMEINDE: "G"}
 
 
 class Segment(models.TextChoices):
@@ -43,25 +46,36 @@ class Segment(models.TextChoices):
 
 class Region(models.Model):
     """
-    Geo-Referenz: alle Länder, Kreise, Ämter/VG und Gemeinden mit Grenzen und Strukturdaten.
-    Importiert (import_vg250), selten geändert, ohne Kundenbezug. Wer Kunde ist, steht in Target.
+    Geo-Referenz: alle Staaten, Länder/Kantone/Régions, Kreise/Bezirke/Départements, Ämter und Gemeinden
+    mit Grenzen und Strukturdaten. Importiert (import_regions, je Land aus der amtlichen Quelle), selten
+    geändert, ohne Kundenbezug. Wer Kunde ist, steht in Target.
+
+    Enthaltensein läuft über path, nicht über die Codes: Die sind je Land verschieden aufgebaut (in der
+    Schweiz steckt der Kanton nicht in der Gemeindenummer, in Frankreich die Région nicht im Département).
+    "A liegt in B" heißt: A.path beginnt mit B.path.
     """
 
-    # Land: Länderschlüssel (2), Kreis: Kreisschlüssel (5), Gemeinde: AGS (8), Amt/VG: Regionalschlüssel
-    # des Verbands (9). Alle beginnen mit dem Länderschlüssel; Gemeinden beginnen mit dem Schlüssel
-    # ihres Kreises. Darauf baut PartnerTerritory auf.
-    key = models.CharField("Schlüssel (AGS/RS)", max_length=12, unique=True)
+    # <Land>-<Ebene>-<amtlicher Code>, z. B. DE-K-14625, AT-G-60101, CH-G-261, FR-K-2A; der Staat selbst: "AT".
+    # Amtliche Codes: DE AGS/RS, AT Gemeindekennziffer, CH BFS-Nummer, FR Code INSEE.
+    key = models.CharField("Schlüssel", max_length=24, unique=True)
+    country = models.CharField("Staat", max_length=2, choices=Country.choices, db_index=True)
+    code = models.CharField("Amtlicher Code", max_length=12, blank=True)
     level = models.CharField(max_length=10, choices=RegionLevel.choices, default=RegionLevel.GEMEINDE)
     name = models.CharField(max_length=200)
-    kind = models.CharField("Bezeichnung", max_length=60, blank=True, help_text="Aus VG250 (BEZ): Landkreis, Kreisfreie Stadt, Stadt, Gemeinde, …")
-    state = models.CharField("Bundesland", max_length=2, choices=State.choices, db_index=True)
+    kind = models.CharField("Bezeichnung", max_length=60, blank=True, help_text="Wie die Ebene vor Ort heißt: Landkreis, Statutarstadt, Kanton, Département, …")
     parent = models.ForeignKey(
         "self", on_delete=models.SET_NULL, null=True, blank=True, related_name="children",
-        help_text="Gemeinde → Amt/VG oder Kreis, Amt/VG → Kreis",
+        help_text="Nächsthöhere Region: Gemeinde → Kreis (oder Land, wo es keine Kreise gibt) → Land → Staat",
     )
+    # Schlüssel aller Vorfahren und der Region selbst: "/CH/CH-L-1/CH-K-112/CH-G-261/". Von rebuild_tree gesetzt.
+    path = models.CharField(max_length=255, blank=True, editable=False)
+    # Land/Kanton/Région, in dem die Region liegt (für Anzeige und Filter), ebenfalls von rebuild_tree
+    state = models.ForeignKey("self", on_delete=models.SET_NULL, null=True, blank=True, related_name="+", editable=False)
+    # Deckungsgleich mit parent (kreisfreie Stadt, Statutarstadt, Paris, Berlin als Kreis): im Gebietsdialog nicht doppelt
+    same_as_parent = models.BooleanField(default=False, editable=False)
     population = models.PositiveIntegerField("Einwohner", null=True, blank=True)
     population_date = models.DateField("Einwohner, Stand", null=True, blank=True)
-    postcodes = ArrayField(models.CharField(max_length=5), default=list, blank=True)
+    postcodes = ArrayField(models.CharField(max_length=5), default=list, blank=True)  # DE/FR 5, AT/CH 4 Stellen
     # geography=True: Abstände und ST_DWithin direkt in Metern
     location = models.PointField(srid=4326, geography=True)
     boundary = models.MultiPolygonField(srid=4326, null=True, blank=True)
@@ -69,14 +83,48 @@ class Region(models.Model):
     class Meta:
         verbose_name = "Region"
         verbose_name_plural = "Regionen"
-        indexes = [GinIndex(fields=["postcodes"])]  # PointField bekommt automatisch GiST
+        indexes = [
+            GinIndex(fields=["postcodes"]),  # PointField bekommt automatisch GiST
+            # LIKE 'präfix%' auf path braucht varchar_pattern_ops, sonst kein Index
+            models.Index(fields=["path"], name="region_path_prefix", opclasses=["varchar_pattern_ops"]),
+        ]
 
     def __str__(self):
         return f"{self.name} ({self.key})"
 
+    @staticmethod
+    def make_key(country, level, code=""):
+        return country if level == RegionLevel.STAAT else f"{country}-{LEVEL_TAG[level]}-{code}"
+
     def clean(self):
-        if self.key and self.state and not self.key.startswith(self.state):
-            raise ValidationError({"state": "Der Schlüssel muss mit dem Länderschlüssel beginnen."})
+        if self.key != self.make_key(self.country, self.level, self.code):
+            raise ValidationError({"key": f"Erwartet {self.make_key(self.country, self.level, self.code)}."})
+
+    def contains(self, other):
+        return other.path.startswith(self.path)
+
+    @classmethod
+    def rebuild_tree(cls, country):
+        """
+        Setzt path, state und same_as_parent für alle Regionen eines Landes, von oben nach unten.
+        Nach jedem Import aufrufen; parent muss vorher stimmen.
+        """
+        rows = {r.pk: r for r in cls.objects.filter(country=country).only("pk", "key", "level", "parent_id")}
+        kids = {}
+        for r in rows.values():
+            kids.setdefault(r.parent_id, []).append(r)
+
+        def walk(r, path, state_id):
+            r.path = f"{path}{r.key}/"
+            r.state_id = r.pk if r.level == RegionLevel.LAND else state_id
+            siblings = kids.get(r.parent_id, [])
+            r.same_as_parent = r.parent_id is not None and len(siblings) == 1
+            for child in kids.get(r.pk, []):
+                walk(child, r.path, r.state_id)
+
+        for root in kids.get(None, []):
+            walk(root, "/", None)
+        cls.objects.bulk_update(rows.values(), ["path", "state", "same_as_parent"], batch_size=2000)
 
 
 class Target(models.Model):
@@ -87,7 +135,7 @@ class Target(models.Model):
     Kunde = customer_since gesetzt. Die Organisation kommt oft erst später dazu.
     """
 
-    key = models.SlugField(max_length=64, unique=True, help_text="Verwaltung: Regionsschlüssel, sonst z. B. sw-14625240")
+    key = models.SlugField(max_length=64, unique=True, help_text="Verwaltung: Regionsschlüssel (DE-G-14625240), sonst z. B. sw-DE-G-14625240")
     segment = models.CharField(max_length=20, choices=Segment.choices, db_index=True)
     name = models.CharField(max_length=200)
     region = models.ForeignKey(Region, on_delete=models.PROTECT, related_name="targets")
@@ -165,15 +213,15 @@ class SalesPartner(models.Model):
 
 class PartnerTerritory(models.Model):
     """
-    Ein Stück Gebiet eines Partners: ein Land, ein Kreis oder eine Gemeinde aus der Referenz.
-    Ein Ziel gehört dazu, wenn der Schlüssel seiner Region mit dem Schlüssel dieser Region
-    beginnt (und sein Segment das des Partners ist).
-    Ämter/VG gehen nicht: Ihre Gemeinden tragen den Verbandsschlüssel nicht im AGS.
+    Ein Stück Gebiet eines Partners: ein Staat, ein Land/Kanton/Région, ein Kreis/Bezirk/Département oder
+    eine Gemeinde aus der Referenz, in jedem unserer Länder. Ein Ziel gehört dazu, wenn seine Region darin
+    liegt (region.path beginnt mit dem path dieser Region) und sein Segment das des Partners ist.
+    Ämter/VG gehen nicht: Sie hängen in DE neben dem Kreis, nicht dazwischen.
     Je Segment exklusiv: Überschneidungen zwischen aktiven Partnern desselben Segments verhindert
     partner_admin._save (Präfix-Überschneidung lässt sich nicht als DB-Constraint ausdrücken).
     """
 
-    ALLOWED_LEVELS = (RegionLevel.LAND, RegionLevel.KREIS, RegionLevel.GEMEINDE)
+    ALLOWED_LEVELS = (RegionLevel.STAAT, RegionLevel.LAND, RegionLevel.KREIS, RegionLevel.GEMEINDE)
 
     partner = models.ForeignKey(SalesPartner, on_delete=models.CASCADE, related_name="territories")
     region = models.ForeignKey(Region, on_delete=models.PROTECT, related_name="+")
@@ -190,7 +238,7 @@ class PartnerTerritory(models.Model):
 
     def clean(self):
         if self.region.level not in self.ALLOWED_LEVELS:
-            raise ValidationError({"region": "Nur Land, Kreis oder Gemeinde. Für ein Amt die Gemeinden einzeln wählen."})
+            raise ValidationError({"region": "Nur Staat, Land, Kreis oder Gemeinde. Für ein Amt die Gemeinden einzeln wählen."})
 
 
 class ReferralStatus(models.TextChoices):

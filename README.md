@@ -1,6 +1,6 @@
 # SpeechMind-Karte: Prototyp
 
-Eine Karte, mehrere Ansichten. Die Daten sind überall dieselben: eine Geo-Referenz aller Länder, Landkreise, Ämter und Gemeinden, darauf die Ziele, denen wir verkaufen (Verwaltungen, Stadtwerke, DRK-Verbände, …), jeweils mit Kundenstatus. Die Ansichten unterscheiden sich nur darin, welchen Ausschnitt und welche Felder sie zeigen.
+Eine Karte, mehrere Ansichten. Die Daten sind überall dieselben: eine Geo-Referenz aller Staaten, Länder/Kantone/Régions, Kreise/Bezirke/Départements und Gemeinden in Deutschland, Österreich, der Schweiz und Frankreich, darauf die Ziele, denen wir verkaufen (Verwaltungen, Stadtwerke, DRK-Verbände, …), jeweils mit Kundenstatus. Die Ansichten unterscheiden sich nur darin, welchen Ausschnitt und welche Felder sie zeigen.
 
 Das ist ein Mock-up. Das Frontend läuft komplett mit Mock-Daten, das Django-Backend unter `backend/maps` ist eine Skizze, wie es später aussehen kann.
 
@@ -12,15 +12,15 @@ npm install
 npm run dev
 ```
 
-Die Ansichten sind Tabs (`#kunden`, `#partner`, `#intern`, `#admin`, `#liste`, `#empfehlen`). Die Anmeldung ist simuliert: Partner, Kunde und Scope wählst du oben rechts aus. Einen Einladungslink probierst du mit `?ref=HOY-QJY0#kunden` aus.
+Die Ansichten sind Tabs (`#kunden`, `#partner`, `#intern`, `#admin`, `#liste`, `#empfehlen`). Die Anmeldung ist simuliert: Partner, Kunde und Scope wählst du oben rechts aus. Einen Einladungslink probierst du mit `?ref=HOY-9G5M#kunden` aus.
 
 ## Die Ansichten
 
 Kunden (öffentliche Startseite)
-: Eine Startseite je Segment („Stadtwerke in Ihrer Nähe“). Kleine Karte, groß per Klick. Zeigt Kunden im Umkreis des Besuchers (IP → Browser auf Klick → Ort/PLZ-Suche). Nicht freigegebene Kunden zählen nur als Zahl. Für FOMO: „Neu im letzten Monat“ (deutschlandweit, Anonyme nur mit Bundesland; erst ab 3 Kunden, sonst „in den letzten drei Monaten“, sonst ausgeblendet) und „Deutschlandweit arbeiten N Verwaltungen in Ihrer Größenklasse mit SpeechMind“ (erst ab 3). Angemeldete Kunden mit Organisation sehen direkt über der Karte ihren Einladungslink zum Kopieren; Besucher und Kunden ohne Orga sehen ihn nicht.
+: Eine Startseite je Segment („Stadtwerke in Ihrer Nähe“). Kleine Karte, groß per Klick. Zeigt Kunden im Umkreis des Besuchers (IP → Browser auf Klick → Ort/PLZ-Suche). Nicht freigegebene Kunden zählen nur als Zahl. Für FOMO: „Neu im letzten Monat“ (deutschlandweit, Anonyme nur mit Bundesland; erst ab 3 Kunden, sonst „in den letzten drei Monaten“, sonst ausgeblendet) und „In Deutschland (bzw. Österreich, der Schweiz, Frankreich) arbeiten N Verwaltungen in Ihrer Größenklasse mit SpeechMind“ (im Land des Besuchers, erst ab 3). Angemeldete Kunden mit Organisation sehen direkt über der Karte ihren Einladungslink zum Kopieren; Besucher und Kunden ohne Orga sehen ihn nicht. Unter der Karte „Welche Lizenz passt zu Ihnen?“, siehe [Lizenzempfehlung](#lizenzempfehlung).
 
 Partner
-: Vertriebspartner sehen ihr Gebiet (Länder, Kreise oder Gemeinden) und darin nur ihr Segment. Das Gebiet ist auf der Karte gelb umrandet und leicht getönt. Kunden sind gelbe Ortsschilder, Noch-nicht-Kunden graue (mit Einwohnerzahl). Dazu die Abdeckung in Prozent und die Lizenz. Cluster zeigen „Kunden/Gesamt“.
+: Vertriebspartner sehen ihr Gebiet (Staaten, Länder/Kantone/Régions, Kreise/Bezirke/Départements oder Gemeinden, auch über Ländergrenzen) und darin nur ihr Segment. Das Gebiet ist auf der Karte gelb umrandet und leicht getönt. Kunden sind gelbe Ortsschilder, Noch-nicht-Kunden graue (mit Einwohnerzahl). Dazu die Abdeckung in Prozent und die Lizenz. Cluster zeigen „Kunden/Gesamt“.
 
 Intern
 : Wie Partner, aber alle Ziele aller Segmente, mit Segmentfilter.
@@ -58,9 +58,62 @@ Partner legt das Team im Tab Admin an, es gibt keine Liste zum Hochladen. Der Di
 - **Je Segment exklusiv:** Eine Region gehört pro Segment höchstens einem aktiven Partner. Ein Stadtwerke-Partner darf denselben Kreis haben wie ein Verwaltungs-Partner, zwei Verwaltungs-Partner nicht. Vergebene Regionen sind auf der Karte hell getönt und in der Suche markiert; wählt man ein teilweise vergebenes Land, kommen nur die freien Kreise. Inaktive Partner blockieren nichts; beim Aktivieren wird neu geprüft.
 - **Vorschau:** Wie viele Ziele des Segments im Gebiet liegen und wie viele davon Kunden sind. Kollidiert das Gebiet (z. B. nach einem Segmentwechsel), lässt es sich nur inaktiv speichern.
 
-Im Backend sind das `SalesPartner` (mit `segment`) und je Gebietsregion ein `PartnerTerritory` (FK auf `Region`), gepflegt über `backend/maps/partner_admin.py` (nur `is_staff`). Die Exklusivität prüft `_save` unter Sperre der Partner des Segments (409 bei Konflikt), weil sich Präfix-Überschneidungen nicht als DB-Constraint ausdrücken lassen. Ein Ziel gehört zum Gebiet, wenn der Schlüssel seiner Region mit dem Schlüssel einer Gebietsregion beginnt und sein Segment das des Partners ist. Ämter/VG gehen als Gebiet nicht, weil ihre Gemeinden den Verbandsschlüssel nicht im AGS tragen.
+Im Backend sind das `SalesPartner` (mit `segment`) und je Gebietsregion ein `PartnerTerritory` (FK auf `Region`), gepflegt über `backend/maps/partner_admin.py` (nur `is_staff`). Ein Ziel gehört zum Gebiet, wenn seine Region darin liegt (`Region.path`, siehe [Länder](#länder)) und sein Segment das des Partners ist. Die Exklusivität prüft `_save` unter Sperre der Partner des Segments (409 bei Konflikt), weil sich Pfad-Überschneidungen nicht als DB-Constraint ausdrücken lassen. Ämter/VG gehen als Gebiet nicht: Sie hängen im Baum neben dem Kreis, nicht dazwischen.
 
 Im Mock liegen die Partner in `mocks/partners.js`; Änderungen im Dialog leben bis zum Neuladen der Seite.
+
+## Länder
+
+Verkauft wird in Deutschland, Österreich, der Schweiz und Frankreich (Festland, mit Korsika; ohne Überseegebiete). Die Ebenen heißen intern überall gleich, wie sie vor Ort heißen, steht in `Region.kind`:
+
+| Ebene | DE | AT | CH | FR |
+|---|---|---|---|---|
+| `staat` | Deutschland | Österreich | Schweiz | Frankreich |
+| `land` | Bundesland | Bundesland | Kanton | Région |
+| `kreis` | Landkreis, kreisfreie Stadt | Bezirk, Statutarstadt | Bezirk (nicht in jedem Kanton) | Département |
+| `gemeinde` | Gemeinde (AGS) | Gemeinde (Gemeindekennziffer) | Gemeinde (BFS-Nr.) | Commune (Code INSEE) |
+| Ziel-Verwaltung | Gemeinde, Kreis | Gemeinde | Gemeinde | Commune, Département |
+
+- **Schlüssel:** `<Land>-<Ebene>-<amtlicher Code>`, z. B. `DE-K-14625`, `AT-G-60101`, `CH-G-261`, `FR-K-2A`; der Staat ist nur `AT`. Das Ebenen-Kürzel (L, K, V, G) ist nötig, weil Codes verschiedener Ebenen kollidieren (Région 84 und Département 84, Schweizer Bezirks- und Gemeindenummern).
+- **Enthaltensein:** über `Region.path`, die Schlüssel aller Vorfahren (`/CH/CH-L-1/CH-K-112/CH-G-261/`). „A liegt in B“ heißt: A.path beginnt mit B.path. Das funktioniert unabhängig davon, wie ein Land seine Codes aufbaut (in der Schweiz steckt der Kanton nicht in der Gemeindenummer). `import_regions` setzt `parent`, danach `Region.rebuild_tree` den Pfad, das Land (`state`) und `same_as_parent` (deckungsgleich mit der übergeordneten Region wie kreisfreie Städte, Statutarstädte, Paris; die bietet der Gebietsdialog nicht doppelt an).
+- **Welche Ebenen als Verwaltung verkauft werden** (letzte Zeile der Tabelle), steht in `TARGET_LEVELS` in `import_regions.py`. Österreichische und Schweizer Bezirke sind keine eigenen Gebietskörperschaften, Kantone und Régions verkaufen wir vorerst nicht. Bitte bestätigen.
+
+Quellen, alle frei nutzbar mit Namensnennung (steht in der Kartenattribution):
+
+| Land | Quelle | Lizenz |
+|---|---|---|
+| DE | BKG VG250 (mit Einwohnern: VG250-EW) | dl-de/by-2-0, © GeoBasis-DE / BKG |
+| AT | Statistik Austria, Gliederungen (Bundesländer, politische Bezirke, Gemeinden) | CC BY 4.0 |
+| CH | swisstopo swissBOUNDARIES3D (Kantone, Bezirke, Hoheitsgebiete mit Einwohnern) | OGD, © swisstopo |
+| FR | IGN ADMIN EXPRESS (Régions, Départements, Communes mit Einwohnern) | Licence Ouverte 2.0 |
+
+```bash
+python manage.py import_regions AT --dir /daten/statistik-austria --dry-run   # prüft Dateien und Felder
+python manage.py import_regions AT --dir /daten/statistik-austria [--plz-csv plz.csv]
+```
+
+### Neues Land hinzufügen
+
+Länder kommen einzeln dazu, wenn wir dort verkaufen. Es reicht:
+
+1. `Country` in `backend/maps/models.py` und `COUNTRIES` in `frontend/src/lib/countries.js` (Name, wie die Ebenen heißen).
+2. Ein Eintrag in `SOURCES` in `import_regions.py`: je Ebene Datei, Feld für Code und Name, wie eine Gemeinde ihren Kreis findet (etwa zehn Zeilen). Dazu `TARGET_LEVELS`.
+3. Falls das Land außerhalb des bisherigen Rahmens liegt: Koordinatenrahmen in `views._coords` erweitern.
+4. `import_regions XX --dir … --dry-run`, dann ohne `--dry-run`. Danach ist das Land im Gebietsdialog, in der Suche und auf den Karten.
+
+Im Mock: das Land in `scripts/build_areas.py` ergänzen und die Datei neu bauen; Beispielgemeinden in `mocks/regions.js` mit `country` und `parent`.
+
+Offen je Land: Sprache der öffentlichen Startseite (Frankreich, Romandie, Tessin) und Segmentnamen (DRK heißt in AT/CH/FR Rotes Kreuz, SRK, Croix-Rouge).
+
+## Lizenzempfehlung
+
+Auf der Startseite („Welche Lizenz passt zu Ihnen?“), öffentlich und ohne Anmeldung. Verwaltungen wählen ihre Gemeinde oder ihren Kreis (vorbelegt mit dem Ort am ungefähren Standort bzw. mit der eigenen Verwaltung, wenn angemeldet); Stadtwerke und DRK geben die Zahl der Mitarbeitenden an. Daraus:
+
+- **Lizenz:** Median der Plätze von bis zu fünf Kunden desselben Segments (bei Verwaltungen derselben Ebene) mit ähnlicher Größe (höchstens Faktor 2,5), aber nur ab drei solchen Kunden. So lässt sich keine einzelne Kundenlizenz zurückrechnen, und es fallen keine Namen. Sonst Faustregel nach Einwohnern bzw. Mitarbeitenden. Stufe nach Plätzen: bis 5 Basis, bis 15 Professional, darüber Enterprise.
+- **Hardware:** Aufnahmesets nach Faustregel.
+- Angemeldete Kunden sehen ihre aktuelle Lizenz daneben.
+
+Backend: `GET /api/licence/suggest/?segment=verwaltung&key=DE-G-14625240` bzw. `?segment=stadtwerk&size=250` (`backend/maps/licence.py`), im Mock `suggestLicence` in `mocks/recommendations.js`. Werte sind Platzhalter, mit dem Vertrieb abstimmen.
 
 ## Empfehlungsdialog
 
@@ -105,7 +158,7 @@ frontend/src/
   mocks/customers.js                   Kundenstatus je Ziel (neue Kunden meist ohne Orga/Lizenz)
   mocks/partners.js                    Vertriebspartner (erfunden), Startzustand für den Admin-Tab
   mocks/referrals.js                   Regeln, Beispiel-Empfehlungen, Codes
-  mocks/areas.json                     Länder und Kreise mit Fläche (aus scripts/build_areas.py)
+  mocks/areas.json                     Staaten, Länder, Kreise in DE/AT/CH/FR mit Fläche (aus scripts/build_areas.py)
   mocks/recommendations.js             Empfehlungslogik
   lib/segments.js                      Segmente: Wörter, Einheiten, Artikel
   lib/referral.js                      Status-Texte, Einladungstext
@@ -117,21 +170,22 @@ backend/maps/                          Skizze
   referrals.py     Rabattregeln, Code-Erzeugung
   views.py         /api/map/<audience>/targets/, /api/map/<audience>/list/ (Seiten), /api/map/<audience>/recent/, /api/referral/<code>/, /api/geo/…
   partner_admin.py /api/partners/…, /api/geo/areas/ (Admin-Tab, nur is_staff)
-  management/commands/import_vg250.py
+  licence.py       /api/licence/suggest/ (öffentliche Lizenzempfehlung)
+  management/commands/import_regions.py   Geo-Referenz je Land (DE, AT, CH, FR)
 ```
 
 ## Datenmodell (Skizze)
 
-- `Region` ist die reine Geo-Referenz: Länder, Kreise, Ämter/VG und Gemeinden mit Grenzen und Einwohnern. `key` ist der Länderschlüssel (2 Stellen), der Kreisschlüssel (5), der AGS (8) oder der Verbandsschlüssel (9); alle beginnen mit dem Länderschlüssel. Import mit `import_vg250 --level land|kreis|gemeinde`.
+- `Region` ist die reine Geo-Referenz: Staaten, Länder, Kreise, Ämter/VG und Gemeinden mit Grenzen und Einwohnern, je Land. Schlüssel, Pfad und Import: siehe [Länder](#länder).
 - `Target` ist ein Ziel, dem wir verkaufen, mit `segment`, `size` (Einwohner bzw. Mitarbeitende), eigener Lage und der Region, in der es sitzt. Verwaltungen entstehen beim VG250-Import automatisch je Region. **Kunde = `customer_since` gesetzt.** `organization` ist optional und wird verknüpft, sobald es sie gibt.
 - `SalesPartner` wird im Admin-Tab angelegt und hat genau ein `segment`. Logins hängen als User daran. Kunden eines Partners erkennt man an `Organization.creater_user`. `Organization.is_partner` meint API-Partner und spielt hier keine Rolle.
 - `PartnerTerritory` = Partner + Region (Land, Kreis oder Gemeinde). Ein Ziel gehört zum Gebiet, wenn der Schlüssel seiner Region mit dem Schlüssel der Gebietsregion beginnt und sein Segment das des Partners ist.
 
-Die Flächen im Mock (`mocks/areas.json`, gebaut mit `scripts/build_areas.py`) stammen aus den Kreisgrenzen des BKG (VG250, Stand 2025, über opendatasoft; Lizenz dl-de/by-2-0, „© GeoBasis-DE / BKG“, steht in der Kartenattribution); Länder sind die Vereinigung ihrer Kreise. Gemeinden haben im Mock keine Fläche, ein Gemeinde-Gebiet fehlt deshalb auf der Karte. Im Betrieb liefert das Backend die Fläche als Vereinigung von `Region.boundary` der Gebietsregionen.
+Die Flächen im Mock (`mocks/areas.json`, gebaut mit `scripts/build_areas.py`) sind vereinfachte Ableitungen der amtlichen Grenzen (Quellen und Download im Kopf des Skripts; DE über opendatasoft aus VG250, AT aus Statistik Austria, CH aus BFS/swisstopo, FR aus IGN); Länder, Régions und Staaten sind die Vereinigung ihrer Kreise. Gemeinden haben im Mock keine Fläche, ein Gemeinde-Gebiet fehlt deshalb auf der Karte. Im Betrieb liefert das Backend die Fläche als Vereinigung von `Region.boundary` der Gebietsregionen.
 
 ## Noch offen
 
-- Echte Referenzliste: Die Werte in `mocks/regions.js` sind aus dem Gedächtnis zusammengestellt und gerundet. Einige kleine AGS sind nur illustrativ.
+- Echte Referenzliste: Die Werte in `mocks/regions.js` sind aus dem Gedächtnis zusammengestellt und gerundet. Einige kleine Codes (AGS, GKZ) sind nur illustrativ. Im Mock gibt es Ziele nur in Ostdeutschland und in den größeren Städten von AT, CH, FR.
 - Welche Felder die Karten der Partner und Intern zeigen, und woher Lizenz- und Hardwaredaten kommen.
 - Kontaktdaten der Noch-nicht-Kunden liegen nicht vor. Eventuell per Anreicherung über die Website der Verwaltung (Impressum).
 - Empfehlungsprogramm: endgültige Prozente und Deckel, rechtliche Prüfung, Auszahlung/Verrechnung, Empfehlungskonto im Backend (`/referral/me/`, braucht die Anmeldung).

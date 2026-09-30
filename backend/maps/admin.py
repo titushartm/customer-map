@@ -5,16 +5,17 @@ from .models import PartnerTerritory, Referral, ReferralCode, Region, SalesPartn
 
 @admin.register(Region)
 class RegionAdmin(admin.GISModelAdmin):
-    list_display = ("name", "key", "level", "kind", "state", "population")
-    list_filter = ("level", "state")
-    search_fields = ("name", "key", "postcodes")
+    list_display = ("name", "key", "level", "kind", "country", "population")
+    list_filter = ("country", "level")
+    search_fields = ("name", "key", "code", "postcodes")
+    readonly_fields = ("path", "state", "same_as_parent")
     raw_id_fields = ("parent",)
 
 
 @admin.register(Target)
 class TargetAdmin(admin.GISModelAdmin):
     list_display = ("name", "segment", "region", "size", "customer_since", "public_reference", "organization")
-    list_filter = ("segment", "public_reference", "region__state")
+    list_filter = ("segment", "public_reference", "region__country")
     search_fields = ("name", "key", "region__name")
     raw_id_fields = ("region", "organization")
 

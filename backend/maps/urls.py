@@ -1,6 +1,6 @@
 from django.urls import path
 
-from . import partner_admin, views
+from . import licence, partner_admin, views
 
 app_name = "maps"
 
@@ -10,6 +10,7 @@ urlpatterns = [
     path("map/<slug:audience>/recent/", views.recent, name="recent"),
     path("map/<slug:audience>/list/", views.target_list, name="list"),
     path("referral/<str:code>/", views.referral_lookup, name="referral"),
+    path("licence/suggest/", licence.suggest_view, name="licence-suggest"),
     path("geo/plz/<str:plz>/", views.postcode_location, name="postcode"),
     path("geo/ip/", views.ip_location, name="ip"),
     path("geo/reverse/", views.reverse_location, name="reverse"),

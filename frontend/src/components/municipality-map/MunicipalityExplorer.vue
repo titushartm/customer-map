@@ -5,6 +5,9 @@ import PlaceSearch from './PlaceSearch.vue'
 import RecentCustomers from './RecentCustomers.vue'
 import { useUserLocation } from '../../composables/useUserLocation.js'
 import { useLazyList } from '../../composables/useLazyList.js'
+import { COUNTRIES } from '../../lib/countries.js'
+
+const capitalize = (s) => s.charAt(0).toUpperCase() + s.slice(1)
 import { fetchTargets, fetchRecent } from '../../api/map.js'
 import { SEGMENTS, sizeText, kindLabel } from '../../lib/segments.js'
 
@@ -33,7 +36,7 @@ const AUDIENCE_DEFAULTS = {
     fields: [
       { key: 'segment', label: 'Art', format: 'kind' },
       { key: 'status', label: 'Status', format: 'status' },
-      { key: 'state', label: 'Bundesland', format: 'text' },
+      { key: 'state', label: 'Land/Region', format: 'text' },
       { key: 'size', label: 'Größe', format: 'size' },
       { key: 'customer_since', label: 'Kunde seit', format: 'month' },
       { key: 'licence', label: 'Lizenz', format: 'text' },
@@ -75,8 +78,8 @@ const copyDefaults = {
   hidden: (n) => n === 1
     ? 'Eine davon wird auf eigenen Wunsch nicht namentlich genannt.'
     : `${n} davon werden auf eigenen Wunsch nicht namentlich genannt.`,
-  // Vergleich über die Größe, deutschlandweit: wirkt auch, wenn in der Nähe noch niemand dabei ist
-  peers: (n, cls) => `Deutschlandweit arbeiten ${n} Verwaltungen in Ihrer Größenklasse (${cls}) mit SpeechMind.`,
+  // Vergleich über die Größe, landesweit: wirkt auch, wenn in der Nähe noch niemand dabei ist
+  peers: (n, cls, country) => `${capitalize(COUNTRIES[country]?.in ?? 'landesweit')} arbeiten ${n} Verwaltungen in Ihrer Größenklasse (${cls}) mit SpeechMind.`,
   emptyArea: 'In diesem Kartenausschnitt ist niemand dabei. Zoomen Sie heraus, um die Nachbarn zu sehen.',
 }
 const text = computed(() => ({ ...copyDefaults, ...props.copy }))
@@ -237,7 +240,7 @@ const headline = computed(() => {
 // Erst ab 3 Kunden in der Klasse, sonst wirkt die Zahl eher abschreckend
 const peerLine = computed(() => {
   const p = meta.value.peers
-  return isRadius.value && p && p.count >= 3 ? text.value.peers(p.count, p.label) : null
+  return isRadius.value && p && p.count >= 3 ? text.value.peers(p.count, p.label, p.country) : null
 })
 
 const ready = computed(() => (isRadius.value ? status.value === 'ready' : loaded.value))

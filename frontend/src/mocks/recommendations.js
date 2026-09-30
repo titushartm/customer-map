@@ -36,6 +36,36 @@ function joinDe(names) {
 const comparable = (a, b) => a.segment === b.segment && (a.segment !== 'verwaltung' || a.level === b.level)
 
 /**
+ * Lizenz aus den Merkmalen des Ziels (Segment, Ebene, Größe): Median der ähnlichsten Kunden mit bekannter
+ * Lizenz, sonst Faustregel. minSimilar = so viele Vergleichskunden braucht der Median mindestens.
+ */
+function licenceFor(target, customers, { minSimilar }) {
+  const withDistance = (t) => ({ ...t, distance_km: Math.round(haversineKm(target.lat, target.lng, t.lat, t.lng)) })
+  // Vergleichbar: ähnlichste Größe (höchstens Faktor 2,5), nur Kunden mit bekannter Lizenz
+  const similar = customers
+    .filter((t) => t.key !== target.key && comparable(t, target) && seatsOf(t.licence) && target.size)
+    .map((t) => ({ ...withDistance(t), ratio: Math.abs(Math.log(t.size / target.size)) }))
+    .filter((t) => t.ratio < Math.log(2.5))
+    .sort((a, b) => a.ratio - b.ratio || a.distance_km - b.distance_km)
+    .slice(0, 5)
+  const bySimilar = similar.length >= minSimilar
+  const seats = bySimilar ? median(similar.map((t) => seatsOf(t.licence))) : rule(RULE_SEATS, target)
+  // Faustregel: ein Aufnahmeset je Sitzungsraum, größere Organisationen tagen parallel
+  const sets = rule(RULE_SETS, target)
+  return { tier: tierFor(seats), seats, sets, basis: bySimilar ? 'similar' : 'rule', similar }
+}
+
+/**
+ * Öffentliche Lizenzempfehlung für die Startseite: nur aus den Merkmalen des Ziels, ohne Namen anderer Kunden.
+ * Der Median braucht mindestens drei Vergleichskunden, damit sich keine einzelne Lizenz zurückrechnen lässt.
+ * target: { segment, level?, size, lat?, lng? }
+ */
+export function suggestLicence(target, all) {
+  const l = licenceFor(target, all.filter((t) => t.is_customer), { minSimilar: 3 })
+  return { tier: l.tier, seats: l.seats, sets: l.sets, basis: l.basis, similarCount: l.basis === 'similar' ? l.similar.length : 0 }
+}
+
+/**
  * @param {object} target   Eintrag aus mockAllTargets()
  * @param {object[]} all    alle Ziele mit Kundenstatus
  */
@@ -45,24 +75,14 @@ export function recommend(target, all) {
   const customers = others.filter((t) => t.is_customer)
   const withDistance = (t) => ({ ...t, distance_km: Math.round(haversineKm(target.lat, target.lng, t.lat, t.lng)) })
 
-  // Vergleichbar: ähnlichste Größe, nur Kunden mit bekannter Lizenz
-  const similar = customers
-    .filter((t) => comparable(t, target) && seatsOf(t.licence))
-    .map((t) => ({ ...withDistance(t), ratio: Math.abs(Math.log(t.size / target.size)) }))
-    .filter((t) => t.ratio < Math.log(2.5))
-    .sort((a, b) => a.ratio - b.ratio || a.distance_km - b.distance_km)
-    .slice(0, 3)
-
-  const seats = similar.length >= 2 ? median(similar.map((t) => seatsOf(t.licence))) : rule(RULE_SEATS, target)
+  const l = licenceFor(target, customers, { minSimilar: 2 })
   const licence = {
-    tier: tierFor(seats),
-    seats,
-    basis: similar.length >= 2 ? 'similar' : 'rule',
-    similar: similar.map((t) => ({ name: t.name, size: sizeText(t.segment, t.size), licence: t.licence, distance_km: t.distance_km })),
+    tier: l.tier,
+    seats: l.seats,
+    basis: l.basis,
+    similar: l.similar.slice(0, 3).map((t) => ({ name: t.name, size: sizeText(t.segment, t.size), licence: t.licence, distance_km: t.distance_km })),
   }
-
-  // Faustregel: ein Aufnahmeset je Sitzungsraum, größere Organisationen tagen parallel
-  const sets = rule(RULE_SETS, target)
+  const sets = l.sets
   const hardware = { sets, text: `${sets}× Aufnahmeset (Konferenzmikrofon und Aufnahmegerät)` }
 
   // Nähe: erst das eigene Segment, dann alle anderen (Stadtwerke hören auch auf ihre Stadt)

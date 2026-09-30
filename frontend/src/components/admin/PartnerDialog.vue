@@ -2,6 +2,7 @@
 import { ref, computed, watch, nextTick, defineAsyncComponent } from 'vue'
 import { fetchAreaMap, previewPartner, savePartner, searchAreas } from '../../api/map.js'
 import { SEGMENTS } from '../../lib/segments.js'
+import { COUNTRIES, COUNTRY_CODES } from '../../lib/countries.js'
 
 const AreaPickerMap = defineAsyncComponent(() => import('./AreaPickerMap.vue'))
 
@@ -25,7 +26,7 @@ const error = ref(null)
 const saving = ref(false)
 const preview = ref(null)
 
-const LEVEL_ORDER = { land: 0, kreis: 1, gemeinde: 2 }
+const LEVEL_ORDER = { staat: 0, land: 1, kreis: 2, gemeinde: 3 }
 const numFmt = new Intl.NumberFormat('de-DE')
 
 function blank() {
@@ -52,54 +53,62 @@ watch(() => props.open, async (open) => {
 
 const keys = computed(() => form.value.areas.map((a) => a.key))
 const sortedAreas = computed(() => [...form.value.areas].sort((a, b) =>
-  LEVEL_ORDER[a.level] - LEVEL_ORDER[b.level] || a.name.localeCompare(b.name, 'de')))
+  COUNTRY_CODES.indexOf(a.country) - COUNTRY_CODES.indexOf(b.country)
+  || LEVEL_ORDER[a.level] - LEVEL_ORDER[b.level] || a.name.localeCompare(b.name, 'de')))
 // Regionen aktiver Partner desselben Segments. Andere Segmente dürfen dieselbe Region haben.
 const taken = computed(() => props.partners
   .filter((p) => p.id !== form.value.id && p.active && p.segment === form.value.segment)
-  .flatMap((p) => p.areas.map((a) => ({ key: a.key, partner: p.name }))))
+  .flatMap((p) => p.areas.map((a) => ({ key: a.key, path: a.path, partner: p.name }))))
 
 const areaByKey = computed(() => Object.fromEntries((areaMap.value ?? []).map((a) => [a.key, a])))
-const toRef = (a) => ({ key: a.key, name: a.name, level: a.level, kind: a.kind ?? null })
-const kindText = (a) => (a.level === 'land' ? 'Land' : a.level === 'gemeinde' ? 'Gemeinde' : a.kind ?? 'Kreis')
+const toRef = (a) => ({ key: a.key, name: a.name, level: a.level, kind: a.kind ?? null, country: a.country, state: a.state ?? null, path: a.path })
+const kindText = (a) => a.kind ?? COUNTRIES[a.country]?.[a.level] ?? ''
 
-/** Vergebene Regionen, die sich mit key überschneiden: darüber (Land hat den Kreis) oder darin (Kreis im Land) */
-const conflictsOf = (key) => taken.value.filter((t) => key.startsWith(t.key) || t.key.startsWith(key))
+// "a liegt in b" über den Pfad der Vorfahren ('/AT/AT-L-6/AT-K-601/'), in jedem Land gleich
+const within = (a, b) => a.path.startsWith(b.path)
+const childrenOf = (area) => (areaMap.value ?? []).filter((c) => c.parent === area.key)
+
+/** Vergebene Regionen, die sich mit area überschneiden: darüber (Land hat den Kreis) oder darin (Kreis im Land) */
+const conflictsOf = (area) => taken.value.filter((t) => within(area, t) || within(t, area))
 const owners = (conflicts) => [...new Set(conflicts.map((t) => t.partner))].join(', ')
 /** Für die Suchliste: 'vergeben an …' oder 'teilweise vergeben' */
-function takenNote(key) {
-  const c = conflictsOf(key)
+function takenNote(area) {
+  const c = conflictsOf(area)
   if (!c.length) return null
-  const owner = c.find((t) => key.startsWith(t.key))
+  const owner = c.find((t) => within(area, t))
   return owner ? `vergeben an ${owner.partner}` : `teilweise vergeben an ${owners(c)}`
+}
+
+/** Die freien Teile eines teilweise vergebenen Gebiets, so grob wie möglich (ganze Länder vor einzelnen Kreisen). */
+function freeParts(area) {
+  const c = conflictsOf(area)
+  if (!c.length) return [area]
+  if (c.some((t) => within(area, t))) return [] // ganz vergeben
+  return childrenOf(area).flatMap(freeParts) // ohne bekannte Kinder (Gemeinde vergeben, Kreis ohne Gemeindeliste): nichts
 }
 
 /**
  * Gebiet aufnehmen. Liegt es schon in einem größeren, passiert nichts; kleinere darin fallen weg.
- * Vergebene Regionen (gleiches Segment) gehen nicht; bei einem teilweise vergebenen Land kommen die freien Kreise.
+ * Vergebene Regionen (gleiches Segment) gehen nicht; bei einem teilweise vergebenen Gebiet kommen die freien Teile.
  */
 function add(area) {
-  const parent = form.value.areas.find((a) => area.key !== a.key && area.key.startsWith(a.key))
+  const parent = form.value.areas.find((a) => area.key !== a.key && within(area, a))
   if (keys.value.includes(area.key) || parent) {
     notice.value = { text: `${area.name} gehört schon zum Gebiet${parent ? ` (liegt in ${parent.name})` : ''}.` }
     return
   }
-  const conflicts = conflictsOf(area.key)
-  if (conflicts.length) {
-    const owner = conflicts.find((t) => area.key.startsWith(t.key))
-    const free = area.level === 'land' && !owner
-      ? areaMap.value.filter((a) => a.level === 'kreis' && a.key.startsWith(area.key) && !conflictsOf(a.key).length && !keys.value.some((k) => a.key.startsWith(k)))
-      : []
-    if (!free.length) {
-      notice.value = { warn: true, text: `${area.name} ist schon vergeben an ${owner?.partner ?? owners(conflicts)}. Je Segment betreut nur ein Partner eine Region.` }
-      return
-    }
-    form.value.areas = [...form.value.areas.filter((a) => !a.key.startsWith(area.key)), ...free.map(toRef)]
-    notice.value = { text: `${area.name} ist teilweise vergeben (${owners(conflicts)}). Übernommen: die ${free.length} freien Kreise.` }
+  const conflicts = conflictsOf(area)
+  const parts = conflicts.length ? freeParts(areaByKey.value[area.key] ?? area) : [area]
+  if (!parts.length) {
+    const owner = conflicts.find((t) => within(area, t))
+    notice.value = { warn: true, text: `${area.name} ist schon vergeben an ${owner?.partner ?? owners(conflicts)}. Je Segment betreut nur ein Partner eine Region.` }
     return
   }
-  const inside = form.value.areas.filter((a) => a.key.startsWith(area.key))
-  form.value.areas = [...form.value.areas.filter((a) => !a.key.startsWith(area.key)), toRef(area)]
-  notice.value = inside.length ? { text: `${area.name} ersetzt ${inside.map((a) => a.name).join(', ')}.` } : null
+  const inside = form.value.areas.filter((a) => within(a, area))
+  form.value.areas = [...form.value.areas.filter((a) => !within(a, area)), ...parts.map(toRef)]
+  notice.value = conflicts.length
+    ? { text: `${area.name} ist teilweise vergeben (${owners(conflicts)}). Übernommen: ${parts.length} freie ${parts.length === 1 ? 'Region' : 'Regionen'}.` }
+    : inside.length ? { text: `${area.name} ersetzt ${inside.map((a) => a.name).join(', ')}.` } : null
 }
 
 function remove(key) {
@@ -107,18 +116,24 @@ function remove(key) {
   notice.value = null
 }
 
-/** Klick auf einen Kreis in der Karte. Liegt er in einem gewählten Land, wird das Land in seine übrigen Kreise aufgeteilt. */
-function toggleKreis(key) {
+/**
+ * Klick auf eine Fläche in der Karte. Liegt sie in einem gewählten größeren Gebiet (Land, Staat), wird dieses
+ * in seine übrigen Teile aufgeteilt: "Sachsen ohne Leipzig", "Österreich ohne Wien".
+ */
+function toggleArea(key) {
+  const target = areaByKey.value[key]
   if (keys.value.includes(key)) return remove(key)
-  const land = form.value.areas.find((a) => a.level === 'land' && key.startsWith(a.key))
-  if (land) {
-    const rest = areaMap.value.filter((a) => a.level === 'kreis' && a.key.startsWith(land.key) && a.key !== key)
-    form.value.areas = [...form.value.areas.filter((a) => a.key !== land.key), ...rest.map(toRef)]
-    const k = areaByKey.value[key]
-    notice.value = { text: `${land.name} ohne ${kindText(k)} ${k.name}: jetzt ${rest.length} einzelne Kreise.` }
-    return
+  const ancestor = form.value.areas.find((a) => within(target, a))
+  if (!ancestor) return add(target)
+  const rest = []
+  for (let node = areaByKey.value[ancestor.key]; node && node.key !== key;) {
+    const kids = childrenOf(node)
+    const next = kids.find((c) => within(target, c))
+    rest.push(...kids.filter((c) => c !== next))
+    node = next
   }
-  add(areaByKey.value[key])
+  form.value.areas = [...form.value.areas.filter((a) => a.key !== ancestor.key), ...rest.map(toRef)]
+  notice.value = { text: `${ancestor.name} ohne ${kindText(target)} ${target.name}: jetzt ${rest.length} einzelne Gebiete.` }
 }
 
 let searchSeq = 0
@@ -195,7 +210,7 @@ async function save() {
               <input
                 v-model="query"
                 type="search"
-                placeholder="Land, Kreis oder Gemeinde suchen"
+                placeholder="Land, Kanton, Kreis, Bezirk, Département oder Gemeinde"
                 aria-label="Gebiet suchen"
                 aria-controls="pd-hits"
                 @keydown.enter.prevent="hits[0] && pick(hits[0])"
@@ -205,8 +220,8 @@ async function save() {
                   <button type="button" @click="pick(h)">
                     <span>{{ h.name }}</span>
                     <span class="pd-muted">
-                      {{ kindText(h) }}<template v-if="h.level !== 'land'"> · {{ h.state }}</template>
-                      <span v-if="takenNote(h.key)" class="pd-taken"> · {{ takenNote(h.key) }}</span>
+                      {{ kindText(h) }}<template v-if="h.state"> · {{ h.state }}</template> · {{ h.country }}
+                      <span v-if="takenNote(h)" class="pd-taken"> · {{ takenNote(h) }}</span>
                     </span>
                   </button>
                 </li>
@@ -216,11 +231,11 @@ async function save() {
             <ul v-if="sortedAreas.length" class="pd-areas">
               <li v-for="a in sortedAreas" :key="a.key">
                 <span class="pd-area-name">{{ a.name }}</span>
-                <span class="pd-muted">{{ kindText(a) }}</span>
+                <span class="pd-muted">{{ kindText(a) }} · {{ a.country }}</span>
                 <button type="button" class="pd-x" :aria-label="`${a.name} entfernen`" @click="remove(a.key)">×</button>
               </li>
             </ul>
-            <p v-else class="pd-muted">Noch kein Gebiet. Suchen oder Kreise in der Karte anklicken.</p>
+            <p v-else class="pd-muted">Noch kein Gebiet. Suchen oder Flächen in der Karte anklicken.</p>
           </fieldset>
 
           <fieldset class="pd-field pd-contact">
@@ -238,7 +253,7 @@ async function save() {
         </div>
 
         <div class="pd-col">
-          <AreaPickerMap v-if="areaMap" :areas="areaMap" :selected="keys" :taken="taken" @toggle="toggleKreis" />
+          <AreaPickerMap v-if="areaMap" :areas="areaMap" :selected="form.areas" :taken="taken" @toggle="toggleArea" />
           <div v-else class="pd-map-wait">Karte wird geladen …</div>
 
           <section class="pd-card" aria-live="polite">
