@@ -1,11 +1,14 @@
 <script setup>
 import { computed } from 'vue'
+import { SEGMENTS } from '../../lib/segments.js'
 
 // Die zuletzt dazugekommenen Kunden. Klein als Zeile auf der Karte, groß als Liste im Panel.
 const props = defineProps({
   /** { days, total, items: [{ key?, name?, level, state, customer_since, lat?, lng? }] } */
   recent: { type: Object, default: null },
   compact: { type: Boolean, default: false },
+  /** Wörter des Segments: { plural, label } */
+  words: { type: Object, default: () => ({ plural: 'Verwaltungen', label: 'Verwaltung' }) },
 })
 const emit = defineEmits(['select'])
 
@@ -26,13 +29,15 @@ const period = computed(() => {
   return months <= 1 ? 'im letzten Monat' : `in den letzten ${['', '', 'zwei', 'drei', 'vier', 'fünf', 'sechs'][months] ?? months} Monaten`
 })
 
-const anonymous = (item) => (item.level === 'kreis' ? `Ein Landkreis in ${item.state}` : `Eine Verwaltung in ${item.state}`)
+const anonymous = (item) => (item.level === 'kreis'
+  ? `Ein Landkreis in ${item.state}`
+  : `${SEGMENTS[item.segment]?.one ?? 'Eine Organisation'} in ${item.state}`)
 const label = (item) => item.name ?? anonymous(item)
 
 const compactLine = computed(() => {
   const named = items.value.filter((i) => i.name).slice(0, 3).map((i) => i.name)
   const rest = total.value - named.length
-  if (!named.length) return `${total.value} neue Verwaltungen`
+  if (!named.length) return `${total.value} neue ${props.words.plural}`
   return rest > 0 ? `${named.join(', ')} und ${rest} weitere` : named.join(', ')
 })
 </script>
@@ -46,7 +51,7 @@ const compactLine = computed(() => {
   <section v-else-if="!compact && total" class="mm-recent" aria-label="Neu dabei">
     <p class="mm-recent-head">
       <span class="mm-recent-dot" aria-hidden="true" />
-      <strong>{{ total }} {{ total === 1 ? 'Verwaltung' : 'Verwaltungen' }}</strong>
+      <strong>{{ total }} {{ total === 1 ? words.label : words.plural }}</strong>
       {{ period }} dazugekommen
     </p>
     <ul>

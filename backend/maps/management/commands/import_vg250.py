@@ -18,7 +18,7 @@ from django.contrib.gis.geos import MultiPolygon
 from django.core.management.base import BaseCommand
 from django.db import transaction
 
-from maps.models import Region, RegionLevel
+from maps.models import Region, RegionLevel, Segment, Target
 
 LAND_WITH_STRUCTURE = 4  # VG250-Feld GF: nur Landflächen, keine Gewässeranteile
 
@@ -50,7 +50,7 @@ class Command(BaseCommand):
             if geom.geom_type == "Polygon":
                 geom = MultiPolygon(geom, srid=4326)
 
-            Region.objects.update_or_create(
+            region, _ = Region.objects.update_or_create(
                 key=ags,
                 defaults={
                     "level": level,
@@ -61,6 +61,17 @@ class Command(BaseCommand):
                     # point_on_surface liegt garantiert in der Gemeinde, der Schwerpunkt nicht immer
                     "location": geom.point_on_surface,
                     "postcodes": sorted(postcodes.get(ags, [])),
+                },
+            )
+            # Jede Region ist auch eine Ziel-Verwaltung; Kundenstatus bleibt beim erneuten Import erhalten
+            Target.objects.update_or_create(
+                key=ags,
+                defaults={
+                    "segment": Segment.VERWALTUNG,
+                    "name": region.name,
+                    "region": region,
+                    "location": region.location,
+                    "size": region.population,
                 },
             )
             count += 1

@@ -1,6 +1,9 @@
-import { REGIONS } from '../mocks/regions.js'
+import { REGIONS, REGION_BY_KEY } from '../mocks/regions.js'
+import { EXTRA_TARGETS, SEGMENT_OFFSET } from '../mocks/targets.js'
 import { MOCK_CUSTOMERS } from '../mocks/customers.js'
 import { MOCK_PARTNERS } from '../mocks/partners.js'
+import { MOCK_REFERRALS, REFERRAL_RULES, codeFor } from '../mocks/referrals.js'
+import { SEGMENT_KEYS } from '../lib/segments.js'
 import { sizeClassOf } from '../lib/sizeClasses.js'
 import { haversineKm } from '../lib/geo.js'
 import { recommend } from '../mocks/recommendations.js'
@@ -14,40 +17,78 @@ const API_BASE = import.meta.env.VITE_API_BASE ?? '/api'
 export const NEW_WITHIN_DAYS = 30
 
 /**
- * Regionen für eine Zielgruppe. Rückgabe: { collection: GeoJSON FeatureCollection, meta }
- * properties: key, name, level, state, status ('customer' | 'prospect'), dazu je nach
- * Zielgruppe customer_since, population, licence, distance_km.
- *   kunden:  { lat, lng, radiusKm }
+ * Ziele (Verwaltungen, Stadtwerke, DRK, …) für eine Zielgruppe.
+ * Rückgabe: { collection: GeoJSON FeatureCollection, meta }
+ * properties: key, name, segment, level, state, status ('customer' | 'prospect'), dazu je nach
+ * Zielgruppe customer_since, size, licence, postcodes, distance_km.
+ *   kunden:  { segment, lat, lng, radiusKm }
  *   partner: { partnerId }   (später aus der Anmeldung); meta.territory = Gebietsfläche als GeoJSON
  *   intern:  —
+ * segment optional: nur dieses Segment. meta.segments = Segmente, die im Ausschnitt vorkommen dürfen.
  */
-export async function fetchRegions({ audience, lat, lng, radiusKm, partnerId }) {
+export async function fetchTargets({ audience, segment, lat, lng, radiusKm, partnerId }) {
   const raw = USE_MOCK
-    ? mockRegions({ audience, lat, lng, radiusKm, partnerId })
-    : await getJson(`/map/${audience}/regions/`, { lat, lng, radius: radiusKm, partner: partnerId })
+    ? mockTargets({ audience, segment, lat, lng, radiusKm, partnerId })
+    : await getJson(`/map/${audience}/targets/`, { segment, lat, lng, radius: radiusKm, partner: partnerId })
   return normalize(raw)
 }
 
-/** Die zuletzt dazugekommenen Kunden: { days, total, items: [{ key?, name?, level, state, customer_since, lat?, lng? }] } */
-export async function fetchRecent({ audience, partnerId }) {
-  return USE_MOCK ? mockRecent({ audience, partnerId }) : getJson(`/map/${audience}/recent/`, { partner: partnerId })
+/** Die zuletzt dazugekommenen Kunden: { days, total, items: [{ key?, name?, segment, level, state, customer_since, lat?, lng? }] } */
+export async function fetchRecent({ audience, segment, partnerId }) {
+  return USE_MOCK
+    ? mockRecent({ audience, segment, partnerId })
+    : getJson(`/map/${audience}/recent/`, { segment, partner: partnerId })
 }
 
 /**
- * Empfehlung für eine Verwaltung: Lizenz, Hardware, Referenzen in der Nähe, E-Mail-Entwurf, One-Pager.
- * Bereits-Kunden bekommen stattdessen Nachbarn für das geplante Empfehlungsprogramm.
+ * Empfehlung für ein Ziel: Lizenz, Hardware, Referenzen in der Nähe, E-Mail-Entwurf, One-Pager.
+ * Bestandskunden bekommen stattdessen Vorschläge fürs Empfehlungsprogramm.
  */
 export async function fetchRecommendation(key, { audience = 'intern', partnerId } = {}) {
-  if (!USE_MOCK) return getJson(`/map/${audience}/regions/${encodeURIComponent(key)}/recommendation/`, { partner: partnerId })
-  const all = mockAllRegions()
-  const region = all.find((r) => r.key === key)
-  if (!region) throw new Error('Diese Verwaltung ist nicht in der Liste.')
-  return recommend(region, all)
+  if (!USE_MOCK) return getJson(`/map/${audience}/targets/${encodeURIComponent(key)}/recommendation/`, { partner: partnerId })
+  const all = mockAllTargets()
+  const target = all.find((t) => t.key === key)
+  if (!target) throw new Error('Dieses Ziel ist nicht in der Liste.')
+  return recommend(target, all)
 }
 
 /** Nur im Prototyp: Partner zum Durchschalten. Im Betrieb kommt der Partner aus der Anmeldung. */
 export function listPartners() {
-  return MOCK_PARTNERS.map(({ id, name, territories }) => ({ id, name, territories: territories.map((t) => t.label) }))
+  return MOCK_PARTNERS.map(({ id, name, contact, territories }) => ({
+    id,
+    name,
+    contact,
+    segments: [...new Set(territories.flatMap((t) => t.segments))],
+    territories: territories.map((t) => t.label),
+  }))
+}
+
+// ---- Empfehlungsprogramm ----
+
+/** Nur im Prototyp: Kunden, die sich "anmelden" können. Nur mit Lizenz gibt es einen Code. */
+export function listReferrers() {
+  return mockAllTargets()
+    .filter(canRefer)
+    .map(({ key, name, segment }) => ({ key, name, segment }))
+    .sort((a, b) => a.name.localeCompare(b.name, 'de'))
+}
+
+/**
+ * Empfehlungskonto des angemeldeten Kunden (im Betrieb aus der Anmeldung, nicht per Key).
+ * { eligible, me, code, link, rules, wins, earnedPct, capReached, referrals: [], suggestions: [] }
+ */
+export async function fetchReferralAccount(key) {
+  if (!USE_MOCK) return getJson('/referral/me/')
+  return mockReferralAccount(key)
+}
+
+/**
+ * Öffentlich: Code aus einem Einladungslink auflösen.
+ * { valid, code, inviteePct, referrer: { name?, segment, level, state, lat?, lng?, key? } }
+ */
+export async function lookupReferral(code) {
+  if (!USE_MOCK) return getJson(`/referral/${encodeURIComponent(code)}/`)
+  return mockLookupReferral(code)
 }
 
 /** Ungefährer Standort über die IP (serverseitig, lokale GeoLite2-Datenbank). */
@@ -119,21 +160,38 @@ function normalize(fc) {
 // ---- Mock-Backend: verhält sich wie backend/maps/views.py ----
 
 // Spiegel von backend/maps/audiences.py
+const FIELDS_FULL = ['customer_since', 'size', 'licence', 'postcodes']
 const AUDIENCES = {
   kunden: { scope: 'radius', includeProspects: false, namedOnly: true, fields: ['customer_since'], recentMin: 3 },
-  partner: { scope: 'territory', includeProspects: true, namedOnly: false, fields: ['customer_since', 'population', 'licence', 'postcodes'], recentMin: 1 },
-  intern: { scope: 'all', includeProspects: true, namedOnly: false, fields: ['customer_since', 'population', 'licence', 'postcodes'], recentMin: 1 },
+  partner: { scope: 'territory', includeProspects: true, namedOnly: false, fields: FIELDS_FULL, recentMin: 1 },
+  intern: { scope: 'all', includeProspects: true, namedOnly: false, fields: FIELDS_FULL, recentMin: 1 },
 }
 
 // "Neu dabei": der erste Zeitraum mit mindestens recentMin Kunden, sonst leer
 const RECENT_WINDOWS_DAYS = [30, 90]
 
-/** Alle Regionen mit Kundenstatus, ohne Zielgruppen-Filter. Nur für Mock und die interne Liste. */
-export function mockAllRegions() {
-  return REGIONS.map((r) => {
-    const c = MOCK_CUSTOMERS[r.key]
+/**
+ * Alle Ziele mit Kundenstatus, ohne Zielgruppen-Filter. Nur für Mock und die interne Liste.
+ * Verwaltungen = alle Regionen; dazu Stadtwerke, DRK, … mit ihrer Region.
+ */
+export function mockAllTargets() {
+  const verwaltungen = REGIONS.map((r) => ({
+    key: r.key, segment: 'verwaltung', region_key: r.key, name: r.name, level: r.level,
+    size: r.population, lat: r.lat, lng: r.lng,
+  }))
+  const others = EXTRA_TARGETS.map((t) => {
+    const r = REGION_BY_KEY[t.region]
+    const [dLat, dLng] = SEGMENT_OFFSET[t.segment] ?? [0, 0]
+    return { key: t.key, segment: t.segment, region_key: t.region, name: t.name, level: null, size: t.size, lat: r.lat + dLat, lng: r.lng + dLng }
+  })
+  return [...verwaltungen, ...others].map((t) => {
+    const r = REGION_BY_KEY[t.region_key]
+    const c = MOCK_CUSTOMERS[t.key]
     return {
-      ...r,
+      ...t,
+      state: r.state,
+      postcodes: r.postcodes,
+      population: r.population, // der Region, für Größenklassen bei Verwaltungen
       is_customer: Boolean(c),
       customer_since: c?.since ?? null,
       public_reference: c?.public_reference ?? false,
@@ -142,85 +200,94 @@ export function mockAllRegions() {
   })
 }
 
-function scoped(audience, partnerId) {
+const inTerritory = (partner, t) =>
+  partner.territories.some((tt) => t.region_key.startsWith(tt.prefix) && tt.segments.includes(t.segment))
+
+function scoped(audience, partnerId, segment) {
   const cfg = AUDIENCES[audience]
   if (!cfg) throw new Error('Unbekannte Karte')
-  let rows = mockAllRegions()
-  const meta = {}
+  let rows = mockAllTargets()
+  const meta = { segments: SEGMENT_KEYS }
   if (cfg.scope === 'territory') {
     const partner = MOCK_PARTNERS.find((p) => p.id === Number(partnerId))
     if (!partner) throw new Error('Für diesen Partner ist kein Gebiet hinterlegt.')
-    rows = rows.filter((r) => partner.territories.some((t) => r.key.startsWith(t.prefix)))
+    rows = rows.filter((t) => inTerritory(partner, t))
     meta.partner = partner.name
     meta.territories = partner.territories.map((t) => t.label)
+    meta.segments = SEGMENT_KEYS.filter((s) => partner.territories.some((t) => t.segments.includes(s)))
     meta.territory = TERRITORIES[partner.id] ?? null // GeoJSON-Geometrie für die Fläche auf der Karte
+  }
+  if (segment) {
+    rows = rows.filter((t) => t.segment === segment)
+    meta.segments = [segment]
   }
   return { cfg, rows, meta }
 }
 
-function mockRegions({ audience, lat, lng, radiusKm, partnerId }) {
-  const { cfg, rows: all, meta } = scoped(audience, partnerId)
+function mockTargets({ audience, segment, lat, lng, radiusKm, partnerId }) {
+  const { cfg, rows: all, meta } = scoped(audience, partnerId, segment)
   let rows = all
 
   if (cfg.scope === 'radius') {
     rows = rows
-      .map((r) => ({ ...r, distance_km: haversineKm(lat, lng, r.lat, r.lng) }))
-      .filter((r) => r.distance_km <= radiusKm)
+      .map((t) => ({ ...t, distance_km: haversineKm(lat, lng, t.lat, t.lng) }))
+      .filter((t) => t.distance_km <= radiusKm)
       .sort((a, b) => a.distance_km - b.distance_km)
     meta.radius_km = radiusKm
-    meta.peers = peers(all, lat, lng)
+    if (segment === 'verwaltung') meta.peers = peers(all, lat, lng)
   } else {
-    rows = [...rows].sort((a, b) => b.population - a.population)
+    rows = [...rows].sort((a, b) => b.size - a.size)
   }
-  if (!cfg.includeProspects) rows = rows.filter((r) => r.is_customer)
+  if (!cfg.includeProspects) rows = rows.filter((t) => t.is_customer)
 
   meta.hidden_count = 0
   if (cfg.namedOnly) {
-    meta.hidden_count = rows.filter((r) => r.is_customer && !r.public_reference).length
-    rows = rows.filter((r) => !r.is_customer || r.public_reference)
+    meta.hidden_count = rows.filter((t) => t.is_customer && !t.public_reference).length
+    rows = rows.filter((t) => !t.is_customer || t.public_reference)
   }
-  meta.customer_count = rows.filter((r) => r.is_customer).length + meta.hidden_count
-  meta.prospect_count = rows.filter((r) => !r.is_customer).length
+  meta.customer_count = rows.filter((t) => t.is_customer).length + meta.hidden_count
+  meta.prospect_count = rows.filter((t) => !t.is_customer).length
 
-  const features = rows.map((r) => ({
+  const features = rows.map((t) => ({
     type: 'Feature',
-    geometry: { type: 'Point', coordinates: [r.lng, r.lat] },
+    geometry: { type: 'Point', coordinates: [t.lng, t.lat] },
     properties: {
-      key: r.key,
-      name: r.name,
-      level: r.level,
-      state: r.state,
-      status: r.is_customer ? 'customer' : 'prospect',
-      ...(cfg.fields.includes('customer_since') && r.customer_since ? { customer_since: r.customer_since } : {}),
-      ...(cfg.fields.includes('population') ? { population: r.population } : {}),
-      ...(cfg.fields.includes('licence') && r.licence ? { licence: r.licence } : {}),
-      ...(cfg.fields.includes('postcodes') ? { postcodes: r.postcodes } : {}),
-      ...(r.distance_km != null ? { distance_km: Math.round(r.distance_km) } : {}),
+      key: t.key,
+      name: t.name,
+      segment: t.segment,
+      level: t.level,
+      state: t.state,
+      status: t.is_customer ? 'customer' : 'prospect',
+      ...(cfg.fields.includes('customer_since') && t.customer_since ? { customer_since: t.customer_since } : {}),
+      ...(cfg.fields.includes('size') ? { size: t.size } : {}),
+      ...(cfg.fields.includes('licence') && t.licence ? { licence: t.licence } : {}),
+      ...(cfg.fields.includes('postcodes') ? { postcodes: t.postcodes } : {}),
+      ...(t.distance_km != null ? { distance_km: Math.round(t.distance_km) } : {}),
     },
   }))
 
   return { type: 'FeatureCollection', features, meta }
 }
 
-/** Kunden in der Größenklasse der Gemeinde am Standort, deutschlandweit, ohne die Gemeinde selbst. */
-function peers(all, lat, lng) {
+/** Verwaltungs-Kunden in der Größenklasse der Gemeinde am Standort, deutschlandweit, ohne sie selbst. */
+function peers(verwaltungen, lat, lng) {
   const here = nearestRegion(lat, lng)
   const cls = here?.population != null ? sizeClassOf(here.population) : null
   if (!cls) return null
-  const count = all.filter((r) => r.level === 'gemeinde' && r.is_customer && r.key !== here.key
-    && r.population >= cls.min && r.population < cls.max).length
+  const count = verwaltungen.filter((t) => t.level === 'gemeinde' && t.is_customer && t.key !== here.key
+    && t.size >= cls.min && t.size < cls.max).length
   return { label: cls.label, count, place: here.name }
 }
 
-function mockRecent({ audience, partnerId }) {
+function mockRecent({ audience, segment, partnerId }) {
   // Bei "kunden" deutschlandweit, damit die Leiste nie leer ist
-  const { cfg, rows } = scoped(audience, partnerId)
-  const customers = rows.filter((r) => r.is_customer).sort((a, b) => b.customer_since.localeCompare(a.customer_since))
+  const { cfg, rows } = scoped(audience, partnerId, segment)
+  const customers = rows.filter((t) => t.is_customer).sort((a, b) => b.customer_since.localeCompare(a.customer_since))
   let days = RECENT_WINDOWS_DAYS[0]
   let recent = []
   for (days of RECENT_WINDOWS_DAYS) {
     const since = Date.now() - days * 86_400_000
-    recent = customers.filter((r) => new Date(r.customer_since).getTime() >= since)
+    recent = customers.filter((t) => new Date(t.customer_since).getTime() >= since)
     if (recent.length >= cfg.recentMin) break
   }
   if (recent.length < cfg.recentMin) return { days, total: 0, items: [] }
@@ -228,19 +295,92 @@ function mockRecent({ audience, partnerId }) {
   return {
     days,
     total: recent.length,
-    items: recent.slice(0, 5).map((r) => {
-      const named = r.public_reference || !cfg.namedOnly
+    items: recent.slice(0, 5).map((t) => {
+      const named = t.public_reference || !cfg.namedOnly
       return {
-        key: named ? r.key : null,
-        name: named ? r.name : null,
-        level: r.level,
-        state: r.state,
-        customer_since: r.customer_since,
-        // Anonyme bekommen keine Koordinaten: sonst wäre die Gemeinde trotzdem erkennbar
-        lat: named ? r.lat : null,
-        lng: named ? r.lng : null,
+        key: named ? t.key : null,
+        name: named ? t.name : null,
+        segment: t.segment,
+        level: t.level,
+        state: t.state,
+        customer_since: t.customer_since,
+        // Anonyme bekommen keine Koordinaten: sonst wäre das Ziel trotzdem erkennbar
+        lat: named ? t.lat : null,
+        lng: named ? t.lng : null,
       }
     }),
+  }
+}
+
+// ---- Empfehlungsprogramm (Mock) ----
+
+// Lizenz setzt eine Organisation voraus. Neue Kunden ohne Orga können (noch) nicht empfehlen.
+const canRefer = (t) => t.is_customer && Boolean(t.licence)
+const SUGGEST_KM = 40
+
+function mockReferralAccount(key) {
+  const all = mockAllTargets()
+  const byKey = Object.fromEntries(all.map((t) => [t.key, t]))
+  const me = byKey[key]
+  if (!me || !canRefer(me)) {
+    return { eligible: false, reason: 'Empfehlungscodes gibt es für Kunden mit Lizenz.' }
+  }
+  const code = codeFor(me.key, me.name)
+  const referrals = MOCK_REFERRALS
+    .filter((r) => r.referrer === key)
+    .map((r) => {
+      const t = byKey[r.invited]
+      return { key: t.key, name: t.name, segment: t.segment, level: t.level, status: r.status, date: r.date }
+    })
+    .sort((a, b) => b.date.localeCompare(a.date))
+  const wins = referrals.filter((r) => r.status === 'won').length
+  const { referrerPctPerWin: per, referrerCapPct: cap } = REFERRAL_RULES
+
+  // Vorschläge: Nachbarn aller Segmente, die noch nicht Kunde und noch nicht eingeladen sind
+  const taken = new Set(MOCK_REFERRALS.map((r) => r.invited))
+  const suggestions = all
+    .filter((t) => !t.is_customer && !taken.has(t.key))
+    .map((t) => ({ ...t, distance_km: Math.round(haversineKm(me.lat, me.lng, t.lat, t.lng)) }))
+    .filter((t) => t.distance_km <= SUGGEST_KM)
+    .sort((a, b) => (a.region_key === me.region_key ? -1 : 0) - (b.region_key === me.region_key ? -1 : 0) || a.distance_km - b.distance_km)
+    .slice(0, 8)
+    .map(({ key: k, name, segment, level, size, distance_km, region_key }) => ({
+      key: k, name, segment, level, size, distance_km, same_place: region_key === me.region_key,
+    }))
+
+  return {
+    eligible: true,
+    me: { key: me.key, name: me.name, segment: me.segment, level: me.level, licence: me.licence, public_reference: me.public_reference },
+    code,
+    link: `${window.location.origin}${window.location.pathname}?ref=${code}#kunden`,
+    rules: REFERRAL_RULES,
+    wins,
+    earnedPct: Math.min(wins * per, cap),
+    capReached: wins * per >= cap,
+    referrals,
+    suggestions,
+  }
+}
+
+function mockLookupReferral(code) {
+  const needle = String(code).trim().toUpperCase()
+  const me = mockAllTargets().filter(canRefer).find((t) => codeFor(t.key, t.name) === needle)
+  if (!me) return { valid: false, code: needle }
+  // Name und Lage nur mit Referenzfreigabe, sonst nur Segment und Bundesland
+  const named = me.public_reference
+  return {
+    valid: true,
+    code: needle,
+    inviteePct: REFERRAL_RULES.inviteePct,
+    referrer: {
+      key: named ? me.key : null,
+      name: named ? me.name : null,
+      segment: me.segment,
+      level: me.level,
+      state: me.state,
+      lat: named ? me.lat : null,
+      lng: named ? me.lng : null,
+    },
   }
 }
 

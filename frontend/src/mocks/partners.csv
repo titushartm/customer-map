@@ -1,0 +1,16 @@
+partner_id;partner;ansprechpartner;email;telefon;website;gebiet;gebiet_name;segmente
+101;Lausitz Kommunal Vertrieb;Anna Beispiel;vertrieb@lausitz-kommunal.example;030 23125 101;lausitz-kommunal.example;14625;Landkreis Bautzen;verwaltung,stadtwerk
+101;Lausitz Kommunal Vertrieb;Anna Beispiel;vertrieb@lausitz-kommunal.example;030 23125 101;lausitz-kommunal.example;14626;Landkreis Görlitz;verwaltung,stadtwerk
+101;Lausitz Kommunal Vertrieb;Anna Beispiel;vertrieb@lausitz-kommunal.example;030 23125 101;lausitz-kommunal.example;12066;Oberspreewald-Lausitz;verwaltung
+101;Lausitz Kommunal Vertrieb;Anna Beispiel;vertrieb@lausitz-kommunal.example;030 23125 101;lausitz-kommunal.example;12071;Spree-Neiße;verwaltung
+101;Lausitz Kommunal Vertrieb;Anna Beispiel;vertrieb@lausitz-kommunal.example;030 23125 101;lausitz-kommunal.example;12052;Cottbus;verwaltung
+102;Mitteldeutsche Verwaltungsberatung;Bernd Muster;info@md-verwaltung.example;030 23125 102;md-verwaltung.example;15;Sachsen-Anhalt;verwaltung
+102;Mitteldeutsche Verwaltungsberatung;Bernd Muster;info@md-verwaltung.example;030 23125 102;md-verwaltung.example;16;Thüringen;verwaltung
+103;Nordost Digital Kommunal;Clara Probe;kontakt@nordost-digital.example;030 23125 103;nordost-digital.example;13;Mecklenburg-Vorpommern;verwaltung,stadtwerk
+103;Nordost Digital Kommunal;Clara Probe;kontakt@nordost-digital.example;030 23125 103;nordost-digital.example;11;Berlin;verwaltung
+103;Nordost Digital Kommunal;Clara Probe;kontakt@nordost-digital.example;030 23125 103;nordost-digital.example;12051;Brandenburg an der Havel;verwaltung
+103;Nordost Digital Kommunal;Clara Probe;kontakt@nordost-digital.example;030 23125 103;nordost-digital.example;12053;Frankfurt (Oder);verwaltung,stadtwerk
+103;Nordost Digital Kommunal;Clara Probe;kontakt@nordost-digital.example;030 23125 103;nordost-digital.example;12054;Potsdam;verwaltung,stadtwerk
+103;Nordost Digital Kommunal;Clara Probe;kontakt@nordost-digital.example;030 23125 103;nordost-digital.example;12060;Barnim;verwaltung
+104;Soziale Dienste Digital Ost;David Test;hallo@sozial-digital.example;030 23125 104;sozial-digital.example;14;Sachsen;drk
+104;Soziale Dienste Digital Ost;David Test;hallo@sozial-digital.example;030 23125 104;sozial-digital.example;12;Brandenburg;drk

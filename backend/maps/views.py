@@ -14,8 +14,9 @@ from django.http import Http404, JsonResponse
 from django.views.decorators.cache import cache_control
 from django.views.decorators.http import require_GET
 
+from . import referrals as rules
 from .audiences import AUDIENCES, RECENT_LIMIT, RECENT_WINDOWS_DAYS
-from .models import PartnerTerritory, Region, RegionLevel, State
+from .models import PartnerTerritory, ReferralCode, Region, RegionLevel, Segment, State, Target
 
 
 def _coords(request, required=True):
@@ -41,37 +42,53 @@ def _audience(name):
 
 def _partner_id(request):
     """
-    Welcher Partner schaut? Später aus request.user. Bis dahin darf der Prototyp den
-    Partner per ?partner=<user_id> wählen, aber nur mit MAP_ALLOW_PARTNER_PARAM
+    Welcher Partner schaut? Später aus request.user (SalesPartner.users). Bis dahin darf der
+    Prototyp den Partner per ?partner=<external_id> wählen, aber nur mit MAP_ALLOW_PARTNER_PARAM
     (Default: DEBUG). Sonst könnte jeder fremde Gebiete abrufen.
     """
     if not getattr(settings, "MAP_ALLOW_PARTNER_PARAM", settings.DEBUG):
         raise Http404("Partneransicht nur mit Anmeldung")
     try:
-        return int(request.GET["partner"])
-    except (KeyError, ValueError):
+        return request.GET["partner"]
+    except KeyError:
         raise Http404("partner ist erforderlich")
 
 
-def _scoped(request, cfg):
-    """Regionen im Ausschnitt der Zielgruppe, plus Meta-Infos zum Ausschnitt."""
-    qs = Region.objects.all()
-    meta = {}
+def _segment(request):
+    seg = request.GET.get("segment") or None
+    if seg and seg not in Segment.values:
+        raise Http404("Unbekanntes Segment")
+    return seg
+
+
+def _scoped(request, cfg, segment=None):
+    """Ziele im Ausschnitt der Zielgruppe, plus Meta-Infos zum Ausschnitt."""
+    qs = Target.objects.all()
+    meta = {"segments": Segment.values}
 
     if cfg["scope"] == "territory":
-        territories = list(PartnerTerritory.objects.filter(partner_id=_partner_id(request)).select_related("partner"))
+        territories = list(
+            PartnerTerritory.objects.filter(partner__external_id=_partner_id(request), partner__active=True)
+            .select_related("partner")
+        )
         if not territories:
             raise Http404("Für diesen Partner ist kein Gebiet hinterlegt")
-        in_territory = reduce(or_, (Q(key__startswith=t.key_prefix) for t in territories))
-        qs = qs.filter(in_territory)
-        meta["partner"] = territories[0].partner.get_full_name() or territories[0].partner.get_username()
+        # Je Gebiet: Präfix UND eines seiner Segmente
+        qs = qs.filter(reduce(or_, (
+            Q(region__key__startswith=t.key_prefix, segment__in=t.segments) for t in territories
+        )))
+        meta["partner"] = territories[0].partner.name
         meta["territories"] = [str(t) for t in territories]
+        meta["segments"] = [s for s in Segment.values if any(s in t.segments for t in territories)]
         # Fläche fürs Hervorheben: Vereinigung der Kreisgrenzen (kreisfreie Städte sind als Kreis importiert).
         # Im Betrieb vorberechnen oder cachen, ST_Union über viele Kreise ist nicht billig.
-        area = (Region.objects.filter(in_territory, level=RegionLevel.KREIS, boundary__isnull=False)
-                .aggregate(u=Union("boundary"))["u"])
+        in_area = reduce(or_, (Q(key__startswith=t.key_prefix) for t in territories))
+        area = Region.objects.filter(in_area, level=RegionLevel.KREIS, boundary__isnull=False).aggregate(u=Union("boundary"))["u"]
         meta["territory"] = json.loads(area.simplify(0.003, preserve_topology=True).geojson) if area else None
 
+    if segment:
+        qs = qs.filter(segment=segment)
+        meta["segments"] = [segment]
     return qs, meta
 
 
@@ -81,32 +98,33 @@ def _licence(org):
     return " · ".join(p for p in parts if p) or None
 
 
-def _properties(r, fields):
+def _properties(t, fields):
     props = {
-        "key": r.key,
-        "name": r.name,
-        "level": r.level,
-        "state": r.get_state_display(),
-        "status": "customer" if r.is_customer else "prospect",
+        "key": t.key,
+        "name": t.name,
+        "segment": t.segment,
+        "level": t.region.level if t.segment == Segment.VERWALTUNG else None,
+        "state": t.region.get_state_display(),
+        "status": "customer" if t.is_customer else "prospect",
     }
-    if "customer_since" in fields and r.customer_since:
-        props["customer_since"] = r.customer_since.isoformat()
-    if "population" in fields and r.population is not None:
-        props["population"] = r.population
-    if "licence" in fields and r.organization_id:  # neue Kunden haben oft noch keine
-        props["licence"] = _licence(r.organization)
+    if "customer_since" in fields and t.customer_since:
+        props["customer_since"] = t.customer_since.isoformat()
+    if "size" in fields and t.size is not None:
+        props["size"] = t.size
+    if "licence" in fields and t.organization_id:  # neue Kunden haben oft noch keine
+        props["licence"] = _licence(t.organization)
     if "postcodes" in fields:
-        props["postcodes"] = r.postcodes
-    if getattr(r, "distance", None) is not None:
-        props["distance_km"] = round(r.distance.km)
+        props["postcodes"] = t.region.postcodes
+    if getattr(t, "distance", None) is not None:
+        props["distance_km"] = round(t.distance.km)
     return props
 
 
-def _feature(r, fields):
+def _feature(t, fields):
     return {
         "type": "Feature",
-        "geometry": {"type": "Point", "coordinates": [round(r.location.x, 5), round(r.location.y, 5)]},
-        "properties": _properties(r, fields),
+        "geometry": {"type": "Point", "coordinates": [round(t.location.x, 5), round(t.location.y, 5)]},
+        "properties": _properties(t, fields),
     }
 
 
@@ -123,29 +141,33 @@ def _size_label(lo, hi):
 
 
 def _peers(point):
-    """Kunden in der Größenklasse der Gemeinde am Standort, deutschlandweit, ohne sie selbst."""
-    gemeinden = Region.objects.filter(level=RegionLevel.GEMEINDE)
-    here = gemeinden.annotate(distance=Distance("location", point)).order_by("distance").first()
+    """Verwaltungs-Kunden in der Größenklasse der Gemeinde am Standort, deutschlandweit, ohne sie selbst."""
+    here = (Region.objects.filter(level=RegionLevel.GEMEINDE)
+            .annotate(distance=Distance("location", point)).order_by("distance").first())
     if here is None or here.population is None:
         return None
     lo, hi = next((lo, hi) for lo, hi in SIZE_CLASSES if here.population >= lo and (hi is None or here.population < hi))
-    qs = gemeinden.filter(customer_since__isnull=False, population__gte=lo).exclude(pk=here.pk)
+    qs = Target.objects.filter(
+        segment=Segment.VERWALTUNG, region__level=RegionLevel.GEMEINDE,
+        customer_since__isnull=False, size__gte=lo,
+    ).exclude(region=here)
     if hi is not None:
-        qs = qs.filter(population__lt=hi)
+        qs = qs.filter(size__lt=hi)
     return {"label": _size_label(lo, hi), "count": qs.count(), "place": here.name}
 
 
 @require_GET
 @cache_control(private=True, max_age=300)
-def regions(request, audience):
+def targets(request, audience):
     """
     Kunden (und je nach Zielgruppe Noch-nicht-Kunden) als GeoJSON.
-    kunden:  ?lat=&lng=&radius=
+    kunden:  ?segment=verwaltung&lat=&lng=&radius=
     partner: ?partner=<id>          (bis zur Anmeldung, siehe _partner_id)
-    intern:  optional ?state=14&status=prospect&min_population=5000
+    intern:  optional ?segment=stadtwerk&state=14&status=prospect
     """
     cfg = _audience(audience)
-    qs, meta = _scoped(request, cfg)
+    segment = _segment(request)
+    qs, meta = _scoped(request, cfg, segment)
 
     point = None
     if cfg["scope"] == "radius":
@@ -157,16 +179,14 @@ def regions(request, audience):
         point = Point(lng, lat, srid=4326)
         qs = qs.filter(location__dwithin=(point, D(km=radius_km)))
         meta["radius_km"] = radius_km
-        meta["peers"] = _peers(point)
+        if segment == Segment.VERWALTUNG:
+            meta["peers"] = _peers(point)
 
     if state := request.GET.get("state"):
-        qs = qs.filter(state=state)
-    if (min_pop := request.GET.get("min_population", "")).isdigit():
-        qs = qs.filter(population__gte=int(min_pop))
+        qs = qs.filter(region__state=state)
 
-    customers = qs.filter(customer_since__isnull=False)
     if not cfg["include_prospects"]:
-        qs = customers
+        qs = qs.filter(customer_since__isnull=False)
     elif (status := request.GET.get("status")) in ("customer", "prospect"):
         qs = qs.filter(customer_since__isnull=(status == "prospect"))
 
@@ -176,22 +196,19 @@ def regions(request, audience):
     else:
         meta["hidden_count"] = 0
 
-    qs = qs.select_related("organization").only(
-        "key", "name", "level", "state", "location", "population", "customer_since", "postcodes",
-        "organization__customer_type", "organization__amount_seats",
-    )
+    qs = qs.select_related("region", "organization")
     if point is not None:
         qs = qs.annotate(distance=Distance("location", point)).order_by("distance")
     else:
-        qs = qs.order_by("-population")
+        qs = qs.order_by("-size")
 
     rows = list(qs[: cfg["limit"]])
-    meta["customer_count"] = sum(r.is_customer for r in rows) + meta["hidden_count"]
-    meta["prospect_count"] = sum(not r.is_customer for r in rows)
+    meta["customer_count"] = sum(t.is_customer for t in rows) + meta["hidden_count"]
+    meta["prospect_count"] = sum(not t.is_customer for t in rows)
 
     return JsonResponse({
         "type": "FeatureCollection",
-        "features": [_feature(r, cfg["fields"]) for r in rows],
+        "features": [_feature(t, cfg["fields"]) for t in rows],
         "meta": meta,
     })
 
@@ -205,7 +222,7 @@ def recent(request, audience):
     Kunden im Zeitraum wird der nächste Zeitraum versucht, danach bleibt die Liste leer.
     """
     cfg = _audience(audience)
-    qs, _ = _scoped(request, {**cfg, "scope": "all" if cfg["scope"] == "radius" else cfg["scope"]})
+    qs, _ = _scoped(request, {**cfg, "scope": "all" if cfg["scope"] == "radius" else cfg["scope"]}, _segment(request))
 
     customers = qs.filter(customer_since__isnull=False)
     for days in RECENT_WINDOWS_DAYS:
@@ -217,22 +234,50 @@ def recent(request, audience):
         return JsonResponse({"days": days, "total": 0, "items": []})
 
     items = []
-    for r in qs.order_by("-customer_since").only(
-        "key", "name", "level", "state", "location", "customer_since", "public_reference",
-    )[:RECENT_LIMIT]:
-        named = r.public_reference or not cfg["recent_named_only"]
+    for t in qs.select_related("region").order_by("-customer_since")[:RECENT_LIMIT]:
+        named = t.public_reference or not cfg["recent_named_only"]
         items.append({
-            "key": r.key if named else None,
-            "name": r.name if named else None,
-            "level": r.level,
-            "state": r.get_state_display(),
-            "customer_since": r.customer_since.isoformat(),
-            # Anonyme bekommen keine Koordinaten: sonst wäre die Gemeinde trotzdem erkennbar
-            "lat": round(r.location.y, 2) if named else None,
-            "lng": round(r.location.x, 2) if named else None,
+            "key": t.key if named else None,
+            "name": t.name if named else None,
+            "segment": t.segment,
+            "level": t.region.level if t.segment == Segment.VERWALTUNG else None,
+            "state": t.region.get_state_display(),
+            "customer_since": t.customer_since.isoformat(),
+            # Anonyme bekommen keine Koordinaten: sonst wäre das Ziel trotzdem erkennbar
+            "lat": round(t.location.y, 2) if named else None,
+            "lng": round(t.location.x, 2) if named else None,
         })
 
     return JsonResponse({"days": days, "total": total, "items": items})
+
+
+@require_GET
+@cache_control(public=True, max_age=3600)
+def referral_lookup(request, code):
+    """
+    Öffentlich: Einladungslink auflösen. Name und Lage des Empfehlenden nur mit Referenzfreigabe.
+    Das Empfehlungskonto (/referral/me/) braucht die Anmeldung und fehlt in dieser Skizze.
+    """
+    rc = (ReferralCode.objects.filter(code=code.strip().upper(), active=True)
+          .select_related("target__region").first())
+    if rc is None or not rc.target.can_refer:
+        return JsonResponse({"valid": False, "code": code.upper()})
+    t = rc.target
+    named = t.public_reference
+    return JsonResponse({
+        "valid": True,
+        "code": rc.code,
+        "inviteePct": rules.INVITEE_DISCOUNT_PCT,
+        "referrer": {
+            "key": t.key if named else None,
+            "name": t.name if named else None,
+            "segment": t.segment,
+            "level": t.region.level if t.segment == Segment.VERWALTUNG else None,
+            "state": t.region.get_state_display(),
+            "lat": round(t.location.y, 2) if named else None,
+            "lng": round(t.location.x, 2) if named else None,
+        },
+    })
 
 
 @require_GET

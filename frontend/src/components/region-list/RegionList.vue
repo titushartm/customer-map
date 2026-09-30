@@ -1,11 +1,12 @@
 <script setup>
 import { ref, shallowRef, computed, watch, onMounted } from 'vue'
 import PlaceSearch from '../municipality-map/PlaceSearch.vue'
-import { fetchRegions } from '../../api/map.js'
+import { fetchTargets } from '../../api/map.js'
+import { SEGMENTS, sizeText, kindLabel } from '../../lib/segments.js'
 import { haversineKm } from '../../lib/geo.js'
 import { SIZE_CLASSES } from '../../lib/sizeClasses.js'
 
-// Alle Verwaltungen als Tabelle. Intern: alles, als Partner: nur das eigene Gebiet.
+// Alle Ziele (Verwaltungen, Stadtwerke, DRK, …) als Tabelle. Intern: alles, als Partner: nur das eigene Gebiet.
 const props = defineProps({
   partnerId: { type: [Number, String], default: null },
   pageSize: { type: Number, default: 100 },
@@ -20,11 +21,11 @@ const loadError = ref(null)
 const q = ref('')
 const status = ref('all') // 'all' | 'customer' | 'prospect'
 const state = ref('')
-const level = ref('')
-const size = ref('') // Index in SIZE_CLASSES
+const kind = ref('') // '' | Segment | 'verwaltung:<ebene>'
+const size = ref('') // Index in SIZE_CLASSES, nur für Verwaltungen (Einwohner)
 const center = ref(null) // { name, lat, lng } aus der Ortssuche
 const radius = ref(25)
-const sortKey = ref('population')
+const sortKey = ref('size')
 const sortDir = ref(-1)
 const limit = ref(props.pageSize)
 
@@ -34,7 +35,7 @@ async function load() {
   loading.value = true
   loadError.value = null
   try {
-    const res = await fetchRegions({ audience: audience.value, partnerId: props.partnerId })
+    const res = await fetchTargets({ audience: audience.value, partnerId: props.partnerId })
     rows.value = res.collection.features.map((f) => ({
       ...f.properties,
       lng: f.geometry.coordinates[0],
@@ -54,12 +55,12 @@ const states = computed(() => [...new Set(rows.value.map((r) => r.state))].sort(
 
 function nearBy(hit) {
   center.value = { name: hit.name, lat: hit.lat, lng: hit.lng }
-  sortKey.value = 'distance'
+  sortKey.value = 'distance_km'
   sortDir.value = 1
 }
 function clearNear() {
   center.value = null
-  if (sortKey.value === 'distance') { sortKey.value = 'population'; sortDir.value = -1 }
+  if (sortKey.value === 'distance_km') { sortKey.value = 'size'; sortDir.value = -1 }
 }
 
 const filtered = computed(() => {
@@ -74,8 +75,11 @@ const filtered = computed(() => {
       if (needle && !(isPlz ? (r.postcodes ?? []).some((p) => p.startsWith(needle)) : r.name.toLowerCase().includes(needle))) return false
       if (status.value !== 'all' && r.status !== status.value) return false
       if (state.value && r.state !== state.value) return false
-      if (level.value && r.level !== level.value) return false
-      if (cls && !(r.population >= cls.min && r.population < cls.max)) return false
+      if (kind.value) {
+        const [seg, lvl] = kind.value.split(':')
+        if (r.segment !== seg || (lvl && r.level !== lvl)) return false
+      }
+      if (cls && !(r.segment === 'verwaltung' && r.size >= cls.min && r.size < cls.max)) return false
       if (c && r.distance_km > radius.value) return false
       return true
     })
@@ -103,7 +107,7 @@ function sortBy(key) {
   if (sortKey.value === key) sortDir.value *= -1
   else {
     sortKey.value = key
-    sortDir.value = key === 'population' || key === 'customer_since' ? -1 : 1
+    sortDir.value = key === 'size' || key === 'customer_since' ? -1 : 1
   }
 }
 const ariaSort = (key) => (sortKey.value !== key ? 'none' : sortDir.value === 1 ? 'ascending' : 'descending')
@@ -112,14 +116,15 @@ function resetFilters() {
   q.value = ''
   status.value = 'all'
   state.value = ''
-  level.value = ''
+  kind.value = ''
   size.value = ''
   clearNear()
 }
 
 const numFmt = new Intl.NumberFormat('de-DE')
 const monthFmt = new Intl.DateTimeFormat('de-DE', { month: 'short', year: 'numeric' })
-const levelLabel = { gemeinde: 'Gemeinde', verband: 'Amt/VG', kreis: 'Landkreis' }
+// Nur Segmente anbieten, die im Ausschnitt vorkommen
+const segments = computed(() => Object.keys(SEGMENTS).filter((k) => rows.value.some((r) => r.segment === k)))
 </script>
 
 <template>
@@ -159,16 +164,20 @@ const levelLabel = { gemeinde: 'Gemeinde', verband: 'Amt/VG', kreis: 'Landkreis'
         </select>
       </label>
       <label class="rl-field">
-        <span>Ebene</span>
-        <select v-model="level">
+        <span>Art</span>
+        <select v-model="kind">
           <option value="">Alle</option>
-          <option value="gemeinde">Gemeinden/Städte</option>
-          <option value="verband">Ämter/VG</option>
-          <option value="kreis">Landkreise</option>
+          <template v-for="k in segments" :key="k">
+            <option :value="k">{{ SEGMENTS[k].plural }}</option>
+            <template v-if="k === 'verwaltung'">
+              <option value="verwaltung:gemeinde">– Gemeinden/Städte</option>
+              <option value="verwaltung:kreis">– Landkreise</option>
+            </template>
+          </template>
         </select>
       </label>
       <label class="rl-field">
-        <span>Größe</span>
+        <span>Einwohner (Verwaltungen)</span>
         <select v-model="size">
           <option value="">Alle</option>
           <option v-for="(c, i) in SIZE_CLASSES" :key="c.label" :value="i">{{ c.label }}</option>
@@ -178,7 +187,7 @@ const levelLabel = { gemeinde: 'Gemeinde', verband: 'Amt/VG', kreis: 'Landkreis'
 
     <div class="rl-summary">
       <p>
-        <strong>{{ numFmt.format(counts.total) }}</strong> Verwaltungen ·
+        <strong>{{ numFmt.format(counts.total) }}</strong> {{ kind ? SEGMENTS[kind.split(':')[0]].plural : 'Einträge' }} ·
         <span class="rl-yes">{{ numFmt.format(counts.customers) }} Kunden</span> ·
         {{ numFmt.format(counts.prospects) }} noch nicht
         <template v-if="meta.partner"> · Gebiet {{ meta.partner }}</template>
@@ -194,10 +203,10 @@ const levelLabel = { gemeinde: 'Gemeinde', verband: 'Amt/VG', kreis: 'Landkreis'
           <tr>
             <th scope="col" :aria-sort="ariaSort('status')"><button type="button" @click="sortBy('status')">Kunde</button></th>
             <th scope="col" :aria-sort="ariaSort('name')"><button type="button" @click="sortBy('name')">Name</button></th>
-            <th scope="col">Ebene</th>
+            <th scope="col">Art</th>
             <th scope="col" :aria-sort="ariaSort('state')"><button type="button" @click="sortBy('state')">Bundesland</button></th>
             <th scope="col">PLZ</th>
-            <th scope="col" class="num" :aria-sort="ariaSort('population')"><button type="button" @click="sortBy('population')">Einwohner</button></th>
+            <th scope="col" class="num" :aria-sort="ariaSort('size')"><button type="button" @click="sortBy('size')">Größe</button></th>
             <th scope="col" :aria-sort="ariaSort('customer_since')"><button type="button" @click="sortBy('customer_since')">Kunde seit</button></th>
             <th scope="col">Lizenz</th>
             <th v-if="center" scope="col" class="num" :aria-sort="ariaSort('distance_km')"><button type="button" @click="sortBy('distance_km')">Entfernung</button></th>
@@ -218,16 +227,16 @@ const levelLabel = { gemeinde: 'Gemeinde', verband: 'Amt/VG', kreis: 'Landkreis'
               </span>
             </td>
             <td class="rl-name">{{ r.name }}<span v-if="r.is_new" class="rl-new">Neu</span></td>
-            <td>{{ levelLabel[r.level] }}</td>
+            <td>{{ kindLabel(r) }}</td>
             <td>{{ r.state }}</td>
             <td class="rl-plz">{{ (r.postcodes ?? [])[0] ?? '–' }}<span v-if="(r.postcodes ?? []).length > 1" class="rl-muted"> +{{ r.postcodes.length - 1 }}</span></td>
-            <td class="num">{{ r.population != null ? numFmt.format(r.population) : '–' }}</td>
+            <td class="num">{{ sizeText(r.segment, r.size) ?? '–' }}</td>
             <td>{{ r.customer_since ? monthFmt.format(new Date(r.customer_since)) : '–' }}</td>
             <td :class="{ 'rl-muted': !r.licence }">{{ r.licence ?? (r.status === 'customer' ? 'noch keine Orga' : '–') }}</td>
             <td v-if="center" class="num">{{ r.distance_km }} km</td>
           </tr>
           <tr v-if="!loading && !page.length" class="rl-empty">
-            <td :colspan="center ? 9 : 8">Keine Verwaltung passt zu diesen Filtern.</td>
+            <td :colspan="center ? 9 : 8">Nichts passt zu diesen Filtern.</td>
           </tr>
         </tbody>
       </table>

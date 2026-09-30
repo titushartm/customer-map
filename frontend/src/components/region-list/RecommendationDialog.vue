@@ -1,10 +1,12 @@
 <script setup>
 import { ref, watch, nextTick, computed } from 'vue'
-import { fetchRecommendation } from '../../api/map.js'
+import { fetchRecommendation, fetchReferralAccount } from '../../api/map.js'
+import { SEGMENTS, kindLabel } from '../../lib/segments.js'
+import { STATUS_LABEL } from '../../lib/referral.js'
 
 const props = defineProps({
-  /** Region, für die der Dialog offen ist. null = geschlossen */
-  regionKey: { type: String, default: null },
+  /** Ziel, für das der Dialog offen ist. null = geschlossen */
+  targetKey: { type: String, default: null },
   audience: { type: String, default: 'intern' },
   partnerId: { type: [Number, String], default: null },
 })
@@ -17,12 +19,12 @@ const view = ref('overview') // 'overview' | 'onepager'
 const subject = ref('')
 const body = ref('')
 const copied = ref(null)
+const account = ref(null) // Empfehlungskonto, nur bei Kunden
 
 const numFmt = new Intl.NumberFormat('de-DE')
 const monthFmt = new Intl.DateTimeFormat('de-DE', { month: 'long', year: 'numeric' })
-const levelLabel = { gemeinde: 'Gemeinde/Stadt', verband: 'Amt/Verwaltungsgemeinschaft', kreis: 'Landkreis' }
 
-watch(() => props.regionKey, async (key) => {
+watch(() => props.targetKey, async (key) => {
   if (!key) {
     dialog.value?.close()
     return
@@ -31,12 +33,14 @@ watch(() => props.regionKey, async (key) => {
   error.value = null
   view.value = 'overview'
   copied.value = null
+  account.value = null
   await nextTick()
   if (!dialog.value.open) dialog.value.showModal()
   try {
     const res = await fetchRecommendation(key, { audience: props.audience, partnerId: props.partnerId })
-    if (key !== props.regionKey) return
+    if (key !== props.targetKey) return
     data.value = res
+    if (res.target.is_customer) account.value = await fetchReferralAccount(key)
     subject.value = res.email?.subject ?? ''
     body.value = res.email?.body ?? ''
   } catch (e) {
@@ -44,7 +48,8 @@ watch(() => props.regionKey, async (key) => {
   }
 })
 
-const r = computed(() => data.value?.region)
+const r = computed(() => data.value?.target)
+const seg = computed(() => SEGMENTS[r.value?.segment] ?? SEGMENTS.verwaltung)
 
 async function copy(what) {
   const value = what === 'subject' ? subject.value : what === 'body' ? body.value : `${subject.value}\n\n${body.value}`
@@ -92,7 +97,7 @@ function onClose() {
       <header class="rd-head">
         <div>
           <p class="rd-kicker">
-            <template v-if="r">{{ levelLabel[r.level] }} · {{ r.state }}<template v-if="r.postcodes?.length"> · {{ r.postcodes[0] }}</template></template>
+            <template v-if="r">{{ kindLabel(r) }} · {{ r.state }}<template v-if="r.postcodes?.length"> · {{ r.postcodes[0] }}</template></template>
             <template v-else>Wird geladen …</template>
           </p>
           <h2 id="rd-title" class="rd-title">{{ r?.name ?? ' ' }}</h2>
@@ -100,7 +105,7 @@ function onClose() {
             <span class="rd-badge" :class="r.is_customer ? 'is-customer' : 'is-prospect'">
               {{ r.is_customer ? `Kunde seit ${monthFmt.format(new Date(r.customer_since))}` : 'Noch kein Kunde' }}
             </span>
-            <span>{{ numFmt.format(r.population) }} Einwohner</span>
+            <span>{{ numFmt.format(r.size) }} {{ seg.sizeLabel }}</span>
           </p>
         </div>
         <button type="button" class="rd-close" aria-label="Schließen" @click="dialog.close()">×</button>
@@ -108,7 +113,7 @@ function onClose() {
 
       <p v-if="error" class="rd-error" role="alert">{{ error }}</p>
 
-      <!-- Bereits Kunde: Lizenz und Nachbarn fürs geplante Empfehlungsprogramm -->
+      <!-- Bereits Kunde: Lizenz und Empfehlungskonto -->
       <div v-else-if="data && r.is_customer" class="rd-body rd-grid">
         <section class="rd-card">
           <h3>Lizenz</h3>
@@ -116,14 +121,18 @@ function onClose() {
           <p v-else class="rd-muted">Noch keine Organisation verknüpft, daher keine Lizenzdaten. Der Kundenstatus steht trotzdem fest.</p>
         </section>
         <section class="rd-card">
-          <h3>Empfehlungsprogramm (geplant)</h3>
-          <p class="rd-muted">Nachbarn, die noch nicht dabei sind. Später mit Empfehlungscode und Rabatt für {{ r.name }}.</p>
-          <ul v-if="data.referralTargets.length" class="rd-list">
-            <li v-for="t in data.referralTargets" :key="t.key">
-              <span>{{ t.name }}</span><span class="rd-muted">{{ t.distance_km }} km · {{ numFmt.format(t.population) }} Einw.</span>
-            </li>
-          </ul>
-          <p v-else class="rd-muted">Im Umkreis von 60 km sind alle schon Kunde.</p>
+          <h3>Empfehlungsprogramm</h3>
+          <template v-if="account?.eligible">
+            <p>Code <strong class="rd-code">{{ account.code }}</strong> · {{ account.wins }} gewonnen · {{ account.earnedPct }} % von max. {{ account.rules.referrerCapPct }} %</p>
+            <ul v-if="account.referrals.length" class="rd-list">
+              <li v-for="x in account.referrals" :key="x.key">
+                <span>{{ x.name }}</span><span class="rd-muted">{{ STATUS_LABEL[x.status] }}</span>
+              </li>
+            </ul>
+            <p v-else class="rd-muted">Noch keine Empfehlungen.</p>
+            <p v-if="account.suggestions.length" class="rd-muted rd-gap">Naheliegend: {{ account.suggestions.slice(0, 3).map((x) => x.name).join(', ') }}</p>
+          </template>
+          <p v-else-if="account" class="rd-muted">{{ account.reason }} Sobald eine Organisation mit Lizenz verknüpft ist, gibt es einen Code.</p>
         </section>
       </div>
 
@@ -147,7 +156,7 @@ function onClose() {
               </p>
               <ul v-if="data.licence.similar.length" class="rd-list">
                 <li v-for="s in data.licence.similar" :key="s.name">
-                  <span>{{ s.name }} <span class="rd-muted">({{ numFmt.format(s.population) }} Einw.)</span></span>
+                  <span>{{ s.name }} <span class="rd-muted">({{ s.size }})</span></span>
                   <span class="rd-muted">{{ s.licence }}</span>
                 </li>
               </ul>
@@ -163,10 +172,11 @@ function onClose() {
               <h3>Argumente</h3>
               <ul class="rd-bullets">
                 <li v-if="data.nearby.length">
-                  {{ data.nearby.length }} Kunden im Umkreis von 60 km, am nächsten {{ data.nearby[0].name }} ({{ data.nearby[0].distance_km }} km)<span v-if="!data.nearby[0].public_reference" class="rd-muted">, nicht zur Nennung freigegeben</span>
+                  {{ data.nearby.length }} {{ data.nearby.length === 1 ? 'Kunde' : 'Kunden' }} im Umkreis von 60 km, am nächsten {{ data.nearby[0].name }} ({{ data.nearby[0].distance_km }} km)<span v-if="!data.nearby[0].public_reference" class="rd-muted">, nicht zur Nennung freigegeben</span>
                 </li>
-                <li>{{ data.stateCount }} Kunden in {{ r.state }}</li>
-                <li>{{ data.peers.count }} Kunden in derselben Größenklasse ({{ data.peers.label }})</li>
+                <li v-if="data.stateCount">{{ data.stateCount }} {{ data.stateCount === 1 ? seg.label : seg.plural }} in {{ r.state }} {{ data.stateCount === 1 ? 'ist' : 'sind' }} Kunde</li>
+                <li v-if="r.segment === 'verwaltung' && r.level === 'gemeinde'">{{ data.peers.count }} Kunden in derselben Größenklasse ({{ data.peers.label }})</li>
+                <li v-else-if="data.peers.count">{{ data.peers.count }} {{ data.peers.label }} {{ data.peers.count === 1 ? 'ist' : 'sind' }} deutschlandweit Kunde</li>
               </ul>
             </section>
 
@@ -177,7 +187,7 @@ function onClose() {
                 <div><dt>E-Mail</dt><dd class="rd-muted">noch nicht hinterlegt</dd></div>
                 <div><dt>Website</dt><dd class="rd-muted">noch nicht hinterlegt</dd></div>
               </dl>
-              <p class="rd-muted">Liegt noch nicht vor. Später eventuell per Anreicherung über die Website der Verwaltung (Impressum).</p>
+              <p class="rd-muted">Liegt noch nicht vor. Später eventuell per Anreicherung über die Website (Impressum).</p>
             </section>
           </div>
 
@@ -266,6 +276,8 @@ function onClose() {
 .rd-card p { margin: 0 0 6px; line-height: 1.45; }
 .rd-big { font-size: 1.35rem; font-weight: 600; color: var(--page-accent); }
 .rd-muted { color: var(--page-muted); }
+.rd-gap { margin-top: 10px !important; }
+.rd-code { font-variant-numeric: tabular-nums; letter-spacing: 0.06em; color: var(--page-accent); }
 .rd-list { list-style: none; margin: 6px 0 0; padding: 0; display: grid; gap: 4px; }
 .rd-list li { display: flex; justify-content: space-between; gap: 12px; }
 .rd-bullets { margin: 0; padding-left: 18px; line-height: 1.5; }

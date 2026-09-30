@@ -11,7 +11,7 @@ Lizenz dl-de/by-2-0, Namensnennung "© GeoBasis-DE / BKG"). Länder = Vereinigun
     pip install shapely
     python scripts/build_territories.py kreise_ods.json
 """
-import json, re, sys
+import csv, json, sys
 from pathlib import Path
 from shapely.geometry import shape, mapping
 from shapely.ops import unary_union
@@ -20,10 +20,12 @@ ROOT = Path(__file__).resolve().parent.parent
 
 kreise = {f['properties']['krs_code'][0]: shape(f['geometry']) for f in json.load(open(sys.argv[1] if len(sys.argv) > 1 else 'kreise_ods.json'))['features']}
 
-src = open(ROOT / 'frontend/src/mocks/partners.js').read()
-partners = []
-for block in re.findall(r"id: (\d+),.*?territories: \[(.*?)\]", src, re.S):
-    partners.append((block[0], re.findall(r"prefix: '(\d+)'", block[1])))
+# Dieselbe Liste wie im Mock und in import_partners: eine Zeile je Gebiet
+partners = {}
+with open(ROOT / 'frontend/src/mocks/partners.csv', newline='', encoding='utf-8') as fh:
+    for row in csv.DictReader(fh, delimiter=';'):
+        partners.setdefault(row['partner_id'], []).append(row['gebiet'].strip())
+partners = list(partners.items())
 
 def rnd(o):
     if isinstance(o, (list, tuple)):

@@ -1,14 +1,14 @@
 """
-Eine Karte je Zielgruppe. Die Daten sind dieselben (Region), nur Ausschnitt und
+Eine Karte je Zielgruppe. Die Daten sind dieselben (Target), nur Ausschnitt und
 Felder unterscheiden sich. Was hier nicht freigegeben ist, verlässt die API nicht,
 egal was das Frontend anfragt.
 
 scope
     "radius"     Umkreis um den Standort des Besuchers
-    "territory"  alle Regionen in den PartnerTerritory-Präfixen des Partners
+    "territory"  alle Ziele in den PartnerTerritory-Präfixen des Partners, nur deren Segmente
     "all"        ganz Deutschland
 include_prospects
-    False: nur Kunden. True: auch Verwaltungen, die noch keine Kunden sind.
+    False: nur Kunden. True: auch Ziele, die noch keine Kunden sind.
     Für das geplante Empfehlungsprogramm kann "kunden" das später einschalten
     (z. B. "Diese Nachbarn fehlen noch, empfehlen Sie uns").
 named_only
@@ -33,7 +33,7 @@ AUDIENCES = {
         "scope": "territory",
         "include_prospects": True,
         "named_only": False,
-        "fields": ["customer_since", "population", "licence", "postcodes"],
+        "fields": ["customer_since", "size", "licence", "postcodes"],
         "limit": 20_000,
         "recent_named_only": False,
         "recent_min": 1,
@@ -42,7 +42,7 @@ AUDIENCES = {
         "scope": "all",
         "include_prospects": True,
         "named_only": False,
-        "fields": ["customer_since", "population", "licence", "postcodes"],
+        "fields": ["customer_since", "size", "licence", "postcodes"],
         "limit": 20_000,
         "recent_named_only": False,
         "recent_min": 1,

@@ -1,18 +1,22 @@
 <script setup>
 import { ref, computed, defineAsyncComponent, onMounted, onBeforeUnmount } from 'vue'
-import { listPartners } from './api/map.js'
+import { listPartners, listReferrers, lookupReferral } from './api/map.js'
+import { SEGMENTS } from './lib/segments.js'
+import ReferralBanner from './components/referral/ReferralBanner.vue'
 
 // MapLibre ist groß (~250 kB gzip). Auf der Startseite deshalb nachladen.
 const MunicipalityExplorer = defineAsyncComponent(() => import('./components/municipality-map/MunicipalityExplorer.vue'))
 const RegionList = defineAsyncComponent(() => import('./components/region-list/RegionList.vue'))
 const RecommendationDialog = defineAsyncComponent(() => import('./components/region-list/RecommendationDialog.vue'))
+const ReferralView = defineAsyncComponent(() => import('./components/referral/ReferralView.vue'))
 
 // Prototyp: Die Anmeldung wird simuliert. Tabs und Partnerauswahl stehen für "wer ist eingeloggt".
 const TABS = [
-  { id: 'kunden', label: 'Kunden', note: 'Öffentliche Startseite. Besucher sehen Kunden im Umkreis, nicht freigegebene nur als Zahl.' },
-  { id: 'partner', label: 'Partner', note: 'Vertriebspartner sehen ihr Gebiet: Kunden und Noch-nicht-Kunden, mit Einwohnern und Lizenz.' },
-  { id: 'intern', label: 'Intern', note: 'SpeechMind-Team: alle Verwaltungen der Referenzliste, Kunden und Noch-nicht-Kunden.' },
-  { id: 'liste', label: 'Liste', note: 'Alle Verwaltungen als Tabelle. Filtern, suchen, Umkreis wählen; Klick öffnet Empfehlung und E-Mail.' },
+  { id: 'kunden', label: 'Kunden', note: 'Öffentliche Startseite, eine je Segment. Besucher sehen Kunden im Umkreis, nicht freigegebene nur als Zahl.' },
+  { id: 'partner', label: 'Partner', note: 'Vertriebspartner sehen ihr Gebiet und nur ihre Segmente: Kunden und Noch-nicht-Kunden, mit Größe und Lizenz.' },
+  { id: 'intern', label: 'Intern', note: 'SpeechMind-Team: alle Ziele aller Segmente, Kunden und Noch-nicht-Kunden.' },
+  { id: 'liste', label: 'Liste', note: 'Alle Ziele als Tabelle. Filtern, suchen, Umkreis wählen; Klick öffnet Empfehlung und E-Mail.' },
+  { id: 'empfehlen', label: 'Empfehlen', note: 'Eingeloggte Kunden mit Lizenz: eigener Empfehlungscode, Einladungen und Rabattstand.' },
 ]
 
 const partners = listPartners()
@@ -20,6 +24,35 @@ const tab = ref(readHash())
 const partnerId = ref(partners[0].id)
 const listScope = ref('intern') // 'intern' oder eine Partner-ID
 const openKey = ref(null)
+
+// Startseite je Segment (im Betrieb eigene Seiten, z. B. /stadtwerke)
+const homeSegment = ref('verwaltung')
+const homeWords = computed(() => SEGMENTS[homeSegment.value])
+
+// Einladungslink: ?ref=CODE. Mit Referenzfreigabe startet die Karte beim Empfehlenden.
+const invite = ref(null)
+const refCode = new URLSearchParams(window.location.search).get('ref')
+if (refCode) {
+  lookupReferral(refCode).then((res) => {
+    invite.value = res
+    if (res.valid) homeSegment.value = res.referrer.segment
+  })
+}
+const inviteStart = computed(() => {
+  const r = invite.value?.valid ? invite.value.referrer : null
+  return r?.lat != null ? { lat: r.lat, lng: r.lng, name: r.name, key: r.key } : null
+})
+function dismissInvite() {
+  invite.value = null
+  const url = new URL(window.location.href)
+  url.searchParams.delete('ref')
+  history.replaceState(null, '', url)
+}
+
+// Empfehlen: nur Kunden mit Lizenz können sich im Prototyp "anmelden"
+const referrers = listReferrers()
+const referrerKey = ref(referrers.find((r) => r.name === 'Hoyerswerda')?.key ?? referrers[0]?.key)
+const currentPartner = computed(() => partners.find((p) => p.id === partnerId.value))
 
 const current = computed(() => TABS.find((t) => t.id === tab.value))
 const listPartnerId = computed(() => (listScope.value === 'intern' ? null : Number(listScope.value)))
@@ -69,6 +102,9 @@ function onTabKey(e, i) {
 
     <!-- Kunden: die Karte als Baustein der Startseite -->
     <main v-if="tab === 'kunden'" role="tabpanel" aria-labelledby="tab-kunden">
+      <!-- Einladungslink: als Erstes sichtbar, vor dem Hero -->
+      <ReferralBanner v-if="invite" :invite="invite" @dismiss="dismissInvite" />
+
       <section class="hero">
         <h1>Protokolle, die sich selbst schreiben</h1>
         <p>
@@ -83,10 +119,24 @@ function onTabKey(e, i) {
 
       <section class="map-block">
         <div class="map-block-head">
-          <h2>Verwaltungen in Ihrer Nähe</h2>
+          <h2>{{ homeWords.plural }} in Ihrer Nähe</h2>
           <p>Wir ermitteln Ihren ungefähren Standort und zeigen, wer in der Umgebung schon dabei ist.</p>
+          <label class="as as-inline">
+            <span>Startseite für (Prototyp)</span>
+            <select v-model="homeSegment">
+              <option v-for="(s, k) in SEGMENTS" :key="k" :value="k">{{ s.plural }}</option>
+            </select>
+          </label>
         </div>
-        <MunicipalityExplorer audience="kunden" :radius-km="60" compact-height="360px" />
+        <!-- Neu mounten, sobald Segment oder Einladung feststehen: Standort und Daten hängen daran -->
+        <MunicipalityExplorer
+          :key="`home-${homeSegment}-${inviteStart?.key ?? ''}`"
+          audience="kunden"
+          :segment="homeSegment"
+          :start-at="inviteStart"
+          :radius-km="60"
+          compact-height="360px"
+        />
       </section>
 
       <section class="cards">
@@ -115,12 +165,29 @@ function onTabKey(e, i) {
           </select>
         </label>
       </div>
+      <p v-if="currentPartner" class="partner-line">
+        Segmente: <strong>{{ currentPartner.segments.map((s) => SEGMENTS[s].plural).join(', ') }}</strong>
+        · Ansprechpartner {{ currentPartner.contact.name }}, {{ currentPartner.contact.phone }}, {{ currentPartner.contact.email }}
+      </p>
       <MunicipalityExplorer :key="`partner-${partnerId}`" audience="partner" :partner-id="partnerId" variant="page" @recommend="openKey = $event" />
     </main>
 
     <main v-else-if="tab === 'intern'" role="tabpanel" aria-labelledby="tab-intern" class="app-view">
-      <div class="view-bar"><h1>Alle Verwaltungen</h1></div>
+      <div class="view-bar"><h1>Alle Ziele</h1></div>
       <MunicipalityExplorer audience="intern" variant="page" @recommend="openKey = $event" />
+    </main>
+
+    <main v-else-if="tab === 'empfehlen'" role="tabpanel" aria-labelledby="tab-empfehlen" class="app-view">
+      <div class="view-bar">
+        <h1>Empfehlen</h1>
+        <label class="as">
+          <span>Angemeldet als (Prototyp, nur Kunden mit Lizenz)</span>
+          <select v-model="referrerKey">
+            <option v-for="r in referrers" :key="r.key" :value="r.key">{{ r.name }}</option>
+          </select>
+        </label>
+      </div>
+      <ReferralView :target-key="referrerKey" />
     </main>
 
     <main v-else role="tabpanel" aria-labelledby="tab-liste" class="app-view">
@@ -138,7 +205,7 @@ function onTabKey(e, i) {
     </main>
 
     <RecommendationDialog
-      :region-key="openKey"
+      :target-key="openKey"
       :audience="dialogAudience"
       :partner-id="dialogPartnerId"
       @close="openKey = null"
@@ -212,6 +279,9 @@ body {
 .view-bar h1 { margin: 0; font-size: 1.8rem; }
 .as { display: grid; gap: 4px; }
 .as span { font-size: 0.85rem; color: var(--page-muted); }
+.as-inline { margin-left: auto; }
+.partner-line { margin: -6px 0 14px; color: var(--page-muted); font-size: 0.95rem; }
+.partner-line strong { color: var(--page-text); }
 .as select {
   font: inherit;
   padding: 7px 10px;

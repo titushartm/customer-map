@@ -4,7 +4,8 @@ import MunicipalityMap from './MunicipalityMap.vue'
 import PlaceSearch from './PlaceSearch.vue'
 import RecentCustomers from './RecentCustomers.vue'
 import { useUserLocation } from '../../composables/useUserLocation.js'
-import { fetchRegions, fetchRecent } from '../../api/map.js'
+import { fetchTargets, fetchRecent } from '../../api/map.js'
+import { SEGMENTS, sizeText, kindLabel } from '../../lib/segments.js'
 
 // Pro Zielgruppe: Ausschnitt, Popup-Felder und Texte. Welche Daten tatsächlich kommen,
 // entscheidet das Backend (audiences.py), nicht diese Tabelle.
@@ -19,8 +20,9 @@ const AUDIENCE_DEFAULTS = {
   partner: {
     scope: 'territory',
     fields: [
+      { key: 'segment', label: 'Art', format: 'kind' },
       { key: 'status', label: 'Status', format: 'status' },
-      { key: 'population', label: 'Einwohner', format: 'number' },
+      { key: 'size', label: 'Größe', format: 'size' },
       { key: 'customer_since', label: 'Kunde seit', format: 'month' },
       { key: 'licence', label: 'Lizenz', format: 'text' },
     ],
@@ -28,9 +30,10 @@ const AUDIENCE_DEFAULTS = {
   intern: {
     scope: 'all',
     fields: [
+      { key: 'segment', label: 'Art', format: 'kind' },
       { key: 'status', label: 'Status', format: 'status' },
       { key: 'state', label: 'Bundesland', format: 'text' },
-      { key: 'population', label: 'Einwohner', format: 'number' },
+      { key: 'size', label: 'Größe', format: 'size' },
       { key: 'customer_since', label: 'Kunde seit', format: 'month' },
       { key: 'licence', label: 'Lizenz', format: 'text' },
     ],
@@ -40,6 +43,10 @@ const AUDIENCE_DEFAULTS = {
 const props = defineProps({
   /** 'kunden' (öffentlich, Umkreis) | 'partner' (Gebiet) | 'intern' (alles) */
   audience: { type: String, default: 'kunden' },
+  /** Nur dieses Segment ('verwaltung', 'stadtwerk', …). null = alle, mit Filter im Panel. */
+  segment: { type: String, default: null },
+  /** Start an einem bestimmten Ort statt per IP, z. B. beim Einladungslink: { lat, lng, name, key? } */
+  startAt: { type: Object, default: null },
   /** Nur für 'partner'. Im Betrieb aus der Anmeldung, im Prototyp auswählbar. */
   partnerId: { type: [Number, String], default: null },
   radiusKm: { type: Number, default: 50 },
@@ -57,12 +64,13 @@ const props = defineProps({
 })
 const emit = defineEmits(['recommend'])
 
+// w = Wörter des Segments: { plural, one, label }, siehe lib/segments.js
 const copyDefaults = {
-  headline: (n, km) => n === 1
-    ? `Eine Verwaltung im Umkreis von ${km} km arbeitet bereits mit SpeechMind`
-    : `${n} Verwaltungen im Umkreis von ${km} km arbeiten bereits mit SpeechMind`,
-  headlineNone: (km) => `Im Umkreis von ${km} km ist noch keine Verwaltung dabei. Ihre könnte die erste sein.`,
-  headlineCoverage: (c, t) => `${c} von ${t} Verwaltungen arbeiten mit SpeechMind`,
+  headline: (n, km, w) => n === 1
+    ? `${w.one} im Umkreis von ${km} km arbeitet bereits mit SpeechMind`
+    : `${n} ${w.plural} im Umkreis von ${km} km arbeiten bereits mit SpeechMind`,
+  headlineNone: (km) => `Im Umkreis von ${km} km ist noch niemand dabei. Sie könnten die Ersten sein.`,
+  headlineCoverage: (c, t, w) => `${c} von ${t} ${w.dative} arbeiten mit SpeechMind`,
   hidden: (n) => n === 1
     ? 'Eine davon wird auf eigenen Wunsch nicht namentlich genannt.'
     : `${n} davon werden auf eigenen Wunsch nicht namentlich genannt.`,
@@ -97,9 +105,24 @@ const mapRef = ref(null)
 
 // Filter nur, wenn auch Noch-nicht-Kunden geladen sind
 const statusFilter = ref('all') // 'all' | 'customer' | 'prospect'
+const segmentFilter = ref('all') // 'all' | Segment-Schlüssel, nur ohne feste segment-Prop
+
+// Segmente, die tatsächlich vorkommen; Filter erst ab zwei
+const availableSegments = computed(() => {
+  const present = new Set(collection.value.features.map((f) => f.properties.segment))
+  return (meta.value.segments ?? []).filter((s) => present.has(s))
+})
+// Ein Segment gilt, wenn es fest vorgegeben, gefiltert oder das einzige im Ausschnitt ist
+const activeSegment = computed(() => props.segment
+  ?? (segmentFilter.value !== 'all' ? segmentFilter.value : null)
+  ?? (availableSegments.value.length === 1 ? availableSegments.value[0] : null))
+const words = computed(() => SEGMENTS[activeSegment.value] ?? { plural: 'Organisationen', dative: 'Organisationen', one: 'Eine Organisation', label: 'Organisation' })
 
 onMounted(() => {
-  if (isRadius.value) locateByIp()
+  if (isRadius.value && props.startAt) {
+    pendingSelect.value = props.startAt.key ?? null
+    usePlace({ name: props.startAt.name, lat: props.startAt.lat, lng: props.startAt.lng, plz: null })
+  } else if (isRadius.value) locateByIp()
   else load()
   loadRecent()
   window.addEventListener('keydown', onKeydown)
@@ -115,8 +138,9 @@ async function load() {
   selectedId.value = null
   try {
     const loc = location.value
-    const res = await fetchRegions({
+    const res = await fetchTargets({
       audience: props.audience,
+      segment: props.segment,
       partnerId: props.partnerId,
       lat: loc?.lat,
       lng: loc?.lng,
@@ -139,7 +163,7 @@ async function load() {
 
 async function loadRecent() {
   try {
-    recent.value = await fetchRecent({ audience: props.audience, partnerId: props.partnerId })
+    recent.value = await fetchRecent({ audience: props.audience, segment: props.segment, partnerId: props.partnerId })
   } catch {
     recent.value = null // Die Leiste ist Beiwerk; ohne sie funktioniert die Karte trotzdem.
   }
@@ -180,20 +204,33 @@ function focusRecent(item) {
 }
 
 const shown = computed(() => {
-  if (statusFilter.value === 'all') return collection.value
-  return { ...collection.value, features: collection.value.features.filter((f) => f.properties.status === statusFilter.value) }
+  if (statusFilter.value === 'all' && segmentFilter.value === 'all') return collection.value
+  return {
+    ...collection.value,
+    features: collection.value.features.filter((f) =>
+      (statusFilter.value === 'all' || f.properties.status === statusFilter.value)
+      && (segmentFilter.value === 'all' || f.properties.segment === segmentFilter.value)),
+  }
 })
 
-const customerCount = computed(() => meta.value.customer_count
-  ?? collection.value.features.filter((f) => f.properties.status === 'customer').length + (meta.value.hidden_count ?? 0))
-const regionCount = computed(() => customerCount.value + (meta.value.prospect_count ?? 0))
+// Zahlen folgen dem Segmentfilter; der Statusfilter ändert nur, was zu sehen ist
+const inSegment = computed(() => (segmentFilter.value === 'all'
+  ? collection.value.features
+  : collection.value.features.filter((f) => f.properties.segment === segmentFilter.value)))
+
+const customerCount = computed(() => (segmentFilter.value === 'all' && meta.value.customer_count != null
+  ? meta.value.customer_count
+  : inSegment.value.filter((f) => f.properties.status === 'customer').length + (meta.value.hidden_count ?? 0)))
+const regionCount = computed(() => (isRadius.value
+  ? customerCount.value
+  : inSegment.value.length))
 const coverage = computed(() => (regionCount.value ? customerCount.value / regionCount.value : 0))
 
 const headline = computed(() => {
-  if (!isRadius.value) return text.value.headlineCoverage(customerCount.value, regionCount.value)
+  if (!isRadius.value) return text.value.headlineCoverage(customerCount.value, regionCount.value, words.value)
   return customerCount.value
-    ? text.value.headline(customerCount.value, props.radiusKm)
-    : text.value.headlineNone(props.radiusKm)
+    ? text.value.headline(customerCount.value, props.radiusKm, words.value)
+    : text.value.headlineNone(props.radiusKm, words.value)
 })
 
 // Erst ab 3 Kunden in der Klasse, sonst wirkt die Zahl eher abschreckend
@@ -210,10 +247,10 @@ const contextLine = computed(() => {
   if (props.audience === 'partner') {
     return meta.value.partner ? `Gebiet ${meta.value.partner}: ${(meta.value.territories ?? []).join(', ')}` : 'Ihr Gebiet'
   }
-  if (props.audience === 'intern') return 'Alle Verwaltungen der Referenzliste'
+  if (props.audience === 'intern') return 'Alle Ziele der Referenzliste: Verwaltungen, Stadtwerke, DRK'
   if (status.value === 'locating') return 'Standort wird ermittelt …'
   const where = placeLabel.value ? `${placeLabel.value}${postcode.value ? `, ${postcode.value}` : ''}` : null
-  if (!where) return 'Verwaltungen in Ihrer Nähe'
+  if (!where) return `${words.value.plural} in Ihrer Nähe`
   if (source.value === 'browser') return `Rund um Ihren Standort: ${where}`
   if (source.value === 'ip') return `Rund um ${where} (ungefähr)`
   return `Rund um ${where}`
@@ -248,16 +285,22 @@ function formatValue(value, format) {
 }
 
 function popupRows(feature) {
+  const p = feature.properties
   return popupFields.value
-    .map((f) => ({ ...f, text: formatValue(feature.properties[f.key], f.format) }))
+    .map((f) => ({
+      ...f,
+      text: f.format === 'size' ? sizeText(p.segment, p[f.key])
+        : f.format === 'kind' ? kindLabel(p)
+        : formatValue(p[f.key], f.format),
+    }))
     .filter((r) => r.text)
 }
 
 function itemMeta(p) {
   if (isRadius.value) return `${p.distance_km} km entfernt, dabei seit ${p.since_label}`
-  const pop = p.population != null ? `${numFmt.format(p.population)} Einw.` : null
+  const kind = activeSegment.value ? null : kindLabel(p)
   const state = p.status === 'customer' ? `Kunde seit ${p.since_label}` : 'Noch kein Kunde'
-  return [state, pop].filter(Boolean).join(' · ')
+  return [kind, state, sizeText(p.segment, p.size)].filter(Boolean).join(' · ')
 }
 </script>
 
@@ -271,7 +314,7 @@ function itemMeta(p) {
       :aria-busy="loading || status === 'locating'"
       :role="expanded && !isPage ? 'dialog' : undefined"
       :aria-modal="expanded && !isPage ? 'true' : undefined"
-      :aria-label="isRadius ? 'Verwaltungen in Ihrer Nähe' : 'Karte der Verwaltungen'"
+      :aria-label="isRadius ? `${words.plural} in Ihrer Nähe` : `Karte: ${words.plural}`"
     >
       <aside v-if="expanded" class="mm-panel">
         <header class="mm-head">
@@ -291,6 +334,16 @@ function itemMeta(p) {
             <button v-if="isRadius && canUseBrowser && source !== 'browser'" type="button" class="mm-btn" @click="useBrowserLocation">
               Meinen Standort verwenden
             </button>
+            <div v-if="!segment && availableSegments.length > 1" class="mm-seg" role="group" aria-label="Segment filtern">
+              <button type="button" :aria-pressed="segmentFilter === 'all'" @click="segmentFilter = 'all'">Alle</button>
+              <button
+                v-for="s in availableSegments"
+                :key="s"
+                type="button"
+                :aria-pressed="segmentFilter === s"
+                @click="segmentFilter = s"
+              >{{ SEGMENTS[s].plural }}</button>
+            </div>
             <div v-if="!isRadius" class="mm-seg" role="group" aria-label="Status filtern">
               <button
                 v-for="opt in [['all', 'Alle'], ['customer', 'Kunden'], ['prospect', 'Noch keine Kunden']]"
@@ -311,7 +364,7 @@ function itemMeta(p) {
             </ul>
           </div>
 
-          <RecentCustomers :recent="recent" @select="focusRecent" />
+          <RecentCustomers :recent="recent" :words="words" @select="focusRecent" />
 
           <p v-if="error || loadError" class="mm-error" role="alert">{{ error || loadError }}</p>
         </header>
@@ -374,10 +427,10 @@ function itemMeta(p) {
         <!-- Klein: nur ein Hinweis, was zu sehen ist. Der Rest steht in der großen Ansicht. -->
         <p v-if="!expanded && ready" class="mm-chip">
           <strong>{{ customerCount }}</strong>
-          {{ customerCount === 1 ? 'Verwaltung' : 'Verwaltungen' }}
+          {{ customerCount === 1 ? words.label : words.plural }}
           <span v-if="placeLabel">um {{ placeLabel }}</span>
         </p>
-        <RecentCustomers v-if="!expanded" class="mm-recent-overlay" :recent="recent" compact />
+        <RecentCustomers v-if="!expanded" class="mm-recent-overlay" :recent="recent" :words="words" compact />
 
         <button
           v-if="!isPage"

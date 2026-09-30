@@ -3,6 +3,7 @@ import { ref, shallowRef, watch, nextTick, onMounted, onBeforeUnmount } from 'vu
 import maplibregl from 'maplibre-gl'
 import 'maplibre-gl/dist/maplibre-gl.css'
 import { createSignImage } from './signImage.js'
+import { SEGMENTS } from '../../lib/segments.js'
 
 const props = defineProps({
   /** GeoJSON FeatureCollection, properties.key ist die ID, properties.status 'customer' | 'prospect' */
@@ -149,13 +150,14 @@ function addLayers() {
     '\n', {},
     ['concat', 'seit ', ['get', 'since_label']], { 'font-scale': 0.78 },
   ]
-  // Noch keine Kunden: Name, darunter die Einwohner (nur wo das Backend sie liefert)
+  // Noch keine Kunden: Name, darunter die Größe mit Einheit des Segments (nur wo das Backend sie liefert)
+  const unit = ['match', ['get', 'segment'], ...Object.entries(SEGMENTS).flatMap(([k, s]) => [k, ` ${s.sizeUnit}`]), '']
   const prospectLabel = [
     'format',
     ['get', 'name'], {},
-    ...[['has', 'population']].flatMap((has) => [
+    ...[['has', 'size']].flatMap((has) => [
       ['case', has, '\n', ''], {},
-      ['case', has, ['concat', ['number-format', ['get', 'population'], { locale: 'de-DE' }], ' Einw.'], ''], { 'font-scale': 0.78 },
+      ['case', has, ['concat', ['number-format', ['get', 'size'], { locale: 'de-DE' }], unit], ''], { 'font-scale': 0.78 },
     ]),
   ]
   const signLayout = (image, field = label) => ({
@@ -213,7 +215,7 @@ function addLayers() {
     layout: {
       ...signLayout('mm-sign-prospect', prospectLabel),
       'text-size': 12,
-      'symbol-sort-key': ['-', 0, ['coalesce', ['get', 'population'], 0]],
+      'symbol-sort-key': ['-', 0, ['coalesce', ['get', 'size'], 0]],
     },
     paint: { 'text-color': props.prospectInk },
   })
@@ -235,7 +237,7 @@ function addLayers() {
     // Näher bzw. größer zuerst, wenn Schilder sich überdecken
     layout: {
       ...signLayout('mm-sign'),
-      'symbol-sort-key': ['coalesce', ['get', 'distance_km'], ['-', 0, ['coalesce', ['get', 'population'], 0]]],
+      'symbol-sort-key': ['coalesce', ['get', 'distance_km'], ['-', 0, ['coalesce', ['get', 'size'], 0]]],
     },
     paint: { 'text-color': props.signInk },
   })

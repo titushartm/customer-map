@@ -1,6 +1,6 @@
 # SpeechMind-Karte: Prototyp
 
-Eine Karte, vier Ansichten. Die Daten sind überall dieselben: eine Referenzliste aller Verwaltungen (Gemeinden, Ämter, Landkreise) mit Geo- und Strukturdaten, dazu der Kundenstatus. Die Ansichten unterscheiden sich nur darin, welchen Ausschnitt und welche Felder sie zeigen.
+Eine Karte, fünf Ansichten. Die Daten sind überall dieselben: eine Geo-Referenz aller Gemeinden, Ämter und Landkreise, darauf die Ziele, denen wir verkaufen (Verwaltungen, Stadtwerke, DRK-Verbände, …), jeweils mit Kundenstatus. Die Ansichten unterscheiden sich nur darin, welchen Ausschnitt und welche Felder sie zeigen.
 
 Das ist ein Mock-up. Das Frontend läuft komplett mit Mock-Daten, das Django-Backend unter `backend/maps` ist eine Skizze, wie es später aussehen kann.
 
@@ -12,21 +12,46 @@ npm install
 npm run dev
 ```
 
-Die Ansichten sind Tabs (`#kunden`, `#partner`, `#intern`, `#liste`). Die Anmeldung ist simuliert: Partner und Scope wählst du oben rechts aus.
+Die Ansichten sind Tabs (`#kunden`, `#partner`, `#intern`, `#liste`, `#empfehlen`). Die Anmeldung ist simuliert: Partner, Kunde und Scope wählst du oben rechts aus. Einen Einladungslink probierst du mit `?ref=HOY-QJY0#kunden` aus.
 
-## Die vier Ansichten
+## Die fünf Ansichten
 
 Kunden (öffentliche Startseite)
-: Kleine Karte, groß per Klick. Zeigt Kunden im Umkreis des Besuchers (IP → Browser auf Klick → Ort/PLZ-Suche). Nicht freigegebene Kunden zählen nur als Zahl. Für FOMO: „Neu im letzten Monat“ (deutschlandweit, Anonyme nur mit Bundesland; erst ab 3 Kunden, sonst „in den letzten drei Monaten“, sonst ausgeblendet) und „Deutschlandweit arbeiten N Verwaltungen in Ihrer Größenklasse mit SpeechMind“ (erst ab 3).
+: Eine Startseite je Segment („Stadtwerke in Ihrer Nähe“). Kleine Karte, groß per Klick. Zeigt Kunden im Umkreis des Besuchers (IP → Browser auf Klick → Ort/PLZ-Suche). Nicht freigegebene Kunden zählen nur als Zahl. Für FOMO: „Neu im letzten Monat“ (deutschlandweit, Anonyme nur mit Bundesland; erst ab 3 Kunden, sonst „in den letzten drei Monaten“, sonst ausgeblendet) und „Deutschlandweit arbeiten N Verwaltungen in Ihrer Größenklasse mit SpeechMind“ (erst ab 3).
 
 Partner
-: Vertriebspartner sehen ihr Gebiet (ein oder mehrere Präfixe des Regionalschlüssels: Land, Kreis, …). Das Gebiet ist auf der Karte gelb umrandet und leicht getönt. Kunden sind gelbe Ortsschilder, Noch-nicht-Kunden graue (mit Einwohnerzahl). Dazu die Abdeckung in Prozent und die Lizenz. Cluster zeigen „Kunden/Gesamt“.
+: Vertriebspartner sehen ihr Gebiet (ein oder mehrere Präfixe des Regionalschlüssels: Land, Kreis, …) und darin nur ihre Segmente. Das Gebiet ist auf der Karte gelb umrandet und leicht getönt. Kunden sind gelbe Ortsschilder, Noch-nicht-Kunden graue (mit Einwohnerzahl). Dazu die Abdeckung in Prozent und die Lizenz. Cluster zeigen „Kunden/Gesamt“.
 
 Intern
-: Wie Partner, aber alle Verwaltungen.
+: Wie Partner, aber alle Ziele aller Segmente, mit Segmentfilter.
 
 Liste
-: Alle Verwaltungen als Tabelle mit Kunden-Häkchen. Suche nach Name oder PLZ, „In der Nähe von“ mit Umkreis, Filter nach Status, Bundesland, Ebene und Größenklasse, sortierbare Spalten. Klick auf eine Zeile öffnet den Empfehlungsdialog.
+: Alle Ziele als Tabelle mit Kunden-Häkchen. Suche nach Name oder PLZ, „In der Nähe von“ mit Umkreis, Filter nach Status, Bundesland, Art (Segment bzw. Ebene) und Einwohnerklasse, sortierbare Spalten. Klick auf eine Zeile öffnet den Empfehlungsdialog.
+
+Empfehlen
+: Für eingeloggte Kunden mit Lizenz: eigener Code und Einladungslink, Einladungstext, Vorschläge aus der Nachbarschaft (auch andere Segmente, z. B. die eigenen Stadtwerke), Status der Einladungen und Rabattstand bis zum Deckel.
+
+## Empfehlungsprogramm
+
+- Nur Kunden mit Organisation und Lizenz bekommen einen Code (`Target.can_refer`). Neue Kunden ohne Orga sehen den Bereich erst später.
+- Beide Seiten bekommen Rabatt: der Neukunde im ersten Vertragsjahr, der Empfehlende je gewonnener Empfehlung, gedeckelt. Werte sind Platzhalter (`backend/maps/referrals.py`, im Mock `mocks/referrals.js`): 10 % / 10 % je Gewinn / max. 30 %.
+- Der Rabatt geht an die Organisation, nie an Personen. Vor dem Start rechtlich prüfen lassen.
+- Der Link `?ref=CODE` zeigt auf der Startseite oben ein Einladungsbanner und startet die Karte beim Empfehlenden. Ohne Referenzfreigabe nennt er nur Segment und Bundesland.
+- Ein Ziel kann nur einmal empfohlen werden; wer zuerst einlädt, zählt.
+
+## Segmente und Partnerliste
+
+Neue Segmente (z. B. Sparkassen) brauchen einen Eintrag in `Segment` (`models.py`) und `SEGMENTS` (`frontend/src/lib/segments.js`: Wörter, Größeneinheit, Sitzungsart für den E-Mail-Text) und eine Liste der Ziele mit Region.
+
+Vertriebspartner kommen aus einer CSV-Liste, eine Zeile je Gebiet. Muster: `frontend/src/mocks/partners.csv` (Mock und Backend nutzen dieselbe Datei).
+
+```
+partner_id;partner;ansprechpartner;email;telefon;website;gebiet;gebiet_name;segmente
+101;Lausitz Kommunal Vertrieb;Anna Beispiel;…;…;…;14625;Landkreis Bautzen;verwaltung,stadtwerk
+104;Soziale Dienste Digital Ost;David Test;…;…;…;14;Sachsen;drk
+```
+
+`python manage.py import_partners partners.csv --dry-run` prüft die Liste (Präfix vorhanden? Segment bekannt? doppelte Gebiete?), ohne `--dry-run` wird sie gespeichert. Die Gebiete eines Partners werden durch die Liste ersetzt. Danach `scripts/build_territories.py` laufen lassen, damit der Mock die Flächen neu hat.
 
 ## Empfehlungsdialog
 
@@ -36,10 +61,10 @@ Für Noch-nicht-Kunden:
 - **Hardware:** vorerst eine Faustregel.
 - **Argumente:** Kunden im Umkreis, im Bundesland und in der Größenklasse.
 - **Kontakt:** Platzhalter, bis die Daten aus Organisation/Zoho oder einer Anreicherung kommen.
-- **E-Mail-Entwurf:** editierbar und kopierbar. Er nennt nur Kunden mit Referenzfreigabe.
+- **E-Mail-Entwurf:** editierbar und kopierbar, Sitzungsart je Segment. Er nennt nur Kunden mit Referenzfreigabe.
 - **One-Pager:** druckbar oder als PDF zu sichern.
 
-Für Kunden: die Lizenz (oder den Hinweis, dass noch keine Organisation verknüpft ist) und die Nachbarn, die noch fehlen. Das ist die Vorlage für das geplante Empfehlungsprogramm mit Code und Rabatt.
+Für Kunden: die Lizenz (oder den Hinweis, dass noch keine Organisation verknüpft ist) und das Empfehlungskonto.
 
 Die Logik steckt in `frontend/src/mocks/recommendations.js`. Später gehört sie ins Backend.
 
@@ -47,7 +72,7 @@ Die Logik steckt in `frontend/src/mocks/recommendations.js`. Später gehört sie
 
 ```
 frontend/src/
-  App.vue                              Tabs, simulierte Anmeldung, gemeinsamer Dialog
+  App.vue                              Tabs, simulierte Anmeldung, Einladungslink, gemeinsamer Dialog
   components/municipality-map/
     MunicipalityExplorer.vue           audience = kunden | partner | intern, variant = teaser | page
     MunicipalityMap.vue                MapLibre: Ortsschilder (Kunden), Punkte (Noch-nicht-Kunden), Cluster
@@ -56,24 +81,35 @@ frontend/src/
   components/region-list/
     RegionList.vue                     Tabelle mit Filtern und Umkreis
     RecommendationDialog.vue           Lizenz, Hardware, Kontakt, E-Mail, One-Pager
+  components/referral/
+    ReferralView.vue                   Empfehlungsbereich eines Kunden
+    ReferralBanner.vue                 Einladungsbanner auf der Startseite
   api/map.js                           fetch + Mock-Backend (VITE_MAP_USE_MOCK)
-  mocks/regions.js                     Referenzliste Ostdeutschland (AGS, Name, Land, Einwohner, PLZ, Koordinaten)
-  mocks/customers.js                   Kundenstatus je Region (neue Kunden meist ohne Orga/Lizenz)
-  mocks/partners.js                    Vertriebspartner und ihre Gebiete (erfunden)
+  mocks/regions.js                     Geo-Referenz Ostdeutschland (AGS, Name, Land, Einwohner, PLZ, Koordinaten)
+  mocks/targets.js                     Stadtwerke und DRK-Verbände je Region (Verwaltungen = alle Regionen)
+  mocks/customers.js                   Kundenstatus je Ziel (neue Kunden meist ohne Orga/Lizenz)
+  mocks/partners.csv, partners.js      Partnerliste (erfunden) und Parser
+  mocks/referrals.js                   Regeln, Beispiel-Empfehlungen, Codes
   mocks/territories.json               Gebietsflächen je Mock-Partner (aus scripts/build_territories.py)
   mocks/recommendations.js             Empfehlungslogik
+  lib/segments.js                      Segmente: Wörter, Einheiten, Artikel
+  lib/referral.js                      Status-Texte, Einladungstext
   lib/sizeClasses.js, lib/geo.js
 backend/maps/                          Skizze
-  models.py        Region (Referenzliste + Kundenstatus), PartnerTerritory (Gebiet je Partner-User)
+  models.py        Region (Geo), Target (Ziel + Kundenstatus), SalesPartner + PartnerTerritory,
+                   ReferralCode + Referral
   audiences.py     was jede Ansicht sehen darf
-  views.py         /api/map/<audience>/regions/, /api/map/<audience>/recent/, /api/geo/…
+  referrals.py     Rabattregeln, Code-Erzeugung
+  views.py         /api/map/<audience>/targets/, /api/map/<audience>/recent/, /api/referral/<code>/, /api/geo/…
+  management/commands/import_vg250.py, import_partners.py
 ```
 
 ## Datenmodell (Skizze)
 
-- `Region` ist eine eigene Tabelle, unabhängig von `Organization`. **Kunde = `customer_since` gesetzt.** `organization` ist optional und wird verknüpft, sobald es sie gibt. Neue Kunden haben oft noch keine Organisation und damit keine Lizenz.
-- `key` ist der AGS (8 Stellen) bei Gemeinden, der Kreisschlüssel (5) bei Kreisen und der Verbandsschlüssel (9) bei Ämtern/VG. Alle beginnen mit dem Länderschlüssel.
-- Vertriebspartner sind vorerst User. Ihre Kunden erkennt man an `Organization.creater_user`. `Organization.is_partner` meint API-Partner und spielt hier keine Rolle. Das Gebiet steht in `PartnerTerritory.key_prefix`.
+- `Region` ist die reine Geo-Referenz: Gemeinden, Ämter/VG, Kreise mit Grenzen und Einwohnern. `key` ist der AGS (8 Stellen), der Kreisschlüssel (5) oder der Verbandsschlüssel (9); alle beginnen mit dem Länderschlüssel.
+- `Target` ist ein Ziel, dem wir verkaufen, mit `segment`, `size` (Einwohner bzw. Mitarbeitende), eigener Lage und der Region, in der es sitzt. Verwaltungen entstehen beim VG250-Import automatisch je Region. **Kunde = `customer_since` gesetzt.** `organization` ist optional und wird verknüpft, sobald es sie gibt.
+- `SalesPartner` kommt aus der Partnerliste, Logins hängen als User daran. Kunden eines Partners erkennt man an `Organization.creater_user`. `Organization.is_partner` meint API-Partner und spielt hier keine Rolle.
+- `PartnerTerritory` = Partner + Schlüssel-Präfix + Segmente. Ein Ziel gehört zum Gebiet, wenn der Schlüssel seiner Region mit dem Präfix beginnt und sein Segment dabei ist.
 
 Die Gebietsflächen im Mock stammen aus den Kreisgrenzen des BKG (VG250, Stand 2025, über opendatasoft; Lizenz dl-de/by-2-0, „© GeoBasis-DE / BKG“, steht in der Kartenattribution). Wenn sich die Mock-Partner ändern, baut `scripts/build_territories.py` sie neu. Im Betrieb liefert das Backend die Fläche als Vereinigung von `Region.boundary`.
 
@@ -82,7 +118,8 @@ Die Gebietsflächen im Mock stammen aus den Kreisgrenzen des BKG (VG250, Stand 2
 - Echte Referenzliste: Die Werte in `mocks/regions.js` sind aus dem Gedächtnis zusammengestellt und gerundet. Einige kleine AGS sind nur illustrativ.
 - Welche Felder die Karten der Partner und Intern zeigen, und woher Lizenz- und Hardwaredaten kommen.
 - Kontaktdaten der Noch-nicht-Kunden liegen nicht vor. Eventuell per Anreicherung über die Website der Verwaltung (Impressum).
-- Empfehlungsprogramm: Codes, Rabatt, und ob die Kunden-Karte dann auch Noch-nicht-Kunden zeigt (`include_prospects` in `audiences.py`).
+- Empfehlungsprogramm: endgültige Prozente und Deckel, rechtliche Prüfung, Auszahlung/Verrechnung, Empfehlungskonto im Backend (`/referral/me/`, braucht die Anmeldung).
+- Listen für Stadtwerke, DRK und weitere Segmente, inklusive Größe (Mitarbeitende).
 - Anmeldung: Bis dahin wählt der Prototyp den Partner per Parameter. Das Backend erlaubt das nur mit `MAP_ALLOW_PARTNER_PARAM` (Default: `DEBUG`).
 
 ## Kartenstil und Datenschutz
