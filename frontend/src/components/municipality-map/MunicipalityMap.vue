@@ -34,7 +34,9 @@ const props = defineProps({
   /** Hervorgehobene Fläche, z. B. das Partnergebiet: GeoJSON-Geometrie (Polygon/MultiPolygon) */
   area: { type: Object, default: null },
   areaAttribution: { type: String, default: '© GeoBasis-DE / BKG 2025' },
-  /** Partnergebiete im Hintergrund (Showcase): Flächen mit properties.color, Linien als Umriss, Punkte mit properties.name und color als Beschriftung */
+  /** Partnergebiete im Hintergrund (Showcase): Flächen mit properties.color, Linien als Umriss, Punkte mit properties.name und color als Beschriftung.
+   * properties.open: Fläche ohne Partner, schraffiert mit gestricheltem Rand; properties.scale verkleinert die Beschriftung;
+   * Punkte mit properties.tag: graues Ortsschild (mögliche Partner), nach dem Zeichnen neben die Cluster geschoben */
   territories: { type: Object, default: null },
   /** Ortsnamen des Grundstils (Städte, Gemeinden, Ortsteile); Länder und Staaten bleiben */
   placeLabels: { type: Boolean, default: true },
@@ -115,6 +117,7 @@ function syncLabels() {
   for (const id of PLACE_LAYERS) if (map.getLayer(id)) map.setLayoutProperty(id, 'visibility', vis(props.placeLabels))
   for (const id of ['mm-signs', 'mm-signs-active', 'mm-new-halo']) map.setLayoutProperty(id, 'visibility', vis(props.signNames))
   for (const id of ['mm-sign-dots', 'mm-sign-one']) map.setLayoutProperty(id, 'visibility', vis(!props.signNames))
+  schedulePlaceTags()
 }
 
 // Staatsgrenzen kräftiger als im Grundstil (fiord: 56 % Deckkraft); andere Stile ohne diese Ebenen bleiben unverändert
@@ -128,6 +131,7 @@ function emphasizeBorders() {
 }
 
 function addImages() {
+  map.addImage('mm-hatch', hatchImage(), { pixelRatio: 2 })
   const normal = createSignImage({ fill: props.signFill, ink: props.signInk })
   const active = createSignImage({ fill: props.signInk, ink: props.signFill })
   map.addImage('mm-sign', normal.image, normal.options)
@@ -158,14 +162,23 @@ function addLayers() {
   })
   map.addSource('mm-user', { type: 'geojson', data: emptyFc() })
   map.addSource('mm-area', { type: 'geojson', data: areaFc(), attribution: props.areaAttribution })
-  map.addSource('mm-territories', { type: 'geojson', data: props.territories ?? emptyFc() })
+  map.addSource('mm-territories', { type: 'geojson', data: territoryFc() })
+  map.addSource('mm-tags', { type: 'geojson', data: emptyFc() })
 
   // Partnergebiete (Showcase): getönte Fläche in der Partnerfarbe, Name groß am Punkt aus territories (Showcase: neben dem Gebiet). Die Namen blockieren
   // keine anderen Beschriftungen, Cluster und Schilder liegen darüber.
   const isPolygon = ['in', ['geometry-type'], ['literal', ['Polygon', 'MultiPolygon']]]
-  map.addLayer({ id: 'mm-territory-fill', type: 'fill', source: 'mm-territories', filter: isPolygon, paint: { 'fill-color': ['get', 'color'], 'fill-opacity': 0.2, 'fill-antialias': false } }) // ohne Antialiasing keine hellen Nähte zwischen Kreisen
+  const isLine = ['in', ['geometry-type'], ['literal', ['LineString', 'MultiLineString']]]
+  const isOpen = ['==', ['get', 'open'], true]
+  // Ohne Partner ("Partner gesucht"): schraffiert, gestrichelter Rand
+  map.addLayer({ id: 'mm-territory-open', type: 'fill', source: 'mm-territories', filter: ['all', isPolygon, isOpen], paint: { 'fill-pattern': 'mm-hatch', 'fill-opacity': 0.55 } })
   map.addLayer({
-    id: 'mm-territory-line', type: 'line', source: 'mm-territories', filter: ['in', ['geometry-type'], ['literal', ['LineString', 'MultiLineString']]],
+    id: 'mm-territory-open-line', type: 'line', source: 'mm-territories', filter: ['all', isPolygon, isOpen],
+    layout: { 'line-join': 'round' }, paint: { 'line-color': ['get', 'color'], 'line-width': 1.2, 'line-opacity': 0.7, 'line-dasharray': [3, 2] },
+  })
+  map.addLayer({ id: 'mm-territory-fill', type: 'fill', source: 'mm-territories', filter: ['all', isPolygon, ['!', isOpen]], paint: { 'fill-color': ['get', 'color'], 'fill-opacity': 0.2, 'fill-antialias': false } }) // ohne Antialiasing keine hellen Nähte zwischen Kreisen
+  map.addLayer({
+    id: 'mm-territory-line', type: 'line', source: 'mm-territories', filter: isLine,
     layout: { 'line-join': 'round' }, paint: { 'line-color': ['get', 'color'], 'line-width': 1.6, 'line-opacity': 0.85 },
   })
   map.addLayer({
@@ -173,7 +186,7 @@ function addLayers() {
     layout: {
       'text-field': ['get', 'name'],
       'text-font': props.labelFont,
-      'text-size': ['interpolate', ['linear'], ['zoom'], 4, 15, 6, 22, 9, 34],
+      'text-size': ['interpolate', ['linear'], ['zoom'], ...[[4, 15], [6, 22], [9, 34]].flatMap(([z, px]) => [z, ['*', px, ['coalesce', ['get', 'scale'], 1]]])],
       'text-transform': 'uppercase',
       'text-letter-spacing': 0.08,
       'text-allow-overlap': true,
@@ -350,6 +363,13 @@ function addLayers() {
     paint: { 'text-color': props.prospectFill },
   })
 
+  // Mögliche Partner (Showcase): graues Ortsschild, neben die Cluster geschoben (placeTags), sonst darüber
+  map.addLayer({
+    id: 'mm-territory-tag', type: 'symbol', source: 'mm-tags',
+    layout: { ...signLayout('mm-sign-prospect', ['get', 'name']), 'text-size': 11, 'icon-allow-overlap': true, 'text-allow-overlap': true },
+    paint: { 'text-color': props.prospectInk },
+  })
+
   map.addLayer({
     id: 'mm-user',
     type: 'circle',
@@ -379,6 +399,7 @@ function bindEvents() {
     map.easeTo({ center: f.geometry.coordinates, zoom: zoom + 0.3 })
   })
   map.on('moveend', emitBounds)
+  map.on('moveend', schedulePlaceTags)
 }
 
 function emitBounds() {
@@ -389,6 +410,7 @@ function syncData() {
   if (!ready) return
   map.getSource(SRC).setData(props.data)
   if (props.fitOnData) fitToData()
+  schedulePlaceTags()
 }
 
 function syncArea() {
@@ -399,7 +421,55 @@ function syncArea() {
 
 function syncTerritories() {
   if (!ready) return
-  map.getSource('mm-territories').setData(props.territories ?? emptyFc())
+  map.getSource('mm-territories').setData(territoryFc())
+  schedulePlaceTags()
+}
+
+const isTag = (f) => f.geometry.type === 'Point' && f.properties.tag
+function territoryFc() {
+  return { type: 'FeatureCollection', features: (props.territories?.features ?? []).filter((f) => !isTag(f)) }
+}
+
+// Schilder der möglichen Partner neben die Cluster: Wo die Cluster liegen, steht erst nach dem Zeichnen fest (hängt
+// am Zoom). Daher nach jeder Bewegung, sobald die Karte fertig ist, in Bildschirmpunkten die nächste freie Stelle um
+// den Wunschpunkt suchen, frei von Clustern, Kundenpunkten und den schon gesetzten Schildern.
+let placeQueued = false
+function schedulePlaceTags() {
+  if (!ready || placeQueued) return
+  placeQueued = true
+  map.once('idle', () => { placeQueued = false; placeTags() })
+}
+function placeTags() {
+  const tags = (props.territories?.features ?? []).filter(isTag)
+  const source = map.getSource('mm-tags')
+  if (!tags.length) return source.setData(emptyFc())
+  const big = props.clusterRatio
+  const radius = (f) => (f.properties.point_count == null ? (big ? 20 : 16)
+    : f.properties.point_count < 5 ? (big ? 20 : 16) : f.properties.point_count < 15 ? (big ? 23 : 20) : 27)
+  const layers = ['mm-clusters', 'mm-sign-dots'].filter((id) => map.getLayer(id))
+  const circles = map.queryRenderedFeatures({ layers }).map((f) => ({ ...map.project(f.geometry.coordinates), r: radius(f) + 4 }))
+  const boxes = []
+  const hits = (b) => boxes.some((o) => b.x0 < o.x1 && b.x1 > o.x0 && b.y0 < o.y1 && b.y1 > o.y0)
+    || circles.some(({ x, y, r }) => Math.hypot(Math.max(b.x0 - x, 0, x - b.x1), Math.max(b.y0 - y, 0, y - b.y1)) < r)
+  const features = tags.map((f) => {
+    const p = map.project(f.geometry.coordinates)
+    const hw = (f.properties.name.length * 6.2 + 16) / 2 // Schild: ca. 6 px je Zeichen bei 11 px Schrift, plus Rand
+    const hh = 11
+    const boxAt = (x, y) => ({ x0: x - hw, x1: x + hw, y0: y - hh, y1: y + hh })
+    let best = boxAt(p.x, p.y)
+    search: for (let r = 0; r <= 160; r += 6) {
+      const steps = r ? Math.max(8, Math.round(r / 4)) : 1
+      for (let i = 0; i < steps; i++) {
+        const a = (i / steps) * 2 * Math.PI
+        const b = boxAt(p.x + r * Math.cos(a), p.y + r * Math.sin(a))
+        if (!hits(b)) { best = b; break search }
+      }
+    }
+    boxes.push(best)
+    const { lng, lat } = map.unproject([(best.x0 + best.x1) / 2, (best.y0 + best.y1) / 2])
+    return { ...f, geometry: { type: 'Point', coordinates: [lng, lat] } }
+  })
+  source.setData({ type: 'FeatureCollection', features })
 }
 
 function territoryCoords() {
@@ -498,6 +568,21 @@ defineExpose({ fitToData, flyTo, resize: () => map?.resize() })
 function point(lng, lat) {
   return { type: 'Feature', geometry: { type: 'Point', coordinates: [lng, lat] }, properties: {} }
 }
+/** Kachel für die Schraffur der Flächen ohne Partner: helle Diagonale, sonst durchsichtig */
+function hatchImage() {
+  const size = 16
+  const canvas = document.createElement('canvas')
+  canvas.width = canvas.height = size
+  const ctx = canvas.getContext('2d')
+  ctx.strokeStyle = 'rgb(201 211 214 / 0.55)'
+  ctx.lineWidth = 2
+  ctx.beginPath()
+  // Diagonale plus die beiden Ecken, damit die Linien über die Kachelgrenze durchlaufen
+  for (const o of [-size, 0, size]) { ctx.moveTo(o, size); ctx.lineTo(o + size, 0) }
+  ctx.stroke()
+  return ctx.getImageData(0, 0, size, size)
+}
+
 function emptyFc() {
   return { type: 'FeatureCollection', features: [] }
 }

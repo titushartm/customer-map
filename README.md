@@ -14,7 +14,7 @@ npm run dev
 
 Die Ansichten sind Tabs (`#kunden`, `#partner`, `#intern`, `#admin`, `#liste`, `#empfehlen`). Die Anmeldung ist simuliert: Partner, Kunde und Scope wählst du oben rechts aus. Einen Einladungslink probierst du mit `?ref=BAU-9EMI#kunden` aus.
 
-`#showcase` zeigt nur die Karte über das ganze Fenster, für Screenshots (z. B. LinkedIn): zahlende Kunden als gelbe Schilder, dahinter die Partnergebiete in Farbe, ihre Namen daneben (außerhalb der Fläche, damit die Cluster sie nicht verdecken), keine Noch-nicht-Kunden. Testlizenzen und Titel lassen sich zuschalten, die Taste H blendet die Steuerung aus.
+`#showcase` zeigt nur die Karte über das ganze Fenster, für Screenshots (z. B. LinkedIn): zahlende Kunden als gelbe Schilder, dahinter die Partnergebiete in Farbe, ihre Namen daneben (außerhalb der Fläche, damit die Cluster sie nicht verdecken), keine Noch-nicht-Kunden. Testlizenzen und Titel lassen sich zuschalten, die Taste H blendet die Steuerung aus. „Partner gesucht“ (an) schraffiert in Deutschland, Österreich und der Schweiz alles, was noch keinem aktiven Partner gehört (`openAreas` in `lib/territories.js`: ganz freie Staaten als ein Stück, sonst die freien Länder, darunter die freien Kreise), mit einem Hinweis je Staat und einem Eintrag im Titel. „Mögliche Partner“ (an) setzt kommunale IT-Dienstleister, die als Partner in Frage kommen, als graues Schild mit „?“ in ihre Fläche, über die Cluster (`mocks/prospects.js`, Recherche in `backend/data/potenzielle_partner.md`); in Staaten mit solchen Schildern entfällt der Hinweis „Partner gesucht“.
 
 Vorerst nur Verwaltungen: Stadtwerke und DRK sind in `segments.js` ausgeblendet (`hidden: true`) und fehlen damit in Karte, Zahlen und Filtern.
 

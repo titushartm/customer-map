@@ -37,21 +37,41 @@ export function partnerShapes(partners, areas) {
   }))
 }
 
-/** Punkt tief im Inneren der Flächen (möglichst weit vom Rand), für einen Namen in der Fläche */
-export function interiorPoint(geometries) {
+/**
+ * Flächen ohne Partner ("Partner gesucht", Showcase): von den Staaten abwärts bis zum Kreis. Ganz frei → die Fläche
+ * selbst (die Schweiz als ein Stück), ganz vergeben → nichts, sonst die Flächen darunter. Ein Kreis mit nur einzelnen
+ * vergebenen Gemeinden gilt als vergeben. partners: aktive Partner (areas mit path), areas: aus fetchAreaMap.
+ * Rückgabe: [Fläche aus areas]
+ */
+export function openAreas(partners, areas, countries) {
+  const owned = partners.flatMap((p) => p.areas.map((a) => a.path)).filter(Boolean)
+  const children = {}
+  areas.forEach((a) => { if (a.parent) (children[a.parent] ??= []).push(a) })
+  const open = (a) => {
+    if (owned.some((p) => a.path.startsWith(p))) return [] // liegt in einem Partnergebiet
+    if (!owned.some((p) => p.startsWith(a.path))) return a.geometry ? [a] : [] // nichts davon vergeben
+    return a.level === 'kreis' ? [] : (children[a.key] ?? []).flatMap(open)
+  }
+  return areas.filter((a) => a.level === 'staat' && countries.includes(a.key)).flatMap(open)
+}
+
+/** Punkt tief im Inneren der Flächen (möglichst weit vom Rand und von den Punkten in avoid, z. B. Kunden), für einen Namen in der Fläche */
+export function interiorPoint(geometries, avoid = []) {
   const rings = polysOf(geometries).map(thin)
   if (!rings.length) return null
   let w = Infinity; let s = Infinity; let e = -Infinity; let n = -Infinity
   rings.forEach((r) => { w = Math.min(w, r.bbox[0]); s = Math.min(s, r.bbox[1]); e = Math.max(e, r.bbox[2]); n = Math.max(n, r.bbox[3]) })
   const k = Math.cos((((s + n) / 2) * Math.PI) / 180)
   const edge = rings.flat()
+  const near = avoid.filter(([x, y]) => x > w - 1 && x < e + 1 && y > s - 1 && y < n + 1)
   let best = null
   const STEPS = 24
   for (let i = 1; i < STEPS; i++) {
     for (let j = 1; j < STEPS; j++) {
       const pt = [w + ((e - w) * i) / STEPS, s + ((n - s) * j) / STEPS]
       if (!rings.some((r) => inThin(pt, r))) continue
-      const d = Math.min(...edge.map(([x, y]) => Math.hypot((x - pt[0]) * k, y - pt[1])))
+      const dist = ([x, y]) => Math.hypot((x - pt[0]) * k, y - pt[1])
+      const d = Math.min(...edge.map(dist), ...near.map(dist))
       if (!best || d > best.d) best = { pt, d }
     }
   }
