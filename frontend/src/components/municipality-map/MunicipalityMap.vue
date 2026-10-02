@@ -29,6 +29,8 @@ const props = defineProps({
   /** Graues Ortsschild für Verwaltungen, die noch keine Kunden sind */
   prospectFill: { type: String, default: '#C9D3D6' },
   prospectInk: { type: String, default: '#1E2E34' },
+  /** Bei neuen Daten auf alle Einträge zoomen. Aus, solange nur um den Ausschnitt nachgeladen wird. */
+  fitOnData: { type: Boolean, default: true },
   /** Hervorgehobene Fläche, z. B. das Partnergebiet: GeoJSON-Geometrie (Polygon/MultiPolygon) */
   area: { type: Object, default: null },
   areaAttribution: { type: String, default: '© GeoBasis-DE / BKG 2025' },
@@ -315,7 +317,7 @@ function emitBounds() {
 function syncData() {
   if (!ready) return
   map.getSource(SRC).setData(props.data)
-  fitToData()
+  if (props.fitOnData) fitToData()
 }
 
 function syncArea() {

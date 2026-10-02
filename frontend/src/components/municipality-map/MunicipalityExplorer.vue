@@ -489,6 +489,7 @@ function itemMeta(p) {
           :navigation="expanded"
           :scroll-zoom="expanded"
           :cluster-ratio="!isRadius"
+          :fit-on-data="!areaFeatures.length"
           :area="meta.territory ?? null"
           @bounds-change="onBoundsChange"
         >
