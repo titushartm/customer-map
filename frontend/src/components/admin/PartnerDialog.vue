@@ -11,7 +11,7 @@ const props = defineProps({
   open: { type: Boolean, default: false },
   /** Zu bearbeitender Partner, null = neuer Partner */
   partner: { type: Object, default: null },
-  /** Alle Partner: Gebiete sind je Segment exklusiv, vergebene zeigt die Karte an */
+  /** Alle Partner: Gebiete dürfen sich überschneiden, die Karte zeigt die anderer Partner desselben Segments */
   partners: { type: Array, default: () => [] },
 })
 const emit = defineEmits(['close', 'saved', 'deleted'])
@@ -71,53 +71,38 @@ const kindText = (a) => a.kind ?? COUNTRIES[a.country]?.[a.level] ?? ''
 const within = (a, b) => a.path.startsWith(b.path)
 const childrenOf = (area) => (areaMap.value ?? []).filter((c) => c.parent === area.key)
 
-/** Vergebene Regionen, die sich mit area überschneiden: darüber (Land hat den Kreis) oder darin (Kreis im Land) */
-const conflictsOf = (area) => taken.value.filter((t) => within(area, t) || within(t, area))
-const owners = (conflicts) => [...new Set(conflicts.map((t) => t.partner))].join(', ')
-/** Für die Suchliste: 'vergeben an …' oder 'teilweise vergeben' */
+/** Regionen anderer Partner, die sich mit area überschneiden: darüber (Land hat den Kreis) oder darin (Kreis im Land) */
+const sharedWith = (area) => taken.value.filter((t) => within(area, t) || within(t, area))
+const owners = (shared) => [...new Set(shared.map((t) => t.partner))].join(', ')
+/** Für die Suchliste: 'auch bei …' oder 'teilweise auch bei …' */
 function takenNote(area) {
-  const c = conflictsOf(area)
+  const c = sharedWith(area)
   if (!c.length) return null
-  const owner = c.find((t) => within(area, t))
-  return owner ? `vergeben an ${owner.partner}` : `teilweise vergeben an ${owners(c)}`
-}
-
-/** Die freien Teile eines teilweise vergebenen Gebiets, so grob wie möglich (ganze Länder vor einzelnen Kreisen). */
-function freeParts(area) {
-  const c = conflictsOf(area)
-  if (!c.length) return [area]
-  if (c.some((t) => within(area, t))) return [] // ganz vergeben
-  return childrenOf(area).flatMap(freeParts) // ohne bekannte Kinder (Gemeinde vergeben, Kreis ohne Gemeindeliste): nichts
+  return c.some((t) => within(area, t)) ? `auch bei ${owners(c)}` : `teilweise auch bei ${owners(c)}`
 }
 
 /**
  * Gebiet aufnehmen, ohne Hinweis. Liegt es schon in einem größeren, passiert nichts; kleinere darin fallen weg.
- * Vergebene Regionen (gleiches Segment) gehen nicht; bei einem teilweise vergebenen Gebiet kommen die freien Teile.
+ * Gebiete anderer Partner (auch im gleichen Segment) dürfen sich überschneiden; dann sehen beide die Ziele dort.
  */
 function merge(area) {
   const parent = form.value.areas.find((a) => area.key !== a.key && within(area, a))
   if (keys.value.includes(area.key) || parent) return { status: 'covered', parent }
-  const conflicts = conflictsOf(area)
-  const parts = conflicts.length ? freeParts(areaByKey.value[area.key] ?? area) : [area]
-  if (!parts.length) {
-    return { status: 'taken', owner: conflicts.find((t) => within(area, t))?.partner ?? owners(conflicts) }
-  }
   const inside = form.value.areas.filter((a) => within(a, area))
-  form.value.areas = [...form.value.areas.filter((a) => !within(a, area)), ...parts.map(toRef)]
-  return { status: 'added', conflicts, parts, inside }
+  form.value.areas = [...form.value.areas.filter((a) => !within(a, area)), toRef(area)]
+  return { status: 'added', shared: sharedWith(area), inside }
 }
 
 function add(area) {
   const r = merge(area)
   if (r.status === 'covered') {
     notice.value = { text: `${area.name} gehört schon zum Gebiet${r.parent ? ` (liegt in ${r.parent.name})` : ''}.` }
-  } else if (r.status === 'taken') {
-    notice.value = { warn: true, text: `${area.name} ist schon vergeben an ${r.owner}. Je Segment betreut nur ein Partner eine Region.` }
-  } else {
-    notice.value = r.conflicts.length
-      ? { text: `${area.name} ist teilweise vergeben (${owners(r.conflicts)}). Übernommen: ${r.parts.length} freie ${r.parts.length === 1 ? 'Region' : 'Regionen'}.` }
-      : r.inside.length ? { text: `${area.name} ersetzt ${r.inside.map((a) => a.name).join(', ')}.` } : null
+    return
   }
+  const bits = []
+  if (r.inside.length) bits.push(`ersetzt ${r.inside.map((a) => a.name).join(', ')}`)
+  if (r.shared.length) bits.push(`dort ist auch ${owners(r.shared)}`)
+  notice.value = bits.length ? { text: `${area.name}: ${bits.join('; ')}.` } : null
 }
 
 /** Mehrere Gebiete auf einmal (Rechteckauswahl in der Karte), ein gemeinsamer Hinweis */
@@ -125,13 +110,11 @@ function addMany(keyList) {
   const results = keyList.map((k) => areaByKey.value[k]).filter(Boolean).map(merge)
   const added = results.filter((r) => r.status === 'added')
   const covered = results.filter((r) => r.status === 'covered')
-  const blockedBy = [...new Set(results.filter((r) => r.status === 'taken').map((r) => r.owner))]
-  const partly = added.filter((r) => r.conflicts.length)
+  const shared = added.filter((r) => r.shared.length)
   const bits = [`${added.length} ${added.length === 1 ? 'Gebiet' : 'Gebiete'} übernommen`]
-  if (partly.length) bits.push(`davon ${partly.length} nur mit den freien Teilen`)
+  if (shared.length) bits.push(`davon ${shared.length} geteilt mit ${owners(shared.flatMap((r) => r.shared))}`)
   if (covered.length) bits.push(`${covered.length} schon im Gebiet`)
-  if (blockedBy.length) bits.push(`${results.length - added.length - covered.length} vergeben an ${blockedBy.join(', ')}`)
-  notice.value = { warn: !added.length && blockedBy.length > 0, text: `Auswahl: ${bits.join(', ')}.` }
+  notice.value = { text: `Auswahl: ${bits.join(', ')}.` }
 }
 
 function remove(key) {
@@ -181,9 +164,6 @@ watch(() => [props.open, form.value.segment, keys.value.join(',')], async () => 
   if (seq === previewSeq) preview.value = res
 })
 
-// Gebiet kollidiert mit einem aktiven Partner desselben Segments: aktiv speichern geht nicht
-const blocked = computed(() => form.value.active && Boolean(preview.value?.overlaps.length))
-
 async function save() {
   error.value = null
   saving.value = true
@@ -231,7 +211,7 @@ async function removePartner() {
 
           <fieldset class="pd-field">
             <legend>Segment</legend>
-            <p class="pd-hint">Ein Partner verkauft genau ein Segment und sieht nur dieses. Für ein zweites Segment einen weiteren Partner anlegen. Je Segment gehört jede Region nur einem Partner.</p>
+            <p class="pd-hint">Ein Partner verkauft genau ein Segment und sieht nur dieses. Für ein zweites Segment einen weiteren Partner anlegen. Gebiete dürfen sich mit anderen Partnern überschneiden.</p>
             <div class="pd-seg">
               <label v-for="(s, k) in VISIBLE_SEGMENTS" :key="k" :class="{ 'is-on': form.segment === k }">
                 <input v-model="form.segment" type="radio" name="pd-segment" :value="k">
@@ -301,16 +281,13 @@ async function removePartner() {
             </p>
             <p v-else class="pd-muted">Sobald ein Gebiet gewählt ist, steht hier, wie viele Ziele darin liegen.</p>
             <template v-if="preview?.overlaps.length">
-              <h3 class="pd-warn-head">Schon vergeben</h3>
-              <ul class="pd-warn">
+              <h3>Geteilt mit</h3>
+              <ul class="pd-shared">
                 <li v-for="(o, i) in preview.overlaps" :key="i">
-                  {{ o.area }}: {{ o.partner }} betreut dort schon {{ segPlural }}<template v-if="o.other !== o.area"> ({{ o.other }})</template>.
+                  {{ o.area }}: auch {{ o.partner }}<template v-if="o.other !== o.area"> ({{ o.other }})</template>
                 </li>
               </ul>
-              <p class="pd-muted">
-                <template v-if="form.active">Je Segment betreut nur ein Partner eine Region. Diese Gebiete entfernen oder den Partner als inaktiv speichern.</template>
-                <template v-else>Inaktiv lässt sich speichern. Aktivieren geht erst, wenn das Gebiet frei ist.</template>
-              </p>
+              <p class="pd-muted">Alle Partner eines Gebiets sehen die {{ segPlural }} dort. Kunden zählen bei dem Partner, der sie angelegt hat.</p>
             </template>
           </section>
         </div>
@@ -326,7 +303,7 @@ async function removePartner() {
         <button v-if="form.id" type="button" class="pd-btn-quiet pd-delete" @click="confirmDelete = true">Partner löschen</button>
         <p v-if="error" class="pd-error" role="alert">{{ error }}</p>
         <button type="button" class="pd-btn-quiet" @click="emit('close')">Abbrechen</button>
-        <button type="submit" class="pd-btn" :disabled="saving || blocked">{{ saving ? 'Speichert …' : 'Speichern' }}</button>
+        <button type="submit" class="pd-btn" :disabled="saving">{{ saving ? 'Speichert …' : 'Speichern' }}</button>
       </footer>
     </form>
   </dialog>
@@ -386,7 +363,8 @@ async function removePartner() {
 }
 .pd-hits button:hover, .pd-hits button:focus-visible { background: var(--page-bg); }
 .pd-notice { margin: 0; font-size: 0.9rem; color: var(--page-accent); }
-.pd-notice.is-warn, .pd-taken { color: #FFB4A8; }
+.pd-notice.is-warn { color: #FFB4A8; }
+.pd-taken { color: var(--page-muted); font-style: italic; }
 
 .pd-areas { display: flex; flex-wrap: wrap; gap: 6px; margin: 0; padding: 0; list-style: none; }
 .pd-areas li {
@@ -412,8 +390,7 @@ async function removePartner() {
 .pd-card h3 { margin: 0 0 6px; font-size: 0.85rem; text-transform: uppercase; letter-spacing: 0.06em; color: var(--page-muted); }
 .pd-card p { margin: 0; line-height: 1.45; }
 .pd-card strong { color: var(--page-accent); font-variant-numeric: tabular-nums; }
-.pd-warn-head { margin-top: 12px !important; color: #FFB4A8 !important; }
-.pd-warn { margin: 0 0 6px; padding-left: 18px; line-height: 1.45; }
+.pd-shared { margin: 0 0 6px; padding-left: 18px; line-height: 1.45; }
 .pd-muted { color: var(--page-muted); }
 
 .pd-foot { display: flex; flex-wrap: wrap; justify-content: flex-end; align-items: center; gap: 10px; margin-top: 20px; padding-top: 16px; border-top: 1px solid var(--page-line); }

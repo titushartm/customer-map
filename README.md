@@ -61,7 +61,7 @@ Partner legt das Team im Tab Admin an, es gibt keine Liste zum Hochladen. Der Di
 - **Stammdaten:** Name, Ansprechpartner, E-Mail, Telefon, Website, aktiv ja/nein. Deaktivierte Partner behalten ihr Gebiet, ihre Logins sehen aber keine Karte mehr.
 - **Genau ein Segment.** Der Partner sieht in seinem Gebiet nur dieses. Wer Verwaltungen und Stadtwerke verkauft, wird zweimal angelegt.
 - **Gebiet:** Länder, Kreise und Gemeinden aus der Referenz (`Region`), per Suche oder per Klick auf einen Kreis in der Karte. Liegt ein Kreis in einem gewählten Land, teilt der Klick das Land in seine übrigen Kreise auf („Sachsen ohne Leipzig“). Ein größeres Gebiet ersetzt die kleineren darin.
-- **Je Segment exklusiv:** Eine Region gehört pro Segment höchstens einem aktiven Partner. Ein Stadtwerke-Partner darf denselben Kreis haben wie ein Verwaltungs-Partner, zwei Verwaltungs-Partner nicht. Vergebene Regionen sind auf der Karte hell getönt und in der Suche markiert; wählt man ein teilweise vergebenes Land, kommen nur die freien Kreise. Inaktive Partner blockieren nichts; beim Aktivieren wird neu geprüft.
+- **Überschneidungen erlaubt:** Mehrere Partner dürfen in derselben Region aktiv sein, auch im gleichen Segment (z. B. ITEBO in ganz NDS/NRW und KAAW in Borken und Steinfurt). Alle Partner eines Gebiets sehen die Ziele dort; Kunden zählen bei dem Partner, der sie angelegt hat (`created_by`). Regionen anderer Partner desselben Segments sind auf der Karte hell getönt und in der Suche als „auch bei …“ markiert; die Vorschau listet sie als Hinweis, speichern geht trotzdem.
 - **Vorschau:** Wie viele Ziele des Segments im Gebiet liegen und wie viele davon Kunden sind. Kollidiert das Gebiet (z. B. nach einem Segmentwechsel), lässt es sich nur inaktiv speichern.
 
 Im Backend sind das `SalesPartner` (mit `segment`) und je Gebietsregion ein `PartnerTerritory` (FK auf `Region`), gepflegt über `backend/maps/partner_admin.py` (nur `is_staff`). Ein Ziel gehört zum Gebiet, wenn seine Region darin liegt (`Region.path`, siehe [Länder](#länder)) und sein Segment das des Partners ist. Die Exklusivität prüft `_save` unter Sperre der Partner des Segments (409 bei Konflikt), weil sich Pfad-Überschneidungen nicht als DB-Constraint ausdrücken lassen. Ämter/VG gehen als Gebiet nicht: Sie hängen im Baum neben dem Kreis, nicht dazwischen.
@@ -214,6 +214,12 @@ Leere Felder (Land, Bundesland, Typ, PLZ) sind ergänzt, wo die Zuordnung eindeu
 - Schweiz und Frankreich sind noch ein Auszug der größeren Städte in `mocks/regions.js`.
 
 Das sind rund 7.600 Verwaltungen. Der Mock lädt sie mit dem Bundle (etwa 270 kB gzip); im Betrieb kommen sie aus `Region` (`import_regions`), dort fehlen für DE noch die Ämter/VG (VG250 hat sie als `VG250_VWG`) und die Regel, welche Gemeinden kein eigenes Ziel sind.
+
+### Freigabe der Kundenkarte
+
+Die Karte auf der Startseite (Tab Kunden) sehen nur dienstliche E-Mail-Adressen von Verwaltungen, damit Mitbewerber die Kundenliste nicht abgreifen. Angemeldete Kunden sehen sie direkt. `mocks/domains.json` ordnet jeder Verwaltung aus `regions.json` ihre Domain zu (offizielle Website aus Wikidata über AGS, Kreisschlüssel, Regionalschlüssel bzw. GKZ; erzeugt mit `scripts/build_domains.py`, Prüfliste in `backend/data/region_domains.csv`), dazu die Stadtwerke/DRK unter den Kunden von Hand. Eine Adresse passt, wenn ihre Domain gleich ist oder darunter liegt (`bauamt.wesel.de` → `wesel.de`). Rund 99 % der Verwaltungen haben eine Domain; fehlende und abweichende Mail-Domains (in Österreich oft `<ort>.gv.at`) in `MANUAL` im Skript nachtragen.
+
+Im Mock prüft der Browser, das zeigt nur den Ablauf. Im Betrieb braucht es `POST /api/map/access/` mit Bestätigungslink an die Adresse, und `/api/map/kunden/…` liefert erst mit bestätigter Sitzung Daten; sonst holt sich jeder die Kunden direkt über die API.
 
 ### Kunde oder kostenlos
 

@@ -117,15 +117,14 @@ export async function fetchPartners() {
 
 /**
  * Partner anlegen (ohne id) oder ändern. areas = Liste von Regionsschlüsseln.
- * Gebiete sind je Segment exklusiv: Ein aktiver Partner darf keine Region haben, die sich mit einem
- * anderen aktiven Partner desselben Segments überschneidet. Andere Segmente dürfen dieselbe Region haben.
+ * Gebiete dürfen sich überschneiden, auch im gleichen Segment: Dann sehen alle Partner dort die Ziele.
  * Gibt den gespeicherten Partner zurück, bei ungültigen Angaben einen Fehler mit Text.
  */
 export async function savePartner({ id, name, segment, active, contact, areas }) {
   const body = { name: name.trim(), segment, active, contact: { ...contact }, areas: [...areas] }
   if (!USE_MOCK) return sendJson(id ? `/partners/${id}/` : '/partners/', id ? 'PUT' : 'POST', body)
   await loadAreas()
-  const error = validatePartner(body) ?? (body.active ? overlapError(overlapsFor(id, segment, body.areas)) : null)
+  const error = validatePartner(body)
   if (error) throw new Error(error)
   const saved = { ...body, id: id ?? Math.max(100, ...partnerStore.map((p) => p.id)) + 1 }
   partnerStore = id ? partnerStore.map((p) => (p.id === id ? saved : p)) : [...partnerStore, saved]
@@ -139,8 +138,8 @@ export async function deletePartner(id) {
 }
 
 /**
- * Vorschau im Partnerdialog, bevor gespeichert wird: wie viele Ziele im Gebiet liegen und wo es
- * mit aktiven Partnern desselben Segments kollidiert (dann lässt es sich nicht speichern).
+ * Vorschau im Partnerdialog, bevor gespeichert wird: wie viele Ziele im Gebiet liegen und wo es sich mit
+ * aktiven Partnern desselben Segments überschneidet (nur als Hinweis, speichern geht trotzdem).
  * { targets, customers, overlaps: [{ partner, area, other }] }
  */
 export async function previewPartner({ id, segment, areas }) {
@@ -192,6 +191,44 @@ export function listCustomerLogins() {
     .filter((t) => t.is_customer || t.is_free)
     .map((t) => ({ key: t.key, name: t.name, segment: t.segment, country: t.country, licence: t.licence, canRefer: canRefer(t) }))
     .sort((a, b) => a.name.localeCompare(b.name, 'de'))
+}
+
+// ---- Freigabe der Kundenkarte ----
+
+// Die Karte auf der Startseite sehen nur dienstliche Adressen von Verwaltungen (und Kunden unter den Stadtwerken/DRK),
+// damit Mitbewerber die Kunden nicht abgreifen. Domains je Verwaltung aus Wikidata, siehe scripts/build_domains.py.
+const STAFF_DOMAINS = ['speechmind.de', 'speechmind.com']
+let DOMAIN_INDEX = null // Domain → Schlüssel
+async function loadDomainIndex() {
+  if (DOMAIN_INDEX) return DOMAIN_INDEX
+  const byKey = (await import('../mocks/domains.json')).default
+  DOMAIN_INDEX = new Map()
+  Object.entries(byKey).forEach(([key, d]) => [d].flat().forEach((dom) => DOMAIN_INDEX.has(dom) || DOMAIN_INDEX.set(dom, key)))
+  return DOMAIN_INDEX
+}
+
+/**
+ * Darf diese E-Mail-Adresse die Kundenkarte sehen? Die Domain muss einer Verwaltung gehören, genau oder als
+ * Subdomain (bauamt.wesel.de zählt für wesel.de). Im Betrieb prüft das Backend und gibt die Kartendaten erst nach
+ * bestätigter Adresse heraus; die Prüfung hier im Browser schützt nichts, sie zeigt nur den Ablauf.
+ * Rückgabe: { ok: true, key, name } (key null bei SpeechMind) oder { ok: false, reason }
+ */
+export async function checkMapAccess(email) {
+  if (!USE_MOCK) return sendJson('/map/access/', 'POST', { email })
+  const domain = email.trim().toLowerCase().match(/^[^@\s]+@([a-z0-9.-]+\.[a-z]{2,})$/)?.[1]
+  if (!domain) return { ok: false, reason: 'Bitte eine gültige E-Mail-Adresse eingeben.' }
+  if (STAFF_DOMAINS.includes(domain)) return { ok: true, key: null, name: 'SpeechMind' }
+  const index = await loadDomainIndex()
+  // wesel.de, dann für bauamt.wesel.de auch wesel.de; nie nur die Endung (de, gv.at)
+  const parts = domain.split('.')
+  for (let i = 0; i < parts.length - 1; i++) {
+    const key = index.get(parts.slice(i).join('.'))
+    if (key) {
+      const name = REGION_BY_KEY[key]?.name ?? EXTRA_TARGETS.find((t) => t.key === key)?.name ?? key
+      return { ok: true, key, name }
+    }
+  }
+  return { ok: false, reason: 'Diese Adresse gehört zu keiner Verwaltung in unserer Liste. Bitte die dienstliche Adresse verwenden.' }
 }
 
 /**
@@ -426,7 +463,7 @@ function validatePartner({ name, segment, areas }) {
   return null
 }
 
-/** Regionen, die ein anderer aktiver Partner desselben Segments schon hat (in beide Richtungen: Land ⊃ Kreis). */
+/** Regionen, die ein anderer aktiver Partner desselben Segments auch hat (in beide Richtungen: Land ⊃ Kreis). */
 function overlapsFor(id, segment, areas) {
   const found = []
   for (const other of partnerStore) {
@@ -438,10 +475,6 @@ function overlapsFor(id, segment, areas) {
   }
   return found
 }
-
-const overlapError = (found) => (found.length
-  ? `Gebiet schon vergeben: ${found.map((o) => `${o.area} (${o.partner})`).join(', ')}. Je Segment betreut nur ein Partner eine Region.`
-  : null)
 
 /** Gebietsfläche als eine MultiPolygon-Geometrie. Gemeinden haben im Mock keine Fläche. */
 function mergedArea(keys) {

@@ -5,6 +5,7 @@ import { SEGMENTS, VISIBLE_SEGMENTS, wordsFor, commonCountry } from './lib/segme
 import ReferralBanner from './components/referral/ReferralBanner.vue'
 import ReferralStrip from './components/referral/ReferralStrip.vue'
 import LicenceAdvisor from './components/licence/LicenceAdvisor.vue'
+import MapGate from './components/municipality-map/MapGate.vue'
 
 // MapLibre ist groß (~250 kB gzip). Auf der Startseite deshalb nachladen.
 const MunicipalityExplorer = defineAsyncComponent(() => import('./components/municipality-map/MunicipalityExplorer.vue'))
@@ -48,6 +49,11 @@ function showPartner(id) {
   select('partner')
 }
 const openKey = ref(null)
+// Nur ausgefüllte Kontaktfelder, sonst steht "Ansprechpartner , ," da
+const contactLine = computed(() => {
+  const c = currentPartner.value?.contact ?? {}
+  return [c.name, c.phone, c.email].filter(Boolean).join(', ')
+})
 
 // Startseite je Segment (im Betrieb eigene Seiten, z. B. /stadtwerke)
 const homeSegment = ref('verwaltung')
@@ -178,14 +184,17 @@ function onTabKey(e, i) {
         </div>
         <ReferralStrip :target-key="homeLogin || null" />
         <!-- Neu mounten, sobald Segment oder Einladung feststehen: Standort und Daten hängen daran -->
-        <MunicipalityExplorer
-          :key="`home-${homeSegment}-${inviteStart?.key ?? ''}`"
-          audience="kunden"
-          :segment="homeSegment"
-          :start-at="inviteStart"
-          :radius-km="60"
-          compact-height="360px"
-        />
+        <!-- Nur für dienstliche Adressen von Verwaltungen, angemeldete Kunden direkt -->
+        <MapGate :bypass="!!homeLogin" height="360px">
+          <MunicipalityExplorer
+            :key="`home-${homeSegment}-${inviteStart?.key ?? ''}`"
+            audience="kunden"
+            :segment="homeSegment"
+            :start-at="inviteStart"
+            :radius-km="60"
+            compact-height="360px"
+          />
+        </MapGate>
       </section>
 
       <!-- Lizenzempfehlung aus den Merkmalen der Verwaltung (bzw. Mitarbeitende bei Stadtwerken, DRK) -->
@@ -220,7 +229,7 @@ function onTabKey(e, i) {
       <template v-if="currentPartner">
         <p class="partner-line">
           Segment: <strong>{{ wordsFor(currentPartner.segment, commonCountry(currentPartner.areas)).plural }}</strong>
-          · Ansprechpartner {{ currentPartner.contact.name }}, {{ currentPartner.contact.phone }}, {{ currentPartner.contact.email }}
+          <template v-if="contactLine"> · Ansprechpartner {{ contactLine }}</template>
         </p>
         <MunicipalityExplorer
           :key="`partner-${partnerId}-${partnersVersion}`"

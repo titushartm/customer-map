@@ -7,8 +7,8 @@ import { COUNTRIES, COUNTRY_CODES } from '../../lib/countries.js'
 import { partnerColors } from '../../lib/partnerColors.js'
 import { partnerShapes, outline, interiorPoint } from '../../lib/territories.js'
 
-// Übersicht im Admin: die Gebiete aller aktiven Partner auf einer Karte, ohne Kunden. Je Segment sind die Gebiete
-// exklusiv; unter "Alle" liegen Partner verschiedener Segmente übereinander und scheinen durch.
+// Übersicht im Admin: die Gebiete aller aktiven Partner auf einer Karte, ohne Kunden. Gebiete dürfen sich
+// überschneiden (auch im gleichen Segment); übereinander liegende Flächen scheinen durch.
 const props = defineProps({
   /** Flächen aus fetchAreaMap: [{ key, level, country, geometry }] */
   areas: { type: Array, required: true },
@@ -44,8 +44,8 @@ const countries = computed(() => props.areas.filter((a) => a.level === 'staat')
   .sort((a, b) => COUNTRY_CODES.indexOf(a.country) - COUNTRY_CODES.indexOf(b.country)))
 
 /**
- * Flächen je Partner (aufgeteilte Kreise beim Partner mit den meisten Gemeinden darin, siehe partnerShapes), dazu der
- * Außenrand ohne Kreisgrenzen und ein Name je Partner. Übrige Gemeinden ohne Fläche als Punkt.
+ * Flächen je Partner (siehe partnerShapes), dazu der Außenrand ohne Kreisgrenzen und ein Name je Partner.
+ * Gemeinden ohne Fläche als Punkt.
  */
 function featureCollections() {
   const fc = (features) => ({ type: 'FeatureCollection', features })
@@ -198,8 +198,7 @@ function focus(p) {
       </ul>
     </div>
     <p class="po-hint po-muted">
-      <template v-if="segment === 'all'">Alle Segmente: Gebiete verschiedener Segmente dürfen sich überschneiden und scheinen durch.</template>
-      <template v-else>Je Segment gehört jede Region höchstens einem Partner.</template>
+Gebiete dürfen sich überschneiden und scheinen dann durch; alle Partner eines Gebiets sehen die Ziele dort.
       Klick auf ein Gebiet öffnet den Partner, Klick in der Legende zoomt hin. Gemeinden ohne Fläche sind Punkte.
     </p>
   </section>

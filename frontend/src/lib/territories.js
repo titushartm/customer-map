@@ -1,39 +1,20 @@
 // Partnergebiete auf der Karte (Admin-Übersicht, Showcase): Flächen je Partner, Umriss ohne innere Grenzen, ein Name je Partner.
 
 /**
- * Flächen je Partner aus seinen Gebieten. Gemeinden haben im Mock keine Fläche: Ein aufgeteilter Kreis bekommt die
- * Fläche für den Partner (je Segment) mit den meisten Gemeinden darin; die Gemeinden der übrigen bleiben Punkte.
- * partners: aus fetchPartners (areas mit key, path, lat/lng bei Gemeinden), areas: aus fetchAreaMap.
+ * Flächen je Partner aus seinen Gebieten. Gemeinden haben im Mock keine Fläche und bleiben Punkte; Gebiete dürfen
+ * sich überschneiden (auch im gleichen Segment), daher bekommt kein Partner einen Kreis, den er nur teilweise hat.
+ * partners: aus fetchPartners (areas mit key, lat/lng bei Gemeinden), areas: aus fetchAreaMap.
  * Rückgabe: { [Partner-ID]: { geometries, names (je Fläche der Gebietsname), towns: [Gebiet mit lat, lng] } }
  */
 export function partnerShapes(partners, areas) {
   const byKey = Object.fromEntries(areas.map((a) => [a.key, a]))
-  const kreisOf = (a) => a.path?.split('/').filter((k) => byKey[k]).at(-1)
-  const counts = {} // "Segment|Kreis" → { Partner-ID: Anzahl Gemeinden }
-  for (const p of partners) {
-    for (const a of p.areas) {
-      const kreis = byKey[a.key] ? null : kreisOf(a)
-      if (!kreis) continue
-      const c = (counts[`${p.segment}|${kreis}`] ??= {})
-      c[p.id] = (c[p.id] ?? 0) + 1
-    }
-  }
-  const owner = Object.fromEntries(Object.entries(counts)
-    .map(([k, c]) => [k, Number(Object.entries(c).sort((x, y) => y[1] - x[1])[0][0])]))
   return Object.fromEntries(partners.map((p) => {
     const own = p.areas.filter((a) => byKey[a.key]?.geometry)
-    const geometries = own.map((a) => byKey[a.key].geometry)
-    const names = own.map((a) => a.name)
-    const kreise = new Set()
-    const towns = []
-    for (const a of p.areas) {
-      if (byKey[a.key]) continue
-      const kreis = kreisOf(a)
-      if (kreis && owner[`${p.segment}|${kreis}`] === p.id) kreise.add(kreis)
-      else if (a.lat != null) towns.push(a)
-    }
-    kreise.forEach((k) => { geometries.push(byKey[k].geometry); names.push(byKey[k].name) })
-    return [p.id, { geometries, names, towns }]
+    return [p.id, {
+      geometries: own.map((a) => byKey[a.key].geometry),
+      names: own.map((a) => a.name),
+      towns: p.areas.filter((a) => !byKey[a.key] && a.lat != null),
+    }]
   }))
 }
 

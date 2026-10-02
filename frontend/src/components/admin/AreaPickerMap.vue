@@ -6,7 +6,7 @@ import { COUNTRIES, COUNTRY_CODES } from '../../lib/countries.js'
 
 // Karte im Partnerdialog: die kleinsten Flächen (Kreise/Bezirke/Départements, dazu Kantone und Stadtstaaten
 // ohne Unterteilung) sind anklickbar. Gelb = im Gebiet dieses Partners,
-// hell = vergeben an einen anderen Partner desselben Segments (je Segment exklusiv).
+// hell = auch bei einem anderen Partner desselben Segments (Gebiete dürfen sich überschneiden).
 // Der Modus legt fest, was ein Klick trifft: die Fläche selbst, ihr Land oder den ganzen Staat.
 // Shift + Ziehen wählt alle Flächen im Rechteck (im gewählten Modus).
 const props = defineProps({
@@ -61,11 +61,14 @@ function label(a) {
   return `${a.kind} ${a.name}`
 }
 
+/** Andere Partner, deren Gebiet die Fläche ganz enthält, als Text ('' = keiner) */
+const ownersOf = (path) => [...new Set(props.taken.filter((t) => within(path, t.path)).map((t) => t.partner))].join(', ')
+
 function unitFc() {
   return {
     type: 'FeatureCollection',
     features: units.value.map((a, i) => {
-      const owner = props.taken.find((t) => within(a.path, t.path))
+      const owner = ownersOf(a.path)
       return {
         type: 'Feature',
         id: i,
@@ -74,7 +77,7 @@ function unitFc() {
           key: a.key,
           name: label(a),
           selected: props.selected.some((s) => within(a.path, s.path)),
-          owner: owner?.partner ?? '',
+          owner,
         },
       }
     }),
@@ -85,11 +88,11 @@ function unitFc() {
 function noteFor(target) {
   const p = target.path
   if (props.selected.some((s) => within(p, s.path))) return 'im Gebiet, Klick entfernt'
-  const owner = props.taken.find((t) => within(p, t.path))
-  if (owner) return `vergeben an ${owner.partner}`
-  if (props.taken.some((t) => within(t.path, p))) return 'teilweise vergeben, Klick fügt die freien Teile hinzu'
-  if (props.selected.some((s) => within(s.path, p))) return 'teilweise im Gebiet, Klick nimmt alles auf'
-  return 'Klick fügt hinzu'
+  const owner = ownersOf(p)
+  const partly = !owner && props.taken.some((t) => within(t.path, p))
+  const also = owner ? ` (auch bei ${owner})` : partly ? ' (teilweise auch bei anderen Partnern)' : ''
+  if (props.selected.some((s) => within(s.path, p))) return `teilweise im Gebiet, Klick nimmt alles auf${also}`
+  return `Klick fügt hinzu${also}`
 }
 
 /** Hover hebt alle Flächen des Ziels hervor (im Modus Land das ganze Land) */
@@ -285,7 +288,7 @@ watch(mode, () => {
     </p>
     <ul class="ap-legend">
       <li><span class="ap-swatch" :style="{ background: fill }" /> Gebiet dieses Partners</li>
-      <li><span class="ap-swatch" :style="{ background: takenFill }" /> vergeben an anderen Partner (gleiches Segment)</li>
+      <li><span class="ap-swatch" :style="{ background: takenFill }" /> auch bei anderem Partner (gleiches Segment)</li>
     </ul>
   </div>
 </template>

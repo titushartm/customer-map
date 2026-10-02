@@ -328,9 +328,16 @@ const ready = computed(() => (isRadius.value ? status.value === 'ready' : loaded
 
 const placeLabel = computed(() => place.value?.label ?? location.value?.label ?? null)
 
+const TERRITORY_INLINE = 6
+const numFmtCtx = new Intl.NumberFormat('de-DE')
+const longTerritory = computed(() => props.audience === 'partner' && (meta.value.territories?.length ?? 0) > TERRITORY_INLINE)
+
 const contextLine = computed(() => {
   if (props.audience === 'partner') {
-    return meta.value.partner ? `Gebiet ${meta.value.partner}: ${(meta.value.territories ?? []).join(', ')}` : 'Ihr Gebiet'
+    // Große Gebiete (ITEBO: über 150 Regionen) nur als Zahl, die Liste klappt darunter auf
+    const t = meta.value.territories ?? []
+    if (!meta.value.partner) return 'Ihr Gebiet'
+    return t.length <= TERRITORY_INLINE ? `Gebiet ${meta.value.partner}: ${t.join(', ')}` : `Gebiet ${meta.value.partner}: ${numFmtCtx.format(t.length)} Regionen`
   }
   if (props.audience === 'intern') {
     const where = countryFilter.value === 'all' ? '' : ` ${COUNTRIES[countryFilter.value].in}`
@@ -390,7 +397,7 @@ const legend = computed(() => {
 })
 const hasFree = computed(() => collection.value.features.some((f) => f.properties.status === 'free'))
 // Lizenzarten als eigene Filter, nur wenn sie vorkommen
-const LICENCE_FILTERS = [['orga-year', 'Jahreslizenz'], ['orga-month', 'Monatslizenz'], ['pilot', 'Pilotphase']]
+const LICENCE_FILTERS = [['orga-year', 'Jahreslizenz'], ['orga-month', 'Monatslizenz'], ['pay-per-use', 'Pay-per-Use'], ['pilot', 'Pilotphase']]
 const statusOptions = computed(() => {
   const present = new Set(collection.value.features.map((f) => f.properties.licence_type))
   return [
@@ -426,6 +433,10 @@ function itemMeta(p) {
       <aside v-if="expanded" class="mm-panel">
         <header class="mm-head">
           <p class="mm-context">{{ contextLine }}</p>
+          <details v-if="longTerritory" class="mm-territory">
+            <summary>Alle anzeigen</summary>
+            <p>{{ [...meta.territories].sort((a, b) => a.localeCompare(b, 'de')).join(', ') }}</p>
+          </details>
           <h2 class="mm-title">{{ ready ? headline : 'Wer arbeitet in Ihrer Nähe schon mit SpeechMind?' }}</h2>
           <p v-if="ready && meta.hidden_count" class="mm-sub">{{ text.hidden(meta.hidden_count) }}</p>
           <p v-if="ready && peerLine" class="mm-peers">{{ peerLine }}</p>
@@ -626,6 +637,10 @@ function itemMeta(p) {
 
 .mm-head { padding: 24px 24px 20px; border-bottom: 1px solid var(--mm-line); }
 .mm-context { margin: 0 0 8px; color: var(--mm-muted); font-size: 0.95rem; }
+.mm-territory { margin: -4px 0 10px; font-size: 0.88rem; color: var(--mm-muted); }
+.mm-territory summary { cursor: pointer; width: fit-content; }
+.mm-territory summary:focus-visible { outline: 2px solid var(--mm-sign); outline-offset: 2px; }
+.mm-territory p { margin: 6px 0 0; max-height: 160px; overflow-y: auto; line-height: 1.45; }
 .mm-title {
   margin: 0;
   font-size: 1.6rem;

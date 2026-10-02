@@ -221,8 +221,7 @@ class PartnerTerritory(models.Model):
     eine Gemeinde aus der Referenz, in jedem unserer Länder. Ein Ziel gehört dazu, wenn seine Region darin
     liegt (region.path beginnt mit dem path dieser Region) und sein Segment das des Partners ist.
     Ämter/VG gehen nicht: Sie hängen in DE neben dem Kreis, nicht dazwischen.
-    Je Segment exklusiv: Überschneidungen zwischen aktiven Partnern desselben Segments verhindert
-    partner_admin._save (Präfix-Überschneidung lässt sich nicht als DB-Constraint ausdrücken).
+    Gebiete verschiedener Partner dürfen sich überschneiden, auch im gleichen Segment; dann sehen alle die Ziele.
     """
 
     ALLOWED_LEVELS = (RegionLevel.STAAT, RegionLevel.LAND, RegionLevel.KREIS, RegionLevel.GEMEINDE)
