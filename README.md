@@ -12,7 +12,7 @@ npm install
 npm run dev
 ```
 
-Die Ansichten sind Tabs (`#kunden`, `#partner`, `#intern`, `#admin`, `#liste`, `#empfehlen`). Die Anmeldung ist simuliert: Partner, Kunde und Scope wählst du oben rechts aus. Einen Einladungslink probierst du mit `?ref=HOY-9G5M#kunden` aus.
+Die Ansichten sind Tabs (`#kunden`, `#partner`, `#intern`, `#admin`, `#liste`, `#empfehlen`). Die Anmeldung ist simuliert: Partner, Kunde und Scope wählst du oben rechts aus. Einen Einladungslink probierst du mit `?ref=BAU-9EMI#kunden` aus.
 
 ## Die Ansichten
 
@@ -155,9 +155,10 @@ frontend/src/
     AreaPickerMap.vue                  Karte der Kreise zum Anklicken
   api/map.js                           fetch + Mock-Backend (VITE_MAP_USE_MOCK)
   composables/useLazyList.js           lange Listen stückweise rendern (Nachladen beim Scrollen)
-  mocks/regions.js                     Geo-Referenz Ostdeutschland (AGS, Name, Land, Einwohner, PLZ, Koordinaten)
+  mocks/regions.js                     Geo-Referenz: Kundenorte (amtlich) + Auszug weiterer Ziele (Ostdeutschland, Großstädte)
+  mocks/customerRegions.js             Orte der echten Kunden und echte Stadtwerke/DRK (erzeugt, siehe Kundendaten)
   mocks/targets.js                     Stadtwerke und DRK-Verbände je Region (Verwaltungen = alle Regionen)
-  mocks/customers.js                   Kundenstatus je Ziel (neue Kunden meist ohne Orga/Lizenz)
+  mocks/customers.js                   Kundenstatus je Ziel: echte Kunden mit Lizenz (erzeugt, siehe Kundendaten)
   mocks/partners.js                    Vertriebspartner (erfunden), Startzustand für den Admin-Tab
   mocks/referrals.js                   Regeln, Beispiel-Empfehlungen, Codes
   mocks/areas.json                     Staaten, Länder, Kreise in DE/AT/CH/FR mit Fläche (aus scripts/build_areas.py)
@@ -186,9 +187,21 @@ backend/maps/                          Skizze
 
 Die Flächen im Mock (`mocks/areas.json`, gebaut mit `scripts/build_areas.py`) sind vereinfachte Ableitungen der amtlichen Grenzen (Quellen und Download im Kopf des Skripts; DE über opendatasoft aus VG250, AT aus Statistik Austria, CH aus BFS/swisstopo, FR aus IGN); Länder, Régions und Staaten sind die Vereinigung ihrer Kreise. Gemeinden haben im Mock keine Fläche, ein Gemeinde-Gebiet fehlt deshalb auf der Karte. Im Betrieb liefert das Backend die Fläche als Vereinigung von `Region.boundary` der Gebietsregionen.
 
+## Kundendaten
+
+Die Kunden im Mock sind echt: der Organisations-Export `backend/data/api_organization_*.csv` mit den Lizenzen aus `backend/data/licence_data_orga.csv`. Der Export ist bereinigt und hat zusätzliche Spalten:
+
+- `region_key`, `region_name`: die Region aus den amtlichen Verzeichnissen (Gemeinde `DE-G-<AGS>`, Amt/VG/Samtgemeinde `DE-V-<Regionalschlüssel>`, Kreis `DE-K-…`, österreichische Gemeinde `AT-G-<GKZ>`). Ortsgemeinden ohne eigene Verwaltung (Rheinland-Pfalz, Samtgemeinden in Niedersachsen) zählen als ihre Verbandsgemeinde.
+- `segment` (verwaltung, stadtwerk, drk oder leer), `channel` (direkt, Dienstleister wie S24/kdvz/regio iT, Test/Demo).
+- `licence_type`, `licence_name`, `licence_hours`, `licence_used` aus der Lizenzdatei (Stunden statt Sekunden; bei kostenlos und Pay-per-Use ohne Stunden).
+- `on_map`: ja nur mit Segment und Lizenz. Firmen, Landesbehörden, Hochschulen, Kammern, Test-/Demokonten und Privatpersonen bleiben weg; `note` sagt, warum, und was korrigiert wurde (Land, Bundesland, PLZ, Typ, unsichere Zuordnungen).
+
+Leere Felder (Land, Bundesland, Typ, PLZ) sind ergänzt, wo die Zuordnung eindeutig ist. `scripts/build_customers.py` baut daraus `mocks/customers.js` und `mocks/customerRegions.js` (Einwohner, PLZ und Mittelpunkt aus Destatis bzw. Statistik Austria, Quellen im Kopf des Skripts). Mehrere Einträge für dasselbe Ziel werden zusammengefasst (frühestes Datum, stärkste Lizenz). Alle Kunden sind als Referenz freigegeben (so entschieden am 02.10.2026). Für einen neuen Export braucht jede Zeile `region_key`, `segment` und `on_map`; am einfachsten bekommt die Organisation im Backend gleich einen Verweis auf ihre `Region`.
+
 ## Noch offen
 
-- Echte Referenzliste: Die Werte in `mocks/regions.js` sind aus dem Gedächtnis zusammengestellt und gerundet. Einige kleine Codes (AGS, GKZ) sind nur illustrativ. Im Mock gibt es Ziele nur in Ostdeutschland und in den größeren Städten von AT, CH, FR.
+- Echte Referenzliste: Die Kundenorte sind amtlich, die übrigen Ziele in `mocks/regions.js` aus dem Gedächtnis zusammengestellt und gerundet, einige kleine Codes (AGS, GKZ) nur illustrativ. Noch-nicht-Kunden gibt es im Mock nur in Ostdeutschland und in den größeren Städten von AT, CH, FR; Kunden in Baden-Württemberg, NRW oder Tirol stehen daher fast allein auf der Karte, und die Abdeckung in Prozent ist dort zu hoch.
+- Lizenzempfehlung: Die echten Lizenzen laufen über Stunden (Jahres-/Monatslizenz, Pilot), die Empfehlung rechnet noch mit Plätzen und den Stufen Basis/Professional/Enterprise.
 - Welche Felder die Karten der Partner und Intern zeigen, und woher Lizenz- und Hardwaredaten kommen.
 - Kontaktdaten der Noch-nicht-Kunden liegen nicht vor. Eventuell per Anreicherung über die Website der Verwaltung (Impressum).
 - Empfehlungsprogramm: endgültige Prozente und Deckel, rechtliche Prüfung, Auszahlung/Verrechnung, Empfehlungskonto im Backend (`/referral/me/`, braucht die Anmeldung).

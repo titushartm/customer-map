@@ -76,7 +76,7 @@ function dismissInvite() {
 
 // Empfehlen: nur Kunden mit Lizenz können sich im Prototyp "anmelden"
 const referrers = listReferrers()
-const referrerKey = ref(referrers.find((r) => r.name === 'Hoyerswerda')?.key ?? referrers[0]?.key)
+const referrerKey = ref(referrers.find((r) => r.name === 'Bautzen')?.key ?? referrers[0]?.key)
 const currentPartner = computed(() => partners.value.find((p) => p.id === partnerId.value))
 
 const current = computed(() => TABS.find((t) => t.id === tab.value))

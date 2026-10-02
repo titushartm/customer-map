@@ -8,7 +8,6 @@ import { tenureOf } from '../lib/tenure.js'
 
 const NEARBY_KM = 60
 
-const seatsOf = (licence) => Number(/(\d+)\s*Plätze/.exec(licence ?? '')?.[1]) || null
 const tierFor = (seats) => (seats <= 5 ? 'Basis' : seats <= 15 ? 'Professional' : 'Enterprise')
 
 // Faustregeln, solange es zu wenige vergleichbare Kunden mit Lizenzdaten gibt
@@ -37,20 +36,20 @@ function joinDe(names) {
 const comparable = (a, b) => a.segment === b.segment && (a.segment !== 'verwaltung' || a.level === b.level)
 
 /**
- * Lizenz aus den Merkmalen des Ziels (Segment, Ebene, Größe): Median der ähnlichsten Kunden mit bekannter
- * Lizenz, sonst Faustregel. minSimilar = so viele Vergleichskunden braucht der Median mindestens.
+ * Lizenz aus den Merkmalen des Ziels (Segment, Ebene, Größe): Median der Plätze der ähnlichsten Kunden,
+ * sonst Faustregel. Die echten Lizenzen laufen über Stunden (licence); die Empfehlung rechnet noch mit Plätzen. minSimilar = so viele Vergleichskunden braucht der Median mindestens.
  */
 function licenceFor(target, customers, { minSimilar }) {
   const withDistance = (t) => ({ ...t, distance_km: Math.round(haversineKm(target.lat, target.lng, t.lat, t.lng)) })
-  // Vergleichbar: ähnlichste Größe (höchstens Faktor 2,5), nur Kunden mit bekannter Lizenz
+  // Vergleichbar: ähnlichste Größe (höchstens Faktor 2,5), nur Kunden mit bekannter Platzzahl
   const similar = customers
-    .filter((t) => t.key !== target.key && comparable(t, target) && seatsOf(t.licence) && target.size)
+    .filter((t) => t.key !== target.key && comparable(t, target) && t.seats && target.size)
     .map((t) => ({ ...withDistance(t), ratio: Math.abs(Math.log(t.size / target.size)) }))
     .filter((t) => t.ratio < Math.log(2.5))
     .sort((a, b) => a.ratio - b.ratio || a.distance_km - b.distance_km)
     .slice(0, 5)
   const bySimilar = similar.length >= minSimilar
-  const seats = bySimilar ? median(similar.map((t) => seatsOf(t.licence))) : rule(RULE_SEATS, target)
+  const seats = bySimilar ? median(similar.map((t) => t.seats)) : rule(RULE_SEATS, target)
   // Faustregel: ein Aufnahmeset je Sitzungsraum, größere Organisationen tagen parallel
   const sets = rule(RULE_SETS, target)
   return { tier: tierFor(seats), seats, sets, basis: bySimilar ? 'similar' : 'rule', similar }

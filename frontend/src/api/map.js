@@ -321,6 +321,7 @@ export function mockAllTargets() {
       customer_since: c?.since ?? null, // nur intern, nach außen geht customer_tenure
       public_reference: c?.public_reference ?? false,
       licence: c?.licence ?? null,
+      seats: c?.seats ?? null, // nur intern, für die Lizenzempfehlung
     }
   })
 }

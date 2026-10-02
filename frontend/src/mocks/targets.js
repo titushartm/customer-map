@@ -1,12 +1,15 @@
 // Zielorganisationen außerhalb der Verwaltungen (im Backend: Target mit segment != verwaltung).
 // Jede sitzt in einer Region (region = AGS bzw. Kreisschlüssel), daher Bundesland, PLZ und Partnergebiet.
-// Namen folgen dem üblichen Muster, Größen (Mitarbeitende) sind geschätzt. Kundenstatus ist erfunden.
+// Echte Kunden (Stadtwerke, DRK) kommen aus customerRegions.js; die Liste hier sind weitere mögliche Ziele,
+// Namen nach dem üblichen Muster, Größen (Mitarbeitende) geschätzt.
 // Verwaltungen brauchen keinen Eintrag: Jede Region ist automatisch eine Ziel-Verwaltung.
 
 const sw = (region, name, size) => ({ key: `sw-${region}`, segment: 'stadtwerk', region, name, size })
 const drk = (region, name, size) => ({ key: `drk-${region}`, segment: 'drk', region, name, size })
 
-export const EXTRA_TARGETS = [
+import { CUSTOMER_TARGETS } from './customerRegions.js'
+
+const SAMPLE_TARGETS = [
   sw('DE-G-14625240', 'Stadtwerke Hoyerswerda', 150),
   sw('DE-G-14625020', 'Stadtwerke Bautzen', 200),
   sw('DE-G-14626110', 'Stadtwerke Görlitz', 350),
@@ -48,6 +51,9 @@ export const EXTRA_TARGETS = [
   drk('FR-G-69123', 'Croix-Rouge-Delegation Rhône', 400),
   drk('FR-G-67482', 'Croix-Rouge-Delegation Bas-Rhin', 300),
 ]
+
+const customerKeys = new Set(CUSTOMER_TARGETS.map((t) => t.key))
+export const EXTRA_TARGETS = [...CUSTOMER_TARGETS, ...SAMPLE_TARGETS.filter((t) => !customerKeys.has(t.key))]
 
 // Leicht versetzt zum Ortsmittelpunkt, damit Stadtwerk, DRK und Verwaltung nicht exakt übereinander liegen
 export const SEGMENT_OFFSET = { stadtwerk: [0.018, 0.012], drk: [-0.016, 0.02] }

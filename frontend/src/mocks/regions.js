@@ -1,14 +1,18 @@
 // Referenzliste (Tabelle Region): Verwaltungen mit Geo- und Strukturdaten, egal ob Kunde.
-// Auszug: Ostdeutschland (Gemeinden und einige Landkreise) und die größeren Städte in AT, CH, FR.
-// Werte aus dem Gedächtnis zusammengestellt: Einwohnerzahlen gerundet, Koordinaten = ungefährer Ortsmittelpunkt,
-// bei kleinen Gemeinden ist der Code nur illustrativ. Für den Betrieb aus den amtlichen Listen ersetzen.
+// Zwei Teile: die Orte aller echten Kunden aus den amtlichen Verzeichnissen (customerRegions.js, erzeugt) und
+// unten ein Auszug weiterer Ziele: Ostdeutschland (Gemeinden und einige Landkreise) und die größeren Städte in
+// AT, CH, FR. Dieser Auszug ist aus dem Gedächtnis zusammengestellt: Einwohnerzahlen gerundet, Koordinaten =
+// ungefährer Ortsmittelpunkt, bei kleinen Gemeinden ist der Code nur illustrativ. Für den Betrieb aus den
+// amtlichen Listen ersetzen. Steht ein Ort in beiden Teilen, gilt der amtliche.
 //
 // Felder: key (<Land>-<Ebene>-<amtlicher Code>: DE AGS, AT Gemeindekennziffer, CH BFS-Nr., FR Code INSEE),
 //         country, parent (Schlüssel der übergeordneten Fläche in areas.json), sameAsParent (deckungsgleich
 //         mit parent, z. B. kreisfreie Stadt, Statutarstadt, Paris: im Gebietsdialog nicht noch einmal wählbar),
-//         level ('gemeinde' | 'kreis'), name, state (Land/Kanton/Région), population, postcodes (erste = Haupt-PLZ), lat, lng
+//         level ('gemeinde' | 'verband' | 'kreis'; verband = Amt, VG, Samtgemeinde), name, state (Land/Kanton/Région), population, postcodes (erste = Haupt-PLZ), lat, lng
 
-export const REGIONS = [
+import { CUSTOMER_REGIONS } from './customerRegions.js'
+
+const SAMPLE_REGIONS = [
   // Berlin
   { key: 'DE-G-11000000', country: 'DE', parent: 'DE-L-11', sameAsParent: true, level: 'gemeinde', name: 'Berlin', state: 'Berlin', population: 3_662_000, postcodes: ['10115', '10117', '10555'], lat: 52.520, lng: 13.405 },
 
@@ -122,5 +126,8 @@ export const REGIONS = [
   { key: 'FR-G-68224', country: 'FR', parent: 'FR-K-68', level: 'gemeinde', name: 'Mulhouse', state: 'Grand Est', population: 105_000, postcodes: ['68100'], lat: 47.750, lng: 7.336 },
   { key: 'FR-G-68066', country: 'FR', parent: 'FR-K-68', level: 'gemeinde', name: 'Colmar', state: 'Grand Est', population: 67_000, postcodes: ['68000'], lat: 48.079, lng: 7.358 },
 ]
+
+const customerKeys = new Set(CUSTOMER_REGIONS.map((r) => r.key))
+export const REGIONS = [...CUSTOMER_REGIONS, ...SAMPLE_REGIONS.filter((r) => !customerKeys.has(r.key))]
 
 export const REGION_BY_KEY = Object.fromEntries(REGIONS.map((r) => [r.key, r]))

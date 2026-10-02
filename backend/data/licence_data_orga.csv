@@ -1,0 +1,1206 @@
+"name","type_of","amount","is_used"
+SpeechMind GmbH,orga-year,5400000,false
+Maep GmbH,orga-month,1080000,true
+ALEGER GLOBAL GmbH,budget,1440000,false
+SL Naturenergie,orga-year,1224000,false
+RAG-Stiftung,,,
+STRAMA MPS GmbH und Co. KG,,,
+ATMOS MedizinTechnik,,,
+Fima GmbH,,,
+STAHLKONTOR GmbH & Co. KG,orga-year,720000,true
+Sigmatic AG,orga-month,108000,true
+UFE-Consulting AG,orga-year,1296000,false
+Hess Advokatur AG,,,
+Berater & Partner AG,,,
+Läser AG,,,
+Woche-Pass AG,,,
+Climartis Service AG,budget,11466,false
+Previon Plus AG,,,
+Lehner Versand AG,orga-month,36000,false
+AUVA,free,8,false
+beckers bester GmbH,budget,36000,false
+replique GmbH,,,
+ViewAR,,,
+Anwaltsbüro Quirmbach & Partner mbB,orga-month,172800,false
+Energieberatung Schmidt W.E.S.T. GmbH,orga-month,28800,true
+ventuno GmbH,orga-month,108000,false
+Ärztekammer Westfalen-Lippe,orga-month,108000,false
+medhochzwei Verlag GmbH,,,
+E1 Energiemanagement GmbH,,,
+Hilleprandt & Partner,orga-year,345600,false
+Salinen Immobilien GmbH,,,
+BFW Leipzig Berufsförderwerk gGmbH,orga-year,1296000,false
+Megger,,,
+Stadt Einbeck,orga-year,1296000,false
+Gemeinde Waldbronn,orga-year,1296000,false
+Finezia AG,free,2,true
+Stadt Krakow am See,orga-year,432000,false
+IHK für Rheinhessen,pilot,313200,true
+Rudolf Hörmann GmbH & Co. KG,orga-year,1123200,true
+Stadt Büdingen,orga-year,2160000,false
+Dämmtechnik Trapp GmbH,pilot,331200,true
+Kliniken Ostalb gkAöR,orga-year,432000,false
+Stadtgemeinde Seekirchen,orga-year,356400,false
+Stadt Witzenhausen,orga-year,1296000,false
+Stadt Wertheim,orga-year,1296000,false
+Stadt Geislingen an der Steige,orga-year,540000,false
+HEINE + BEISSWENGER Stiftung + Co. KG,month,28800,true
+STIFTUNG PS.SPEICHER,orga-month,108000,true
+IMA - International Management Assistants,orga-year,180000,false
+Stadt Uhingen,orga-year,1296000,true
+Stadt Rheine,orga-year,1429200,false
+Stadt Wülfrath,orga-year,432000,false
+SPD  Stadtrat Dresden,orga-month,360000,true
+Fa. büroforum - planen und einrichten GmbH,pilot,324000,true
+Stadt Heidelberg,orga-year,1296000,false
+TU Dresden Pilotphase,pilot,180000,true
+Verbandsgemeinde Liebenwerda,orga-year,486000,false
+Stadt Singen,orga-year,1296000,false
+Braunschweig Beteiligungen GmbH,orga-month,28800,false
+bauverein AG,pilot,324000,true
+Stadt Tangerhütte,orga-year,1296000,false
+Stadt Ladenburg,orga-year,1296000,false
+Heilpädagogische Praxis Pusteblume,pilot,86400,true
+Stadt Rodgau,orga-year,540000,false
+Landkreis Elbe-Elster,orga-year,432000,false
+Volksbank Mittelhessen eG,pilot,648000,true
+Mathias Warstat,orga-year,216000,false
+Gemeinde Panketal,orga-year,1296000,false
+Samtgemeinde Heeseberg,orga-month,28800,true
+Wohnen und Pflege in Artlandsberg,pilot,324000,true
+Wasserverband Strausberg-Erkner,orga-year,432000,false
+Stadt Krefeld,orga-year,1728000,false
+Gemeinde Empfingen,pilot,86400,true
+Tourismuszentrale Rostock & Warnemünde ,orga-year,1296000,false
+Test,free,8,false
+Michael Schneider,orga-month,28800,true
+LUPCOM media GmbH,orga-year,432000,true
+reha gmbh,budget,54000,false
+Brandenburger Theater GmbH,orga-month,36000,false
+Stadt Konstanz,orga-year,1296000,false
+Stadt Bad Iburg,orga-year,432000,false
+BLAEK Bayerische Landesärztekammer,pilot,324000,true
+Heidinger Kühlsysteme,orga-month,28800,true
+UMB AG,free,20,false
+Landkreis Ludwigslust-Parchim,pilot,108000,true
+Amt Usedom Nord,pilot,324000,true
+Städtisches Krankenhaus Nettetal GmbH,orga-year,432000,false
+Stadt Harsewinkel,orga-year,1296000,true
+Czulkowski Service GmbH,budget,36000,false
+IB Berlin-Brandenburg gGmbH ,orga-year,720000,false
+Kufgem GmbH,orga-year,8640000,false
+Gemeinde Wildschönau,free,2,false
+Gemeinde Aschau im Zillertal,free,2,true
+Gemeinde Seefeld in Tirol,orga-year,360000,false
+Gemeinde Hallwang,orga-year,720000,false
+Gemeinde Anif,orga-year,360000,false
+Marktgemeinde Kundl,orga-year,360000,false
+Stadtgemeinde Bischofshofen,free,2,true
+Marktgemeinde Altenmarkt,orga-year,360000,false
+Gemeinde Fusch a.d. Glocknerstraße,free,2,true
+Marktgemeinde Fieberbrunn,free,2,true
+Gemeinde Krispl,free,2,false
+Stadtgemeinde Hallein,free,4,false
+Gemeinde Oetz,free,2,false
+Gemeinde Ampass,free,2,true
+Gemeinde Kaunertal,free,2,true
+Marktgemeinde Zirl,orga-year,360000,false
+Stadtgemeinde Oberndorf bei Salzburg,orga-year,720000,false
+Gemeinde Lend,free,2,false
+Stadtgemeinde Radstadt,orga-year,720000,false
+Arte,free,15,false
+Gemeinde Kramsach,free,2,true
+Stadtgemeinde Lienz,free,2,false
+Gemeinde Karrösten,free,2,true
+Marktgemeinde Neukirchen,free,4,false
+Marktgemeinde Grödig,free,1,false
+Marktgemeinde Telfs,free,2,true
+Gemeinde Rosendahl,orga-year,1296000,false
+Tauernkliniken GmbH,free,2,false
+ Gemeinde Strobl,orga-year,360000,false
+Gemeinde Navis,free,2,true
+Gemeinde Mieming,free,2,false
+Gemeinde Bad Gastein,orga-year,720000,false
+Gemeinde Hollersbach,orga-year,360000,false
+Gemeinde Fritzens,free,2,false
+Gemeinde Uttendorf,free,2,true
+Gemeinde Thaur,orga-year,720000,false
+Marktgemeinde Taxenbach,free,2,false
+Hessische Landesstelle für Suchtfragen e.V. (HLS),orga-year,432000,false
+Gemeinde Niederndorferberg,free,2,true
+Gemeinde Saalbach-Hinterglemm ,free,2,true
+Stadt Güglingen,orga-year,432000,false
+Stadt Bassum,orga-year,432000,false
+Stadtsportbund Potsdam e.V.,orga-year,345600,true
+Stadt Pirmasens,orga-year,1440000,false
+Gemeinde Eben am Achensee,orga-year,360000,false
+Marktgemeinde Wattens,free,4,true
+Samtgemeinde Artland,orga-year,864000,false
+Stadtgemeinde Wörgl,free,2,true
+Evangelische Bank eG,orga-year,432000,false
+Stadt Heilbronn,orga-year,1296000,false
+Gemeinde Herzebrock-Clarholz,orga-year,1296000,false
+KRH Klinikum Hannover,orga-year,126000,true
+Gemeinde Wenns,free,2,true
+Stadtgemeinde Neumarkt am Wallersee,free,2,false
+Berner Torantriebe KG,budget,61200,false
+AWU Abfallwirtschafts-Union Oberhavel GmbH,pilot,324000,true
+Stadtgemeinde Saalfelden,free,2,false
+Gemeinde Mils bei Hall,free,2,false
+Stadt Maulbronn,orga-month,108000,false
+Stadtgemeinde Kufstein,orga-year,1080000,false
+Handwerkskammer Region Stuttgart,orga-year,432000,false
+Sehlhoff GmbH,orga-month,108000,false
+Gemeinde Bruck an der Glocknerstraße,free,2,false
+Gemeinde Pfarrwerfen,free,2,true
+Landratsamt Rhein-Neckar-Kreis,orga-year,900000,false
+Verbandsgemeinde Beetzendorf-Diesdorf,orga-year,1296000,false
+Landkreis Hildesheim,orga-year,1296000,false
+Stadtverwaltung Mühlheim an der Donau,orga-year,345600,true
+Stiftung Lebenshilfe Zollernalb,orga-year,360000,false
+Stadt Hückelhoven,orga-year,1296000,false
+Stadt Nettetal,pilot,324000,true
+Kreisverwaltung Altenkirchen,orga-year,432000,false
+Stadt Wolfenbüttel,orga-year,6480000,false
+NOVENTI Health SE,orga-year,864000,false
+Stadt Lengerich,free,6,false
+Gemeinde Silz,free,2,false
+Stadt Bönnigheim,orga-year,864000,false
+Handwerkskammer Reutlingen,pilot,324000,true
+Stadt Sehnde,pilot,324000,true
+Stadt Herbolzheim,orga-year,432000,false
+Marktgemeinde Lofer,orga-year,360000,false
+DRK KV Leipzig-Land e.V,orga-month,28800,true
+Stadtwerke Kufstein,free,10,false
+Gemeinde Bürmoos,orga-year,720000,false
+Demo Organisation SpeechMind,orga-year,1080000,false
+Amt Warnow-West,orga-year,432000,false
+XITASO GmbH,pilot,324000,true
+more! software GmbH & Co. KG,orga-year,900000,false
+Stadt Bretten,orga-year,864000,false
+Marktgemeinde Jenbach,free,2,false
+ Stadtentwicklung und Mobilität GbR,orga-month,36000,false
+Stadtverwaltung Großröhrsdorf,orga-year,1296000,false
+Stadt Villingen-Schwenningen,orga-year,1296000,false
+Stadt Schmölln,orga-year,432000,false
+Stadt Unna,orga-year,1296000,false
+Amt Güstrow-Land,orga-year,1296000,false
+Gemeinde Grenzach-Wyhlen,orga-month,108000,false
+ALACsystems GmbH,orga-year,28800,true
+Stadtverwaltung Meppen,orga-year,432000,false
+Verbandsgemeinde Höhr-Grenzhausen,orga-month,36000,false
+Deutsches Jugendherbergswerk,orga-year,432000,false
+Gemeinde Schwoich,free,3,false
+oncampus GmbH,pilot,324000,true
+ZG Raiffeisen eG,orga-month,108000,false
+Luye Pharma AG,orga-month,28800,true
+Gemeinde Puch bei Hallein,orga-year,360000,false
+Klinik Diakonissen Schladming,month,28800,true
+Strictly Business,orga-month,108000,true
+Stadt Dissen am Teutoburger Wald,orga-year,1296000,false
+Gemeinde Laudenbach,orga-year,432000,false
+ACRIBO GmbH,pilot,36000,true
+Sternberg24,orga-month,432000,true
+FC Amberg,month,28800,true
+Test Rafiq,orga-year,720000,false
+Stadt Ahaus,orga-year,864000,false
+Samtgemeinde Nord-Elm,orga-year,432000,false
+Landratsamt Alb-Donau-Kreis,orga-year,720000,false
+TIHV Tiroler Immobilien Hausverwaltungs GmbH,free,2,false
+Kommunalverband für Jugend und Soziales Baden-Württemberg,pilot,324000,false
+Stadt Rietberg,orga-year,1296000,false
+Gemeinde Havixbeck,orga-year,1296000,false
+Stadt Böblingen,orga-year,1296000,false
+kdvz Rhein-Erft-Rur,pilot,108000,false
+Stadtgemeinde Reutte,free,2,false
+Stadtgemeinde Kapfenberg,orga-year,432000,false
+Gemeinde Wattenberg,free,1,true
+Gemeinde Westendorf,free,2,false
+Edingen-Neckarhausen,pilot,324000,true
+Gemeinde Ramsau,free,2,false
+Gemeinde Hof bei Salzburg,free,2,true
+Marktgemeinde Vomp,free,2,false
+Marktgemeinde Oberalm,orga-year,720000,false
+Gemeinde Göming,free,2,false
+Marktgemeinde Großarl,orga-year,720000,false
+Gemeinde Bergheim,orga-year,360000,false
+Gemeinde Kirchberg in Tirol,free,2,false
+JUL Pflege GmbH,orga-month,72000,false
+Marktgemeinde Bad Hofgastein,free,2,false
+Braunschweiger Verkehrs-GmbH,orga-year,1728000,true
+Gemeinde Henndorf am Wallersee,orga-year,1080000,false
+Gemeinde Ischgl,free,2,false
+Stadt Schneverdingen,orga-month,108000,false
+Gemeinde St. Jakob in Haus,free,2,false
+Gemeinde Patsch,free,2,true
+Kreis Paderborn,orga-year,1296000,false
+Landratsamt Main-Spessart,orga-year,1296000,false
+Stadt Freudenstadt,orga-year,1296000,false
+Montagnapower e.U.,orga-month,28800,true
+Gemeinde Plankstadt,orga-year,1296000,false
+Stadt Gera,pilot,324000,true
+R. STAHL Aktiengesellschaft,orga-year,1296000,true
+Gemeinde Bramberg am Wildkogel,free,2,false
+Gemeindeverwaltung Ascheberg,orga-year,432000,false
+Landratsamt Augsburg,orga-year,1296000,false
+Gemeinde Mettingen,orga-month,72000,false
+MÜLLER WELT GmbH,month,28800,true
+Gemeinde Kleinarl,free,2,true
+Gemeinde Bruck an der Glocknerstraße,,,
+Stadt Bocholt,orga-year,1728000,false
+Samtgemeinde Sögel,pilot,54000,true
+Stadt Borken,orga-year,1296000,false
+Stadt Ahlen,orga-month,108000,false
+Zukunftsagentur Rheinisches Revier,orga-year,1296000,false
+Stadt Fellbach,orga-year,864000,false
+Partner SVS,pilot,72000,true
+Gemeinde Reith bei Kitzbühel,free,2,false
+Stadt Ditzingen,orga-year,1296000,false
+Gemeinde Imsterberg,orga-year,360000,false
+Gemeinde Ensdorf,orga-month,36000,true
+Marktgemeinde Sillian,orga-year,360000,false
+Gemeinde Gries im Sellrain,free,2,false
+Stadt Nordhorn,orga-year,439200,false
+Gemeinde Maria Alm,free,2,false
+Stadtgemeinde St. Johann im Pongau,orga-year,360000,false
+Stadt Königs Wusterhausen,orga-year,864000,false
+Kreisjugendring Esslingen e. V. (KJR),pilot,324000,true
+Stadt Aichtal,orga-year,864000,true
+Stadt Wehrheim,orga-month,36000,false
+Landratsamt Lörrach,orga-year,432000,false
+Stadt Kenzingen,orga-year,432000,false
+KUHN RIKON AG,orga-month,108000,true
+Gemeinde Nordkirchen,orga-year,1296000,false
+Gemeinde Ellmau,free,4,true
+Kufgem Demo (EGOVDEMO2019),orga-year,216000,false
+Gemeinde Mülsen,orga-year,432000,false
+AWO Werra Meißner e.V.,orga-month,36000,true
+Gemeinde St. Margarethen im Lungau,orga-year,360000,false
+Marktgemeinde Werfen,orga-year,360000,false
+Gemeinde Bad Vigaun,orga-year,360000,false
+Landkreis Grafschaft Bentheim,orga-year,864000,false
+"Bezirksamt Neukölln, Geschäftsbereich Soziales und Gesundheit",orga-year,1296000,false
+Gemeinde Jungholz,free,2,false
+Gemeinde St. Leonhard im Pitztal,free,2,false
+Österreichischer Alpenverein,pilot,324000,true
+Gemeinde Mutters,free,2,false
+Stadt Borkum,orga-year,259200,false
+Versorgungswerk der Zahnärztekammer Berlin,orga-year,432000,false
+Stadt Vaihingen an der Enz,orga-year,1296000,false
+Amt Lützow-Lübstorf,orga-year,1296000,false
+Odenwaldkreis,pilot,324000,true
+Gemeinde Assling,orga-year,360000,false
+Stadt Dessau-Roßlau,orga-year,3456000,false
+HENKEL Beiz- und Elektropoliertechnik Betriebs GmbH,month,72000,true
+Gemeinde Walheim,orga-year,432000,false
+Stadt Braunschweig,pilot,324000,true
+Stadt Rheinstetten,orga-year,1335600,false
+RIS GmbH,free,2,false
+DECHEMA Gesellschaft für Chemische Technik und Biotechnologie e.V.,orga-year,1476000,false
+Industrie- und Handelskammer (IHK) zu Leipzig,orga-month,108000,false
+Seiko Germany,pilot,324000,true
+Gemeinde Untereisesheim,orga-month,108000,false
+Gemeinde Serfaus,orga-year,360000,false
+Universität Wien,month,28800,true
+HTW Dresden,free,50,false
+Stadt Baden-Baden,orga-year,1296000,false
+Gemeinde Ehrwald,free,2,false
+Stadt Weingarten,orga-year,1296000,false
+Stadt Koblenz,orga-month,108000,false
+Amt Brück,orga-year,1296000,false
+Gemeinde Ilvesheim,orga-month,108000,false
+Landratsamt Göppingen,budget,234000,false
+Kreis Wesel,orga-year,1800000,false
+SILVRETTASEILBAHN AG,free,2,false
+Gemeinde Schwarzach im Pongau,orga-year,360000,false
+Stadtverwaltung Glauchau,orga-year,1296000,false
+Gemeinde Hagen a.T.W.,orga-year,432000,false
+Gemeinde Längenfeld,free,2,true
+novumprojekt,pilot,324000,false
+Landeshauptstadt Stuttgart,pilot,1440000,false
+Landeskirche Braunschweig,pilot,324000,true
+ITK Harburg,orga-year,1296000,false
+Stadt Oelde,orga-month,108000,false
+Gemeinde Alpbach,free,2,false
+Gemeinde Leogang,free,2,false
+Markt Meitingen,orga-year,432000,false
+Gemeindeverwaltung Mönchweiler,orga-year,432000,false
+Soziale Dienste Vorderes Zillertal,free,2,true
+ Verbandsgemeinde Hermeskeil,orga-year,1296000,false
+Samtgemeinde Fürstenau,orga-year,432000,false
+Landratsamt Altenburger Land,orga-year,1296000,false
+Verwaltungsverband Weißer Schöps/Neiße,pilot,324000,false
+Gemeinde Bad Rothenfelde,orga-year,1296000,false
+Stadt Plauen,orga-year,1296000,false
+ Landkreis Günzburg,orga-month,36000,false
+Stadt Hamminkeln,pilot,324000,true
+Gemeinde Brieselang,orga-year,1296000,false
+Stadtverwaltung Tanna,orga-year,432000,false
+Gemeinde Jochberg,free,2,true
+Verbandsgemeindeverwaltung Annweiler am Trifels,pilot,324000,true
+Stadt Mittenwalde,orga-year,1296000,false
+Sennegemeinde Hövelhof,orga-month,36000,false
+Stadt Rastatt,orga-year,1296000,false
+Gemeinde Dorfgastein,free,2,true
+Marktgemeinde St. Veit im Pongau,free,2,false
+Wohnbaugruppe Augsburg,pilot,324000,true
+Kirchheim unter Teck,orga-year,432000,false
+Gemeinde Pfaffenhofen,free,2,false
+Somacos GmbH und Co. KG,free,100,false
+EMUGE,free,8,false
+Stadt Sindelfingen,orga-month,108000,false
+Gemeinde Hippach,free,2,true
+Gemeinde Wildermieming,free,3,false
+Heime Hall,free,5,false
+Landkreis Osterholz,pilot,324000,true
+Gemeinde Tarrenz,free,2,false
+Gemeinde Prutz,free,2,false
+Stadtgemeinde Schwaz,orga-year,360000,false
+Marktgemeinde Mattsee,free,2,false
+Stiftung Bildung der katholischen Krankenhäuser,orga-month,36000,true
+Gemeinde Langkampfen,free,2,false
+Stadt Fürstenfeldbruck,orga-year,1296000,false
+Stadtverwaltung Wildberg,orga-year,1296000,false
+Stadtgemeinde Hall in Tirol,free,2,true
+Stadtverwaltung Lohmar,orga-month,108000,false
+Gemeinde Gäufelden,orga-year,1296000,false
+Stadtverwaltung Weida,orga-year,432000,false
+KVINNE GmbH,pilot,324000,true
+Stadtverwaltung Schwäbisch Gmünd,orga-year,1296000,false
+Landesamt für Gesundheit und Soziales Berlin,orga-year,1296000,false
+Gemeinde Recke,orga-year,1296000,false
+Leibniz-Institut für ökologische Raumentwicklung,orga-year,432000,false
+Verbandsgemeinde Elbe-Havel-Land,orga-year,1296000,false
+Neustadt (Dosse),pilot,324000,true
+Stadtverwaltung Oberursel (Taunus),orga-year,1296000,false
+Gemeinde Adelberg,orga-month,36000,false
+Gemeinde Grünheide (Mark),orga-year,1296000,false
+Stadt Dingelstädt,orga-year,432000,false
+Samtgemeinde Gieboldehausen,pilot,324000,true
+Stadt Aachen,orga-month,36000,false
+Stadt Niedernhall,orga-year,432000,false
+Kur- und Tourismusverband Bad Gastein,orga-year,360000,false
+Wirtschaftskammer Kufstein,free,2,false
+Uni Wuppertal,pilot,324000,true
+"Landesbüro Berlin, Friedrich-Ebert-Stiftung e.V.",pilot,324000,true
+Stadt Dülmen,orga-year,864000,false
+Stadt Meerbusch,orga-year,1296000,false
+"Freie Hansestadt Bremen (Umwelt, Klima und Wissenschaft)",pilot,324000,false
+Stadt Gaggenau,orga-year,1296000,false
+Marktgemeinde Straßwalchen,orga-year,360000,false
+Gemeinde Nüziders,orga-year,432000,false
+Gemeindeverwaltung Rietheim-Weilheim,pilot,324000,true
+Abfallwirtschaftsbetrieb Böblingen,pilot,324000,true
+Landratsamt Calw,orga-year,432000,false
+Stadt Holzminden,pilot,216000,false
+Amt Goldberg-Mildenitz,orga-year,432000,false
+Gemeinde Schlitters,free,2,false
+Stadtgemeinde Zell am See,free,2,true
+Marktgemeinde Tamsweg,orga-year,720000,false
+Hochschule Ravensburg-Weingarten,pilot,648000,true
+Gemeinde Innervillgraten,free,2,true
+Stadt Stutensee,orga-year,1296000,false
+Bezirksjugendring Unterfranken des Bayerischen Jugendrings KdöR,pilot,450000,false
+Gemeindeverwaltung Kronau,orga-year,432000,false
+Kreis Borken,orga-year,3024000,false
+Abwasserverband Lienzer Talboden,free,3,false
+Stadt Mosbach,orga-year,432000,false
+Studienstiftung des deutschen Volkes,pilot,324000,true
+Regionale Verkehrsgesellschaft Dahme-Spreewald mbH,pilot,324000,false
+Fachhochschule Kufstein Tirol,free,10,false
+Zell am Harmersbach,orga-year,864000,false
+Arbeiter-Samariter-Bund Landesverband Sachsen e. V.,pilot,324000,false
+Leonding (Testlizenz),free,2,true
+Gemdat OÖ,orga-year,1296000,false
+Stadt Füssen,orga-year,432000,false
+Musterstadt,pilot,54000,false
+Johann-Peter-Schäfer-Schule,orga-year,1296000,false
+LWV Hessen,orga-year,1728000,false
+Gemeinde Adnet,orga-year,360000,false
+Zeppelin Museum Friedrichshafen GmbH,orga-year,432000,false
+Stadt Ludwigslust,orga-year,1314000,false
+Gemeinde Deizisau,orga-year,432000,false
+Stadtverwaltung Zweibrücken,orga-year,1296000,false
+Ärztekammer für Niederösterreich,orga-month,36000,false
+EVK Wesel,free,8,false
+Gemeinde Vorderhornbach,free,2,false
+Regionalmanagement Kitzbühel,free,2,false
+Wirtschaftsförderung Oftringen Zofingen Rothrist ,free,8,false
+GEMDAT NÖ,free,2,false
+ Sächsischer Städte- und Gemeindetag e.V.,pilot,244800,true
+Digital-Lotsen-Sachsen Projektteam,pilot,504000,false
+Stadt Langenau,orga-month,108000,false
+Große Kreisstadt Grimma,orga-year,1296000,false
+Gemeinde Uedem,orga-year,432000,false
+Inselgemeinde Langeoog,orga-month,36000,false
+Stadt Wernigerode,orga-year,864000,false
+Landesjägerschaft Niedersachsen e.V.,orga-year,432000,false
+Stadt Wanzleben-Börde,orga-month,108000,false
+Stadt Lützen,orga-year,1296000,false
+"Freie Hansestadt Bremen Abteilung 2 ""Technischer Umweltschutz, Naturschutz und Grünflächen“",pilot,324000,false
+Gemeinde Mulfingen,orga-year,432000,false
+Gemeinde Werfenweng,free,2,false
+Gemeinde Forstau,free,2,false
+Gemeinde Wustermark,orga-year,1296000,false
+Komm.ONE Demo,orga-year,864000,false
+Landratsamt Wartburgkreis,orga-year,648000,false
+Stadt Selm,pilot,324000,true
+Stadt Leinfelden-Echterdingen,orga-year,432000,false
+Digitale Hochschule NRW c/o Ruhr-Universität Bochum,orga-year,432000,false
+Kreis Viersen,orga-year,432000,false
+Amt Friesack,orga-year,432000,false
+Stadt Herrenberg,orga-month,36000,false
+Gemeinde Hüttau,free,2,false
+Gemeinde Zeuthen ,orga-year,903600,false
+Stadt Bühl,orga-year,1296000,false
+Landkreis Wolfenbüttel,orga-year,1296000,false
+Regionalverband Tennengau,orga-year,360000,false
+Stadt Verden (Aller),orga-year,1728000,false
+Kremsmünster (Testlizenz),free,10,false
+Alberndorf in der Riedmark (Testlizenz),free,6,false
+MACH Architektur & Projektmanagement GmbH,free,2,false
+Marktgemeinde Matrei in Osttirol,orga-year,360000,false
+Gemeinde Ladis,orga-year,360000,false
+Bundesstadt Bonn,pilot,324000,false
+Stadt Forchtenberg,orga-year,432000,false
+Stadtwerke Bielefeld GmbH,orga-year,432000,false
+Landkreis Emsland,pilot,324000,true
+Landkreis Havelland,orga-year,3888000,false
+Kommunalkredit Public Consulting GmbH,orga-year,432000,false
+Scharnstein,orga-year,180000,false
+Stadtverwaltung Crailsheim,orga-year,1296000,false
+Stadtverwaltung Frankenthal (Pfalz),orga-year,432000,false
+Freistadt,orga-year,180000,false
+SENIO-VITAL Unternehmensverbund,pilot,324000,true
+Ansfelden (Testlizenz),free,2,false
+Marktgemeinde Matrei am Brenner,free,2,false
+Stadt Cottbus/Chóebuz,pilot,972000,true
+Luftenberg an der Donau,orga-year,180000,false
+Verwaltungsgemeinschaft Marktheidenfeld,pilot,324000,true
+Kassenzahnärztliche Vereinigung Hessen,orga-year,1296000,false
+Stadt Volkmarsen,orga-year,432000,false
+Pregarten (Testlizenz),free,2,false
+Ried im Traunkreis (Testlizenz),free,2,false
+Verbandsgemeinde Römerberg-Dudenhofen,pilot,324000,true
+Sandl (Testlizenz),free,2,false
+Gmunden (Testlizenz),free,2,false
+Freinberg (Testlizenz),free,2,false
+Stadt Dormagen,pilot,324000,true
+Stadt Winnenden,orga-year,1296000,false
+Gemeinde Bohmte,orga-year,432000,false
+Aistersheim (Testlizenz),free,2,false
+RECON Europe GmbH,free,2,true
+Grieskirchen (Testlizenz),free,3,false
+Lutherstadt Wittenberg,orga-year,6480000,false
+Gemeinde Schutterwald,orga-year,439200,false
+Verwaltungsgemeinschaft Neumarkt i.d.OPf.,pilot,324000,true
+Stadt Billerbeck,orga-year,432000,false
+J. Klausner Professional Multimedia GmbH,free,5,false
+Herzogsdorf (Testlizenz),free,2,false
+Stadt Arnsberg,orga-year,2160000,false
+Eitzing (Testlizenz),free,2,false
+Stadt Emmendingen (Stadtverwaltung),orga-year,1296000,false
+Stadt Sulingen,orga-year,1296000,false
+Gemeinde Bietigheim,orga-year,432000,false
+Gemeinde Weißbach,orga-year,432000,false
+Kirchdorf an der Krems (Testlizenz) ,free,2,true
+Munderfing (Testlizenz),free,2,false
+Vorderweißenbach (Testlizenz),free,2,false
+Stadt Lingen (Ems),pilot,324000,true
+Stadt Hohenems,orga-year,432000,false
+"Senatsverwaltung für Arbeit, Soziales, Gleichstellung, Integration, Vielfalt und Antidiskriminierung Abteilung Soziales, III D 2",pilot,324000,true
+Geretsberg (Testlizenz),free,2,false
+Verbandsgemeinde Kirchen (Sieg),orga-month,36000,true
+SDNet Demo Account,pay-per-use,0,false
+S24,pay-per-use,0,false
+"KDVZ, Frechen",pay-per-use,0,false
+Stadt Heidelberg - Amt 0127,orga-month,180000,false
+Stadtgemeinde Vöcklabruck,orga-year,360000,false
+Traunkirchen (Testlizenz),free,2,false
+Andorf (Testlizenz),free,2,false
+Gemeinde St. Martin bei Lofer,free,2,true
+Stadt Ettlingen,orga-year,1296000,false
+Stadt Filderstadt,pilot,324000,true
+Kanton Luzern - Dienststelle Volksschulbildung,orga-month,144000,true
+Gemeinde Telfes im Stubai,free,2,false
+Gemeinde Beimerstetten,orga-year,1296000,false
+Stadt Norderney,orga-month,108000,false
+Gemeinde Schönbrunn,orga-year,432000,false
+Stadtverwaltung Bad Liebenzell,orga-year,1296000,false
+Amt Seenlandschaft Waren,orga-year,1296000,false
+Sächsische Staatskanzlei,pilot,324000,false
+Gemeinde Malsch,orga-year,1296000,false
+Eggelsberg (Testlizenz),free,2,false
+Steinerkirchen an der Traun,orga-year,360000,false
+Langenstein (Testlizenz),free,2,true
+Stadtverwaltung Werdohl,orga-year,1296000,false
+Stadt Olfen,orga-year,432000,false
+Kreis Coesfeld,orga-year,2160000,false
+Katsdorf (Testlizenz),free,2,false
+Stadt Großalmerode – der Magistrat,orga-year,432000,false
+Hansestadt Wipperfürth,orga-year,1296000,false
+Markus Weidhaußer Steuerberatung,pilot,324000,true
+Stadt Philippsburg,orga-year,432000,false
+Ungenach (Testlizenz),free,2,false
+Waldhausen im Strudengau (Testlizenz),free,2,false
+Stadt Mainburg,orga-year,1296000,false
+Sierning (Testlizenz),free,2,false
+Amt Am Peenestrom ,orga-year,1296000,false
+Landratsamt Rastatt,orga-year,1296000,false
+Gemeinde Schkopau,orga-year,1296000,false
+Schlüßlberg (Testlizenz),free,2,true
+Kreishandwerkerschaft Stade,pilot,324000,true
+Hessischer Rundfunk,orga-year,1296000,false
+WFMG – Wirtschaftsförderung Mönchengladbach GmbH ,pilot,324000,true
+Gemeinde Linkenheim-Hochstetten,orga-year,648000,false
+Stadt Lommatzsch,orga-year,432000,false
+Traun (Testlizenz),free,3,true
+Erzbischöfliches Berufskolleg Köln,orga-year,432000,false
+Gemeinde Stödtlen,orga-year,432000,false
+Marktgemeinde Eugendorf,free,3,false
+ITEBO Informationstechnologie Emsland Bentheim Osnabrück GmbH,free,100,false
+Stadtverwaltung Donaueschingen,orga-year,864000,false
+"Wohnungsgenossenschaft ""Lößnitz"" eG",free,8,false
+Kreisverwaltung Neuwied,pilot,324000,true
+Stadtverwaltung der Fontanestadt Neuruppin,orga-year,1296000,false
+ROLAND-Gruppe,month,86400,true
+Stadt Ellwangen (Jagst),pilot,324000,true
+St. Georgen im Attergau,orga-year,180000,false
+Geboltskirchen (Testlizenz),free,2,false
+S24 - Gemeinde Recke,pay-per-use,0,false
+S24 - Stadt Lingen (Ems),pay-per-use,0,false
+KDVZ - Stadt Attendorn,pay-per-use,0,false
+S24 - Gemeinde Birkenfeld,pay-per-use,0,false
+S24 - Gemeinde Scheeßel,pay-per-use,0,false
+S24 - Stadt Bad Pyrmont,pay-per-use,0,false
+S24 - Gemeinde Gundelfingen,pay-per-use,0,false
+Kreis Unna,orga-year,1296000,false
+Gemeinde Lamprechtshausen,orga-year,720000,false
+Barmherzige Brüder IT Services,free,5,false
+Gemeinde Wyhl am Kaiserstuhl,orga-year,432000,false
+Samtgemeinde Emlichheim,orga-year,432000,false
+Amt Brieskow-Finkenheerd,orga-month,108000,false
+S24 - Stadt Cloppenburg,pay-per-use,0,false
+Stadtwerke Giengen GmbH,orga-month,108000,true
+Gemeinde Laer,orga-year,1296000,false
+Stadt Colditz,orga-year,432000,false
+Gemeinde Vörstetten,orga-month,36000,false
+Stadt Bräunlingen,orga-month,36000,false
+Gemeinde Virgen,free,2,false
+Landratsamt Würzburg,orga-year,1296000,false
+kdvz - Gemeinde Kall,pay-per-use,0,false
+Stadtverwaltung Backnang,orga-year,1296000,false
+Landkreis Freudenstadt,orga-year,432000,false
+kdvz - Gemeinde Nettersheim,pay-per-use,0,false
+Lasberg (Testlizenz),free,2,false
+S24 - Gemeinde Laer,pay-per-use,0,false
+Gemeinde Edt bei Lambach,orga-year,360000,false
+Henneberg-Klinik Hildburghausen GmbH,pilot,324000,true
+Stadt Eppelheim,pilot,324000,true
+Stadt Overath,orga-month,108000,false
+Seniorenwohnhaus Oberndorf ,orga-year,360000,false
+Stadt Trebbin,orga-year,432000,false
+Arbeiterwohlfahrt-Bezirksverband Braunschweig e. V. (AWO),pilot,324000,true
+Landratsamt Ansbach,orga-year,1296000,false
+WERDER Feinkost GmbH,orga-month,36000,true
+VBD Beratungsgesellschaft für Behörden mbH,orga-year,1296000,false
+Gemeinde Schwieberdingen,orga-year,1296000,false
+Gemeinde Gerlos,free,2,true
+Westerland,pay-per-use,0,false
+Steinbach am Attersee (Testlizenz),free,2,true
+Tollet (Testlizenz),free,2,false
+Freiburg,pay-per-use,0,false
+Klett Familienkommanditgesellschaft,orga-year,432000,false
+Stadtverwaltung Hemsbach,orga-month,36000,false
+HOPPE AG Müstair,pilot,324000,true
+Stadt Gersthofen,orga-month,108000,true
+Immanuel Albertinen Diakonie gGmbH | Konzerngeschäftsführung und KI Board ,orga-month,108000,false
+Hallstadt (Testlizenz),free,3,true
+Herrenberg,pay-per-use,0,false
+Sattledt (Testlizenz),free,2,false
+S24 - Gemeinde Deißlingen,pay-per-use,0,false
+St. Wolfgang im Salzkammergut (Testlizenz),free,2,true
+Verbandsgemeinde Unkel,orga-year,432000,false
+Bad Leonfelden (Testlizenz),free,2,false
+Stadt Diepholz,orga-year,1296000,false
+Gemeindeverwaltung Schlat,orga-year,432000,false
+Gemeinde Hochdorf,orga-year,432000,false
+Amt Märkische Schweiz,orga-year,432000,false
+Gemeinde Abtsgmünd,orga-year,648000,false
+Gemeinde Hohenstein,pilot,324000,false
+GL GmbH Metall- und Werkstatttechnik,pilot,648000,true
+Gemeinde Sipplingen,orga-year,432000,false
+Emlichheim,pay-per-use,0,false
+Gemeinde Wilhelmsfeld,orga-year,432000,false
+Stadt Laupheim,pilot,324000,true
+Landratsamt Breisgau-Hochschwarzwald (FB 130),orga-year,432000,false
+Gemeinde Ellbögen,free,2,false
+Gemeinde Hintersee,free,2,false
+S24 - Stadtverwaltung Prenzlau,pay-per-use,0,false
+Kreis Steinfurt,orga-month,1512000,false
+Lebenshilfe Oberösterreich,,,
+Lebenshilfe Oberösterreich,free,8,false
+Gemeinde St. Gilgen,free,2,false
+Deutsche Telekom MMS GmbH - Pentesting,,,
+Pichl bei Wels (Testlizenz),free,2,false
+S24 - Stadt Colditz,pay-per-use,0,false
+Gemeinde Scheffau am Tennengebirge,free,2,true
+Gemeinde Schefflenz,orga-year,432000,false
+Stadt Hann. Münden,pilot,324000,true
+Sächsische Schweiz-Osterzgebirge,pay-per-use,0,false
+Gemeinde Ebbs,free,2,false
+Tourismusverband Kufsteinerland,orga-year,720000,false
+Ing. Hans Bodner Baugesellschaft mbH & Co. KG,orga-month,36000,false
+S24 - Gemeinde Gundelfingen NEU,pay-per-use,0,false
+kdvz - Stadt Bedburg,pay-per-use,0,false
+Gemeinde Loffenau,orga-year,432000,false
+Marktgemeinde Frankenburg,orga-year,360000,false
+Timelkam (Testlizenz),free,2,false
+Amt der Vorarlberger Landesregierung,pilot,324000,true
+Gemeinde Fahrenbach,orga-month,36000,false
+Gemeinde Ebhausen,orga-year,450000,false
+S24 - Gemeinde Bietigheim,pay-per-use,0,false
+Musterstadt,free,3,false
+Marktgemeinde St. Nikola/Donau,orga-year,180000,false
+S24 - Stadt Bocholt,pay-per-use,0,false
+Gemeinde Dielheim,orga-year,1296000,false
+Landeshauptstadt Magdeburg,pilot,648000,true
+regio iT - Stadt Versmold,pay-per-use,0,false
+S24 - Gemeinde Kalletal,pay-per-use,0,false
+Gemeinde Nußloch,pilot,324000,true
+ Landkreis Ostprignitz-Ruppin,orga-year,1296000,false
+Stadtwerke Münster GmbH,orga-year,1296000,false
+Sarleinsbach (Testlizenz),free,2,false
+Puchenau (Testlizenz),free,4,false
+Stadt Lohne,orga-month,36000,false
+Samtgemeindeverwaltung Neuenkirchen,orga-year,1296000,false
+Stadtverwaltung Bautzen,orga-year,1296000,false
+Stadtwerke Freudenstadt GmbH & Co. KG,orga-year,216000,false
+Kadur GmbH Raumidee,orga-month,108000,false
+Gemeinde Gosau,orga-year,180000,false
+Verwaltungsakademie Berlin - Landesamt für Aus- und Fortbildung sowie Interne Beratung,pilot,324000,true
+Hansestadt Gardelegen,pilot,324000,true
+Gemeindeverwaltung Radibor,orga-year,432000,false
+Dimbach (Testlizenz),free,2,true
+Allerheiligen im Mühlkreis (Testlizenz),free,2,false
+Gilgenberg am Weilhart (Testlizenz),free,2,false
+Gemeinde Fredersdorf-Vogelsdorf,pilot,324000,false
+Hofkirchen im Mühlkreis,orga-year,180000,false
+St. Johann am Wimberg (Testlizenz),free,2,false
+Marktgemeinde Aigen-Schlägl,orga-year,180000,false
+Haslach an der Mühl (Testlizenz),free,2,true
+Kleinzell im Mühlkreis (Testlizenz),free,2,false
+Klaffer am Hochficht (Testlizenz),free,2,false
+Gemeinde Trins,free,2,false
+Weng im Innkreis (Testlizenz),free,2,false
+Stadtverwaltung Strausberg,orga-year,1296000,false
+S24 - Gemeinde Eisingen,pay-per-use,0,false
+Gemeinde Wickede (Ruhr),orga-month,36000,false
+Komm.ONE Gremien,orga-year,432000,false
+Burggemeinde Brüggen,orga-year,1296000,false
+Stadt Bielefeld,budget,72000,false
+Schweizerischer Blindenbund,orga-year,432000,false
+Krankenhaus Tabea,pilot,324000,true
+Hunkeler Partner Architekten AG,pilot,180000,true
+Gemeinde Morsbach,pilot,324000,true
+ Stadtverwaltung Speyer,orga-year,864000,false
+Altmünster (Testlizenz),free,2,false
+Gemeinde Polling,orga-year,360000,false
+St. Florian am Inn,orga-year,180000,false
+Balingen,pilot,432000,false
+Kaltenberg (Testlizenz),free,2,true
+Gemeinde Fraham,orga-year,180000,false
+Bundesamt für Strahlenschutz,orga-year,1296000,false
+futureSAX GmbH - die Innovationsplattform des Freistaates Sachsen,orga-month,36000,false
+"Hochschule für Musik, Theater und Medien Hannover",orga-month,36000,false
+Stadt Wesel,orga-year,1728000,false
+Tollet (Testlizenz),free,2,false
+Gemeinde Hohberg,orga-year,432000,false
+Touring Club Schweiz (TCS),pilot,324000,false
+S24 - Stadt Breisach am Rhein,pay-per-use,0,false
+Stadt Altensteig,orga-year,864000,false
+Aschach an der Donau (Testlizenz),free,2,true
+Verwaltungszentrum 5+ (Testlizenz),free,2,false
+Neukirchen an der Vöckla (Testlizenz),free,2,true
+SAXONIA MEDIA Filmproduktionsgesellschaft mbH ,pilot,324000,true
+Lorch,orga-year,432000,false
+S24 - Stadt Schriesheim,pay-per-use,0,false
+Malterdingen,,,
+Stadt Wriezen,orga-year,432000,false
+Stadt Coesfeld,pilot,324000,false
+AWO SANO gGmbH,pilot,324000,false
+Gemeinde Eriskirch,pilot,324000,true
+Brigachtal,free,2,false
+Sontheim an der Brenz,free,3,false
+Putzleinsdorf (Testlizenz),free,2,true
+Stadt Karlsruhe,pilot,648000,false
+ReFa24,orga-year,226800,false
+Laichingen,free,2,false
+Oppenau,,,
+Stadt Sigmaringen,orga-year,1296000,false
+Stadt Warstein,orga-year,1296000,false
+Kreis Warendorf,orga-year,1728000,false
+Gemeinde Bissendorf,,,
+Stadt Haselünne,orga-year,432000,false
+Verwaltungsgemeinschaft Lechfeld,orga-month,36000,false
+Schönwald,pilot,324000,true
+S24 - Gemeinde Nordseeheilbad Wangerooge,pay-per-use,0,false
+Regau (Testlizenz),free,2,false
+GWG - Gemeinnützige Wohnungsbaugesellschaft der Stadt Kassel mbH,pilot,324000,false
+Marktgemeinde Mauterndorf,free,2,false
+Regionalverband Lungau,free,2,true
+Samtgemeinde Bersenbrück,orga-year,432000,false
+Gemeinde Steinhausen an der Rottum,orga-month,36000,false
+Wolfschlugen,free,2,false
+HALLAG Kommunal GmbH,orga-year,432000,false
+Rainbach im Mühlkreis (Testlizenz),free,2,true
+Bonndorf,free,4,false
+Stadt Kalkar,orga-year,432000,false
+Marktgemeinde Ottnang am Hausruck,orga-year,360000,false
+Gemeinde Albershausen,orga-year,432000,false
+Stadt Lüdinghausen,pilot,324000,true
+Biberach an der Riß,free,2,false
+Stadt Ibbenbüren,pilot,324000,false
+Spital am Pyhrn (Testlizenz),free,2,false
+kdvz - Stadt Wesseling,pay-per-use,0,false
+FB Ketten HandelsgesmbH,free,5,false
+Gemeinde Nordendorf,pilot,324000,true
+Stadtverwaltung Markranstädt,orga-month,108000,false
+Landratsamt Ravensburg,orga-year,1296000,false
+Sipbachzell (Testlizenz),free,2,false
+Schörfling am Attersee (Testlizenz),free,2,false
+Gemeinde Sternenfels,orga-year,432000,false
+Rheinfelden (Baden),free,2,true
+Sulzburg,orga-year,432000,false
+Gemeinde Ottersweier,orga-month,36000,false
+Gemeinde Elsbethen,free,4,false
+Stadtverwaltung Calw,orga-year,1296000,false
+S24 - Stadt Schloß Holte-Stukenbrock,pay-per-use,0,false
+Stadt Würzburg,free,4,false
+PD – Berater der öffentlichen Hand GmbH,pilot,324000,true
+Landkreis Emmendingen,pilot,324000,false
+regio IT - Stadt Rheda-Wiedenbrück,pay-per-use,0,false
+Gemeinde Heddesheim,orga-year,432000,false
+Gemeinde Rußbach am Paß Gschütt,free,2,false
+Stadt Aalen - Amt für IT und Digitalisierung,orga-year,1728000,false
+Landkreis Anhalt-Bitterfeld,pilot,324000,true
+Landkreis Mansfeld-Südharz,pilot,324000,true
+Tuningen,free,2,false
+Asten (Testlizenz),free,3,true
+Straß im Attergau (Testlizenz),free,2,false
+Blaufelden,orga-year,432000,false
+Weinstadt,pilot,302400,true
+Stadtverwaltung Ludwigsburg,pilot,540000,false
+Gemeinde Riegelsberg,orga-year,1296000,false
+Zweckverband Kommunale Informationsverarbeitung Sachsen - KISA,free,25,false
+Eberschwang (Testlizenz),free,3,false
+Gemeinde Steinenbronn,orga-year,450000,false
+Stadt Jena,pilot,378000,true
+Gemeinde Grefrath,orga-year,1296000,false
+Gemeinde Lotte,orga-year,432000,false
+Landratsamt Karlsruhe,pilot,324000,false
+Stadt Zerbst/Anhalt,orga-year,1296000,false
+Stadtverwaltung Weimar,orga-year,1296000,false
+Zweckverband KAAW - Kommunale ADV-Anwendergemeinschaft West,budget,180000,false
+Gemeinde Kriebstein,pilot,324000,false
+Stadtverwaltung Hockenheim,orga-year,1296000,false
+Bammental,pay-per-use,0,false
+Bötzingen,free,2,false
+Stadt Eppingen,orga-year,432000,false
+Gemeinde Schiffweiler,orga-year,432000,false
+Landkreistag BW,free,2,false
+Samtgemeinde Oderwald,pilot,324000,false
+S24 - Gemeinde Langenberg,pay-per-use,0,false
+Südbrookmerland,pay-per-use,0,false
+IHK Bonn / Rhein-Sieg,orga-month,36000,false
+Johanniter-Unfall-Hilfe e.V.,orga-year,432000,false
+Gemeinde Maulburg,pilot,324000,false
+Stadt Tecklenburg,pilot,324000,true
+Landratsamt Ebersberg,pilot,324000,true
+Stadt Neckarsulm ,pilot,324000,false
+Gemeinde Muldestausee,orga-year,1296000,false
+kdvz - Stadt Pulheim,pay-per-use,0,false
+Lochen am See (Testlizenz),free,2,false
+Waldneukirchen (Testlizenz),free,2,false
+Losenstein (Testlizenz),free,2,false
+Landkreis Biberach,free,4,true
+kdvz - Gemeinde Nörvenich,pay-per-use,0,false
+Neuweiler,pilot,324000,false
+S24 - Samtgemeinde Bevern,pay-per-use,0,false
+Adelsheim,free,2,true
+Gampern (Testlizenz),free,2,false
+Samtgemeinde Freren,orga-year,1296000,false
+Gemeinde Belm,orga-year,1296000,false
+S24 - Stadt Bönnigheim,pay-per-use,0,false
+"Stiftung ""Seniorenhilfe Zeitz""",free,3,true
+Gemeinde Haiming,free,2,true
+Stadt Endingen am Kaiserstuhl,pilot,324000,false
+Hilzingen,orga-year,432000,false
+S24 - Stadt Sachsenheim,pay-per-use,0,false
+Mainzer Aufbaugesellschaft mbH,pilot,324000,false
+Gemeinde Rheinmünster,orga-month,36000,false
+Stadtverwaltung Mössingen,orga-year,432000,false
+Kreis Gütersloh,orga-year,1296000,false
+Stadtverwaltung Kamen,pilot,324000,true
+Stiftung Juventus-Schulen,orga-month,46800,false
+Zweckverband Kommunales Rechnenzentrum Niederrhein (KRZN),orga-month,36000,true
+Gemeindeverwaltung Schwepnitz,pilot,324000,false
+ALT_Ruppiner Kliniken GmbH,pilot,324000,true
+Landratsamt Reutlingen,orga-year,432000,false
+Kleine Helfer gGmbH,orga-year,432000,false
+Amt Nennhausen,pilot,324000,false
+Hochschule Zittau/Görlitz,pilot,324000,false
+Gemeinde Berndorf bei Salzburg,free,2,false
+Rottweil,free,2,false
+Gemeinde Merchweiler,pilot,648000,false
+Hochsauerlandkreis,pilot,324000,true
+Gemeinde Dalaas,free,2,true
+Bildungsdirektion für Vorarlberg,pilot,324000,true
+Regionalverband Salzburger Seenland,orga-year,720000,false
+Mauerkirchen (Testlizenz),free,2,true
+Marktgemeinde St. Florian,orga-year,180000,false
+Oschersleben(Bode),pay-per-use,0,false
+Universitätsklinikum Schleswig-Holstein (UKSH - Wirtschaft und Versorgung),pilot,324000,true
+UKSH Gesellschaft für IT Services mbH (UKSH ITSG),pilot,324000,false
+Gemeinde Eisingen,orga-month,36000,false
+Gemeinde Ebersbach,orga-year,432000,false
+Verwaltungsgemeinschaft Stiefenhofen,pilot,324000,true
+Braunau (Testlizenz),free,2,true
+Gemeinde Schermbeck,orga-year,432000,false
+Dietzenbach,pay-per-use,0,false
+Wartberg an der Krems (Testlizenz),free,2,false
+Landespflegekammer Rheinland-Pfalz (Körperschaft des öffentlichen Rechts),orga-month,144000,false
+Deutsche Sporthochschule Köln,pilot,324000,false
+Stadt Bad Säckingen,orga-year,432000,false
+Pfarrkirchen bei Bad Hall (Testlizenz),free,2,true
+Rohr im Kremstal (Testlizenz),free,2,false
+Verbandsgemeindeverwaltung Nordpfälzer Land,orga-year,1296000,false
+Landratsamt Sigmaringen,pilot,324000,true
+Caritasverband für den Kreis Coesfeld e.V.,pilot,324000,false
+PSC Public Software & Consulting GmbH,free,50,false
+Stadtverwaltung Langenburg,orga-year,432000,false
+Gemeinde Heek,orga-year,432000,false
+Stadt Senftenberg,pilot,324000,false
+München,pay-per-use,0,false
+Kastellaun,pay-per-use,0,false
+Rene Kurtkowiak,free,15,false
+Gemeindeverwaltung Neukirchen,pilot,324000,false
+S24 - Samtgemeinde Bevern (2),pay-per-use,0,false
+Ostfildern,free,2,false
+Landkreis Oberspreewald-Lausitz,pilot,324000,true
+HSH Soft- und Hardware Vertriebs GmbH,pilot,324000,true
+Stadt Wilhelmshaven,pilot,324000,true
+Gemeinde Unterreichenbach,orga-year,432000,false
+Waizenkirchen (Testlizenz),free,2,false
+Ort im Innkreis (Testlizenz),free,2,false
+Edenkoben,pay-per-use,0,false
+S24 - Gemeinde Alfter,pay-per-use,0,false
+Landkreis Osnabrück,pilot,324000,false
+Gemeinde Böhmenkirch,orga-year,432000,false
+Stadt­ver­wal­tung Bad Kro­zin­gen,pilot,324000,false
+Stadt Leer,orga-year,3024000,false
+Bentheimer Eisenbahn AG,orga-month,36000,true
+Große Kreisstadt Germering,orga-month,36000,false
+Landkreis Zollernalbkreis,pilot,324000,false
+S24 - Gemeinde Meckenbeuren,pay-per-use,0,false
+Gemeinde Augustdorf,orga-year,432000,false
+Albertinen Krankenhaus,pilot,324000,true
+Gemeinde Bedburg-Hau,orga-year,216000,false
+Stadtverwaltung Erbach,pilot,1296000,false
+Stadtverwaltung Sinsheim,pilot,324000,true
+Langenargen,orga-year,1296000,false
+Stadtwerke Haldensleben,,,
+Stadtwerke Haldensleben GmbH,orga-year,432000,false
+Gemeinde Magstadt,pilot,324000,false
+Stadt Itzehoe,orga-year,432000,false
+Gemeindeverwaltung Niederau,orga-year,432000,false
+Geislinger Siedlungs- und Wohnungsbau GmbH,orga-year,90000,false
+Stadt Gronau,orga-year,1296000,false
+Gemeinde Krayenberggemeinde,pilot,324000,false
+Stadt Öhringen,pilot,324000,true
+Gschwand (Testlizenz),free,2,false
+Schärding (Testlizenz),free,2,false
+Bad Marienberg,pay-per-use,0,false
+Stadt Schönebeck (Elbe),orga-year,1296000,false
+Stadt Wanfried,orga-year,432000,false
+Herten,pay-per-use,0,false
+Prambachkirchen (Testlizenz),free,2,false
+Rottenburg,,,
+Große Kreisstadt Annaberg-Buchholz,pilot,324000,false
+Molln (Testlizenz),free,2,true
+Marktgemeinde Mariapfarr,free,2,false
+Gemeinde Göriach,free,2,false
+Ebensee am Traunsee (Testlizenz) ,free,2,false
+Stadt Bruchsal,orga-year,1296000,false
+wobra GmbH,orga-month,36000,true
+Landkreis Rems-Murr-Kreis,pilot,324000,false
+Stadtamt Braunau am Inn,orga-year,540000,false
+S24 - Gemeinde Seelbach,pay-per-use,0,false
+TVB Kitzbüheler Alpen Brixental,free,4,true
+Mondsee (Testlizenz),free,2,false
+Gemeindeverwaltung Malschwitz,pilot,324000,false
+Gemeinde Sonnenbühl,orga-year,432000,false
+Stadt Falkensee,orga-year,1296000,false
+Evangelisch-lutherischer Kirchenkreisverband Osnabrück-Stadt und -Land,orga-year,1296000,false
+Gemeinde Wilnsdorf,pilot,324000,false
+Spremberg,pay-per-use,0,false
+Stadt Monschau,orga-month,36000,false
+Gemeinde Pfalzgrafenweiler,orga-year,432000,false
+Gemeindeverwaltung Birkenfeld,orga-year,1296000,false
+"AWO Bezirksverband Rheinland e.V., Remeyerhof, Worms",,,
+kdvz - Kreisverwaltung Euskirchen,pay-per-use,0,false
+Stadt Brackenheim,pilot,324000,false
+Landkreis Leer,pilot,324000,false
+Stadt Melle,orga-year,1296000,false
+Hochschule für nachhaltige Entwicklung Eberswalde (HNEE),orga-year,1512000,false
+Pram (Testlizenz),free,2,false
+Oberhaching,pay-per-use,0,false
+Stadt Murrhardt,orga-year,216000,false
+ILLIG packaging solutions GmbH,pilot,324000,false
+Laakirchen (Testlizenz) ,free,3,false
+S24 - Stadt Brackenheim,pay-per-use,0,false
+Bad Ischl (Testlizenz),free,2,false
+Gemeinde Hausen im Wiesental,pilot,324000,false
+GVV Denzlingen,free,2,false
+Vöhringen,pay-per-use,0,false
+Bad Lippspringe,pay-per-use,0,false
+Bechtle IT-Systemhaus Weimar,free,30,false
+Kempen Krause Ingenieure GmbH,pilot,324000,false
+Steinheim,pay-per-use,0,false
+Höhr-Grenzhausen,pay-per-use,0,false
+DYWIDAG Dyckerhoff & Widmann Gesellschaft m.b.H.,orga-month,36000,false
+Technische Werke Brandenburg an der Havel GmbH,orga-year,432000,false
+Stadt Meersburg,pilot,324000,false
+Amt Britz-Chorin-Oderberg,pilot,324000,false
+Hirschberg a.d.B.,orga-year,432000,false
+Kreis Siegen-Wittgenstein,pilot,324000,false
+Gondelsheim,orga-month,36000,false
+Freiberg,pay-per-use,0,false
+Gemeindeverwaltung Eberdingen,orga-year,432000,false
+Universität zu Köln,free,2,true
+Römerberg-Dudenhofen,pay-per-use,0,false
+Ensdorf,pay-per-use,0,false
+Monsheim,pay-per-use,0,false
+Gemeinde Essingen,pilot,324000,false
+Gemeinde Pfarrkirchen bei Bad Hall,orga-year,180000,false
+IT Land Tirol ,free,5,false
+Tiroler Gemeindeverband,free,5,false
+Pasching (Testlizenz) ,free,2,false
+Landkreis Börde,pilot,162000,true
+Testkommune,,,
+Pischelsdorf am Engelbach (Testlizenz),free,2,false
+Thalheim bei Wels (Testlizenz),free,2,false
+Maria Schmolln (Testlizenz),free,2,false
+Kreis Minden-Lübbecke ,pilot,324000,false
+kdvz - Stadt Willebadessen,pay-per-use,0,false
+Alzey-Land (Kreis),pay-per-use,0,false
+Regionalleitstelle Osnabrück kAöR,pilot,324000,false
+TecArt GmbH ,orga-month,36000,false
+Marktgemeinde Völs,free,3,false
+Kreisverwaltung Recklinghausen,orga-year,1296000,false
+Stadt Seifhennersdorf,pilot,324000,false
+Gemeinde Rosengarten,pilot,324000,false
+Stadt Fürstenwalde/Spree,pilot,324000,false
+kiC Sitzungsdienst - Entwicklung,free,90,false
+Stadt Schloß Holte-Stukenbrock,orga-month,36000,false
+Worms,pay-per-use,0,false
+Hansestadt Herford,orga-year,8208000,false
+Gemeinde Iffezheim,pilot,324000,false
+Gemeinde Immenstaad am Bodensee,orga-month,36000,true
+Kreis Düren,pilot,324000,false
+Altmarkkreis Salzwedel,pilot,324000,true
+Amt Elsterland,pilot,324000,false
+Hüfingen,free,2,false
+Brettspielverein Kufstein,free,5,false
+Kirchham (Testlizenz),free,2,true
+Stadtgemeinde Kirchdorf an der Krems,orga-year,360000,false
+Gemeindeamt Langenstein,orga-year,180000,false
+Lichtenau (Baden),,,
+Gemeinde Schwendi,pilot,324000,false
+Taiskirchen (Testlizenz),free,2,false
+Gemeinde Schöneiche bei Berlin,pilot,324000,false
+Gemeinde Weyhe,pilot,324000,false
+Elsterwerda,pay-per-use,0,false
+Arnstadt,pay-per-use,0,false
+Filderstadt,pay-per-use,0,false
+Stadt Aschersleben,pilot,324000,false
+Gemeinde Bach,free,4,false
+Gemeinde Ubstadt-Weiher,pilot,324000,false
+Gemeinde Eichstetten am Kaiserstuhl,orga-year,432000,false
+Verwaltungsgemeinschaft Diespeck,pilot,324000,false
+Markt Sulzberg,orga-year,432000,false
+Stadt Bad Schussenried,pilot,324000,false
+Kusterdingen,free,2,false
+S24 - Stadt Halle,pay-per-use,0,false
+Stadt Herzberg (Elster),orga-month,46800,false
+Gudensberg,pay-per-use,0,false
+Gemeinde Rhauderfehn,pilot,324000,false
+Stadt Euskirchen,pilot,324000,false
+Saarland Heilstätten GmbH,pilot,324000,false
+Amt Landschaft Sylt,pay-per-use,0,false
+VG-Nahe-Glan,pay-per-use,0,false
+Landratsamt Unstrut-Hainich-Kreis,pilot,324000,false
+Wohnungsgenossenschaft Aufbau Dresden eG,pilot,324000,false
+Desselbrunn (Testlizenz),free,2,true
+Stadtverwaltung Altenburg,pilot,324000,false
+Markt Peiting,pilot,324000,false
+Bad Wildbad,,,
+Demo ekom21 – KGRZ Hessen,free,8,false
+Stadt Olbernhau,pilot,324000,false
+Stadt Haldensleben,pilot,324000,false
+Ohlsdorf (Testlizenz),free,2,false
+Gemeindeverwaltung Remshalden,orga-year,1296000,false
+Stadt Bad Bentheim,pilot,324000,false
+Schalchen (Testlizenz),free,2,false
+Steinen,pay-per-use,0,false
+Ingelheim,pay-per-use,0,false
+GER Gewerbeimmobilien Reutlingen GmbH & Co. KG,pilot,324000,false
+Landratsamt Neuburg-Schrobenhausen,pilot,324000,false
+Waldshut-Tiengen,free,2,false
+Landratsamt Breisgau-Hochschwarzwald - Stabsbereich 01 / Geschäftsstelle Kreistag,orga-year,432000,false
+Stadt Norden,pilot,324000,false
+Fritz Winter Eisengießerei GmbH & Co. KG,orga-year,432000,false
+Gemeinde Oberndorf in Tirol ,free,4,false
+Stadt Mannheim,pilot,324000,false
+Gemeinde Großgmain,free,4,false
+Stadt Elsdorf,pilot,324000,false
+Stadt Neuenbürg,pilot,324000,false
+Stadtwerke Karlsruhe GmbH,pilot,324000,false
+Marktgemeinde Riedau,orga-year,180000,false
+VG-Rhein-Selz,pay-per-use,0,false
+Bad Wimsbach-Neydharting (Testlizenz),free,2,false
+Wallfahrtsstadt Kevelaer,pilot,324000,false
+Spelle,pay-per-use,0,false
+Ditzingen,pay-per-use,0,false
+Stadt Hagen,pilot,324000,false
+Gemeinde Bissingen an der Teck,orga-month,36000,false
+Gladbeck,pay-per-use,0,false
+Stadt Schwabmünchen,pilot,324000,false
+Stadt Sulz am Neckar,pilot,324000,false
+VG-Cochem,pay-per-use,0,false
+Ayunis DEMO,free,8,false
+Tischtennis Baden-Württemberg ,pilot,324000,false
+Ärztekammer Sachsen-Anhalt,orga-year,345600,false
+Stadt Emmendingen - Ortschaftsverwaltung Windenreute,orga-month,36000,false
+Stadt Emmendingen - Ortschaftsverwaltung Maleck,orga-month,36000,false
+Stadt Emmendingen - Ortschaftsverwaltung Mundingen,orga-month,36000,false
+Stadt Emmendingen - Ortschaftsverwaltung Wasser,orga-month,36000,false
+Stadt Emmendingen - Ortschaftsverwaltung Kollmarsreute,orga-month,36000,false
+Stadt Wildau,pilot,324000,false
+Gemeinde Limbach,pilot,324000,false
+Stadt Münster,pilot,324000,false
+VG-Maxdorf,pay-per-use,0,false
+Unterhaching,pay-per-use,0,false
+Baltmannsweiler,pilot,324000,false
+TVB Salzburger Lungau Katschberg,free,4,false
+Landkreis Saarlouis,pilot,324000,false
+Gemeindeverwaltung Steinhagen,orga-year,432000,false
+S24 - Gemeinde Lotte,pay-per-use,0,false
+Hargelsberg (Testlizenz),free,2,false
+Marchtrenk (Testlizenz),free,2,false
+Hofkirchen im Traunkreis (Testlizenz),free,2,false
+DRK-Kreisverband Rhein-Neckar / Heidelberg e.V.,pilot,324000,false
+Universitätsklinikum Ruppin-Brandenburg GmbH,orga-year,432000,false
+Bertelsmann SE & Co. KGaA,pilot,324000,false
+Stadt Lörrach,pilot,324000,false
+Stadt Burghausen,pilot,324000,false
+Nordhausen (LRA),pay-per-use,0,false
+Stadtverwaltung Riesa,orga-year,432000,false
+Stadt Schramberg,orga-year,1296000,false
+Gemeinde Schwanau,pilot,324000,false
+Stadt Netphen,pilot,324000,false
+Stadt Halle (Westf.),orga-year,432000,false
+Gemeinde Viehhofen,free,2,false
+Stadt Kleve,pilot,324000,false
+Institut für sozial-ökologische Forschung (ISOE) GmbH,pilot,324000,false
+Amt Neubukow-Salzhaff,pilot,324000,false
+Stadt Norden ,,,
+Wirtschaftsförderung Sachsen GmbH,pilot,324000,false
+Landkreis Wittmund,pilot,324000,false
+Verwaltungsgemeinschaft Ranis-Ziegenrück,pilot,324000,false
+Amt Schradenland,pilot,324000,false
+Stadt Hemer,pilot,324000,false
+Stadt Friedberg,orga-year,1296000,false
+Landratsamt Aichach-Friedberg,pilot,324000,false
+Wirges,pay-per-use,0,false
+Alkoven (Testlizenz),free,2,false
+Niederneukirchen (Testlizenz),free,2,false
+Stadtverwaltung Nagold,pilot,324000,false
+Österreichisches Rotes Kreuz | Landesverband Wien,pilot,324000,false
+Schloßbühlschule,orga-year,432000,false
+Merseburg,pay-per-use,0,false
+Amt Putlitz Berge,pay-per-use,0,false
+Gemeinde Pettneu am Arlberg,free,8,false
+Gemeinde Faistenau,free,6,false
+Bad Hall (Testlizenz),free,2,false
+Gemeinde Korb,pilot,324000,false
+Stadt Essen,pilot,324000,false
+Gallneukirchen (Testlizenz),free,2,false
+S24 - Gemeinde Jade,pay-per-use,0,false
+Kassenärztliche Vereinigung Hessen,pilot,324000,false
+Stadt Ennepetal,pilot,324000,false
+Stadt Lauchhammer,pilot,324000,false
+Stadt Lünen,pilot,324000,false
+Ministerium für Verkehr Baden-Württemberg ,orga-month,108000,false
+Stadtgemeinde Imst,free,4,false
+Silberhoamat Schwaz,free,4,false
+Gemeinde Schmirn,free,2,false
+Gemeinde St. Koloman,free,4,false
+Gemeinde Aldrans,free,4,false
+Gemeinde Marktflecken Villmar,pilot,324000,false
+Marktgemeinde Thalgau,free,3,false
+Attnang-Puchheim (Testlizenz),free,2,false
+Gemeinde Schwendt,free,4,false
+Goldwörth (Testlizenz),free,2,false
+Hartkirchen (Testlizenz),free,2,false
+Grünbach (Testlizenz),free,2,false
+Gemeinde Bayerisch Gmain,pilot,324000,false
+Stadtverwaltung Bad Liebenstein,pilot,324000,false
+Marktgemeinde Raab,orga-year,180000,false
+Gemeinde Sinzheim,pilot,324000,false
+Gemeindeverwaltung Großdubrau,pilot,324000,false
+Gemeinde Senden,pilot,324000,false
+Inntalcenter Telfs,free,2,false
+Tamm,pay-per-use,0,false
+Uelsen,pay-per-use,0,false
+Nieheim,pay-per-use,0,false
+Bensheim,pay-per-use,0,false
+Gengenbach,pay-per-use,0,false
+Gemeinde Windeck,orga-year,518400,false
+Gemeinde Inzigkofen,pilot,324000,false
+Gemeinde Kabelsketal,pilot,324000,false
+Stadt Baesweiler,pilot,324000,false
+Gemeinde Großbeeren,orga-month,36000,false
+Stadt Hörstel,pilot,324000,false
+Kliniken Landkreis Diepholz gGmbH,free,8,false
+Gommern,pay-per-use,0,false
+Kirchdorf,pay-per-use,0,false
+Bad Schallerbach (Testlizenz),free,2,false
+Vorchdorf (Testlizenz),free,2,false
+Edlbach (Testlizenz),free,2,false
+Hövelhof,pay-per-use,0,false
+Stadt Sangerhausen,orga-year,1728000,false
+Gemeinde Neunkirchen-Seelscheid,orga-year,432000,false
+Gemeindeverwaltung Königswartha,orga-year,432000,false
+GVV Waibstadt,pilot,324000,false
+Große Kreisstadt Niesky,pilot,324000,false
+Nocker-Metallbau,free,2,false
+Gemeinde Rot am See,orga-year,432000,false
+Gemeinde Heusweiler,orga-year,432000,false
+Stadl-Paura (Testlizenz),free,2,false
+Pfaffing (Testzugrang),free,2,false
+Verwaltungsgemeinschaft Stiefenhofen,orga-year,432000,false
+Gemeinde Kleinostheim,orga-year,432000,false
+Stadtverwaltung Nordhausen,orga-month,36000,false
+Gemeinde Ingersheim,pilot,324000,false
+Waldkirchen am Wesen (Testlizenz),free,2,false
+Kirchberg-Thening (Testlizenz),free,2,false
+Gemeinde Lohsa,orga-month,36000,false
+Verbandsgemeinde Otterbach-Otterberg,pilot,324000,false
+Stadt Rottweil,orga-year,1296000,false
+FMSicherheit Flughafen München,budget,36000,false
+Gemeinde Thurn,free,4,false
+Landratsamt Meißen,pilot,324000,false
+Landhagen (Amt) in Neuenkirchen,pay-per-use,0,false
+Königswiesen (Testlizenz),free,2,false
+SPD Ortsverein Heidgraben,orga-year,432000,false
