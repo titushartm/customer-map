@@ -66,6 +66,7 @@ onMounted(() => {
   resizeObserver.observe(container.value)
 
   map.on('load', () => {
+    emphasizeBorders()
     addImages()
     addLayers()
     bindEvents()
@@ -97,6 +98,16 @@ function syncScrollZoom() {
   if (!map) return
   if (props.scrollZoom) map.scrollZoom.enable()
   else map.scrollZoom.disable()
+}
+
+// Staatsgrenzen kräftiger als im Grundstil (fiord: 56 % Deckkraft); andere Stile ohne diese Ebenen bleiben unverändert
+function emphasizeBorders() {
+  for (const id of ['boundary_country_z0-4', 'boundary_country_z5-']) {
+    if (!map.getLayer(id)) continue
+    map.setPaintProperty(id, 'line-color', 'hsl(214,75%,85%)')
+    map.setPaintProperty(id, 'line-opacity', 0.9)
+    map.setPaintProperty(id, 'line-width', ['interpolate', ['exponential', 1.1], ['zoom'], 3, 1.5, 22, 22])
+  }
 }
 
 function addImages() {
@@ -217,6 +228,7 @@ function addLayers() {
 
   // Noch keine Kunden: graues Ortsschild. Liegt unter den Kundenschildern, damit die bei
   // Überschneidung gewinnen; der kleine Punkt darunter bleibt dann als Hinweis sichtbar.
+  // Weit herausgezoomt nur der Punkt: Am Rand bleiben sonst einzelne Orte neben den Clustern stehen.
   map.addLayer({
     id: 'mm-prospect-dots',
     type: 'circle',
@@ -228,6 +240,7 @@ function addLayers() {
     id: 'mm-prospects',
     type: 'symbol',
     source: SRC,
+    minzoom: 8,
     filter: ['all', notCluster, isProspect],
     layout: {
       ...signLayout('mm-sign-prospect', prospectLabel),
