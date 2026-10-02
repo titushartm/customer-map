@@ -432,7 +432,7 @@ function territoryFc() {
 
 // Schilder der möglichen Partner neben die Cluster: Wo die Cluster liegen, steht erst nach dem Zeichnen fest (hängt
 // am Zoom). Daher nach jeder Bewegung, sobald die Karte fertig ist, in Bildschirmpunkten die nächste freie Stelle um
-// den Wunschpunkt suchen, frei von Clustern, Kundenpunkten und den schon gesetzten Schildern.
+// den Wunschpunkt suchen, frei von Clustern, Kundenpunkten, Partnernamen und den schon gesetzten Schildern.
 let placeQueued = false
 function schedulePlaceTags() {
   if (!ready || placeQueued) return
@@ -448,7 +448,18 @@ function placeTags() {
     : f.properties.point_count < 5 ? (big ? 20 : 16) : f.properties.point_count < 15 ? (big ? 23 : 20) : 27)
   const layers = ['mm-clusters', 'mm-sign-dots'].filter((id) => map.getLayer(id))
   const circles = map.queryRenderedFeatures({ layers }).map((f) => ({ ...map.project(f.geometry.coordinates), r: radius(f) + 4 }))
-  const boxes = []
+  // Partnernamen als Boxen (Schrift wie in mm-territory-label; über 10 Zeichen bricht MapLibre am Leerzeichen um)
+  const z = map.getZoom()
+  const px = z <= 4 ? 15 : z <= 6 ? 15 + ((z - 4) * 7) / 2 : z <= 9 ? 22 + ((z - 6) * 12) / 3 : 34
+  const boxes = map.queryRenderedFeatures({ layers: ['mm-territory-label'] }).map((f) => {
+    const size = px * (f.properties.scale ?? 1)
+    const name = String(f.properties.name)
+    const lines = name.length > 10 ? name.split(' ') : [name]
+    const hw = (Math.max(...lines.map((l) => l.length)) * size * 0.78) / 2 + 4
+    const hh = (lines.length * size * 1.2) / 2 + 2
+    const { x, y } = map.project(f.geometry.coordinates)
+    return { x0: x - hw, x1: x + hw, y0: y - hh, y1: y + hh }
+  })
   const hits = (b) => boxes.some((o) => b.x0 < o.x1 && b.x1 > o.x0 && b.y0 < o.y1 && b.y1 > o.y0)
     || circles.some(({ x, y, r }) => Math.hypot(Math.max(b.x0 - x, 0, x - b.x1), Math.max(b.y0 - y, 0, y - b.y1)) < r)
   const features = tags.map((f) => {
