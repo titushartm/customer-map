@@ -51,53 +51,67 @@ const data = computed(() => ({
 const activePartners = computed(() => partners.value.filter((p) => p.active))
 const colorOf = computed(() => partnerColors(partners.value, PALETTE))
 
-/** Flächen je Partnergebiet und ein Namenspunkt je Partner (neben dem Gebiet, siehe labelPoint) */
-const territories = computed(() => {
+// Teure Rechnungen (Umrisse, Namensplätze) hängen nicht an den Schaltern: einmal je Partner/Kunden, die Schalter
+// setzen nur noch zusammen. Sonst steht die Seite bei jedem Klick mehrere Sekunden.
+
+/** Flächen und Umriss je Partner, die freien Flächen und je Staat der Punkt für "Partner gesucht" */
+const geo = computed(() => {
   const shapes = partnerShapes(activePartners.value, areas.value)
-  const geomsOf = (p) => shapes[p.id].geometries
-  const allPolys = activePartners.value.flatMap((p) => polysOf(geomsOf(p)).map(thin))
-  const customers = data.value.features.map((f) => f.geometry.coordinates)
-  const placed = [] // Boxen schon gesetzter Namen
-  const features = []
-  const byKey = Object.fromEntries(areas.value.map((a) => [a.key, a]))
-  // Mögliche Partner zuerst, als graues Schild mit "?" in ihrer Fläche, weg von Kunden und voneinander. Ihr Platz bleibt frei
-  // für die Namen der Partner; Staaten mit möglichen Partnern brauchen kein "Partner gesucht"
-  const prospectCountries = new Set()
-  if (withProspects.value) {
-    const taken = []
-    for (const p of PROSPECTS) {
-      const home = byKey[p.home]
-      const center = home?.geometry ? interiorPoint([home.geometry], [...customers, ...taken]) : null
-      if (!center) continue
-      prospectCountries.add(home.country)
-      taken.push(center)
-      const name = `${p.name} ?`
-      features.push({ type: 'Feature', geometry: { type: 'Point', coordinates: center }, properties: { name, tag: true } })
-      placed.push([center[0], center[1], (name.length * 0.1 + 0.2) / Math.cos((center[1] * Math.PI) / 180) / 2])
-    }
-  }
-  if (withOpen.value) {
-    // Je Staat ein "Partner gesucht" tief in der größten freien Fläche; die Grenzen der freien Länder bleiben gestrichelt sichtbar
-    const open = openAreas(activePartners.value, areas.value, OPEN_COUNTRIES)
-    open.forEach((a) => features.push({ type: 'Feature', geometry: a.geometry, properties: { color: OPEN_COLOR, open: true } }))
-    for (const country of OPEN_COUNTRIES.filter((c) => !prospectCountries.has(c))) {
-      const own = open.filter((a) => a.country === country).map((a) => a.geometry)
-      const center = own.length ? interiorPoint(own) : null
-      if (!center) continue
-      features.push({ type: 'Feature', geometry: { type: 'Point', coordinates: center }, properties: { name: 'Partner gesucht', color: OPEN_COLOR, scale: 0.7 } })
-      // Platz freihalten, damit kein Partnername darauf landet (zweizeilig, so breit wie "Partner", kleinere Schrift)
-      placed.push([center[0], center[1], ('Partner'.length * 0.12 + 0.1) * 0.7 / Math.cos((center[1] * Math.PI) / 180) / 2])
-    }
-  }
-  for (const p of activePartners.value) {
-    const color = colorOf.value[p.id]
-    const own = geomsOf(p)
-    own.forEach((geometry) => features.push({ type: 'Feature', geometry, properties: { color } }))
-    features.push({ type: 'Feature', geometry: outline(own), properties: { color } }) // nur der Außenrand, ohne Kreisgrenzen
+  const own = activePartners.value.map((p) => ({ p, color: colorOf.value[p.id], geometries: shapes[p.id].geometries }))
+  own.forEach((o) => { o.outline = outline(o.geometries); o.polys = polysOf(o.geometries).map(thin) })
+  const open = openAreas(activePartners.value, areas.value, OPEN_COUNTRIES)
+  const openCenters = OPEN_COUNTRIES.map((country) => {
+    const geoms = open.filter((a) => a.country === country).map((a) => a.geometry)
+    return { country, center: geoms.length ? interiorPoint(geoms) : null }
+  }).filter((c) => c.center)
+  return { own, allPolys: own.flatMap((o) => o.polys), open, openCenters }
+})
+
+const customers = computed(() => data.value.features.map((f) => f.geometry.coordinates))
+
+/** Namenspunkt je Partner (neben dem Gebiet, siehe labelPoint); die Plätze für "Partner gesucht" bleiben immer frei */
+const partnerLabels = computed(() => {
+  const { own, allPolys, openCenters } = geo.value
+  // Platz freihalten, damit kein Partnername darauf landet (zweizeilig, so breit wie "Partner", kleinere Schrift)
+  const placed = openCenters.map(({ center: [x, y] }) => [x, y, ('Partner'.length * 0.12 + 0.1) * 0.7 / Math.cos((y * Math.PI) / 180) / 2])
+  return own.map(({ p, color, polys }) => {
     const town = p.areas.find((a) => a.lat != null) // nur Gemeinden: Punkt statt Fläche
-    const center = labelPoint(p.name, polysOf(own).map(thin), allPolys, customers, placed) ?? (town ? [town.lng, town.lat] : null)
-    if (center) features.push({ type: 'Feature', geometry: { type: 'Point', coordinates: center }, properties: { name: p.name, color } })
+    const center = labelPoint(p.name, polys, allPolys, customers.value, placed) ?? (town ? [town.lng, town.lat] : null)
+    return center && { type: 'Feature', geometry: { type: 'Point', coordinates: center }, properties: { name: p.name, color } }
+  }).filter(Boolean)
+})
+
+/** Mögliche Partner als graues Schild mit "?" in ihrer Fläche, weg von Kunden und voneinander; die Karte schiebt sie danach neben die Cluster */
+const prospectTags = computed(() => {
+  const byKey = Object.fromEntries(areas.value.map((a) => [a.key, a]))
+  const taken = []
+  return PROSPECTS.map((p) => {
+    const home = byKey[p.home]
+    const center = home?.geometry ? interiorPoint([home.geometry], [...customers.value, ...taken]) : null
+    if (!center) return null
+    taken.push(center)
+    return { country: home.country, feature: { type: 'Feature', geometry: { type: 'Point', coordinates: center }, properties: { name: `${p.name} ?`, tag: true } } }
+  }).filter(Boolean)
+})
+
+/** Alles für die Karte: Partnergebiete, freie Flächen, Namen und Schilder je nach Schalter */
+const territories = computed(() => {
+  const { own, open, openCenters } = geo.value
+  const tags = withProspects.value ? prospectTags.value : []
+  const tagCountries = new Set(tags.map((t) => t.country)) // dort ersetzen die Schilder das "Partner gesucht"
+  const features = []
+  if (withOpen.value) {
+    // Die Grenzen der freien Länder bleiben gestrichelt sichtbar
+    open.forEach((a) => features.push({ type: 'Feature', geometry: a.geometry, properties: { color: OPEN_COLOR, open: true } }))
+    openCenters.filter((c) => !tagCountries.has(c.country)).forEach(({ center }) => features.push({
+      type: 'Feature', geometry: { type: 'Point', coordinates: center }, properties: { name: 'Partner gesucht', color: OPEN_COLOR, scale: 0.7 },
+    }))
   }
+  for (const { color, geometries, outline: line } of own) {
+    geometries.forEach((geometry) => features.push({ type: 'Feature', geometry, properties: { color } }))
+    features.push({ type: 'Feature', geometry: line, properties: { color } }) // nur der Außenrand, ohne Kreisgrenzen
+  }
+  features.push(...partnerLabels.value, ...tags.map((t) => t.feature))
   return { type: 'FeatureCollection', features }
 })
 
