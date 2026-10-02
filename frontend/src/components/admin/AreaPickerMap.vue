@@ -7,6 +7,8 @@ import { COUNTRIES, COUNTRY_CODES } from '../../lib/countries.js'
 // Karte im Partnerdialog: die kleinsten Flächen (Kreise/Bezirke/Départements, dazu Kantone und Stadtstaaten
 // ohne Unterteilung) sind anklickbar. Gelb = im Gebiet dieses Partners,
 // hell = vergeben an einen anderen Partner desselben Segments (je Segment exklusiv).
+// Der Modus legt fest, was ein Klick trifft: die Fläche selbst, ihr Land oder den ganzen Staat.
+// Shift + Ziehen wählt alle Flächen im Rechteck (im gewählten Modus).
 const props = defineProps({
   /** Flächen: [{ key, name, level: 'staat' | 'land' | 'kreis', kind, country, parent, path, geometry }] */
   areas: { type: Array, required: true },
@@ -18,16 +20,33 @@ const props = defineProps({
   fill: { type: String, default: '#F5C400' },
   takenFill: { type: String, default: '#DDE7EA' },
 })
-const emit = defineEmits(['toggle'])
+const emit = defineEmits(['toggle', 'select'])
+
+const MODES = [
+  { level: 'kreis', label: 'Kreis / Bezirk', title: 'Klick wählt eine einzelne Fläche' },
+  { level: 'land', label: 'Land / Kanton / Région', title: 'Klick wählt das ganze Land, in dem die Fläche liegt' },
+  { level: 'staat', label: 'Ganzer Staat', title: 'Klick wählt den ganzen Staat' },
+]
+const DEPTH = { staat: 0, land: 1, kreis: 2 }
+const mode = ref('kreis')
 
 const container = ref(null)
 const hover = ref(null) // { name, note }
 let map = null
 let ready = false
-let hoveredId = null
+let hoveredIds = []
+let hoveredKey = null
 let resizeObserver = null
 
 const within = (path, of) => path.startsWith(of)
+const byKey = computed(() => Object.fromEntries(props.areas.map((a) => [a.key, a])))
+
+/** Was ein Klick auf die Fläche key trifft: sie selbst oder ihr Land/Staat, je nach Modus */
+function targetOf(key) {
+  let a = byKey.value[key]
+  while (a?.parent && DEPTH[a.level] > DEPTH[mode.value]) a = byKey.value[a.parent]
+  return a
+}
 
 // Anklickbar: jeder Kreis, dazu jedes Land ohne Kreise (Basel-Stadt, Genève, Berlin, Wien, …)
 const units = computed(() => {
@@ -60,6 +79,80 @@ function unitFc() {
       }
     }),
   }
+}
+
+/** Hinweis unter der Karte: was ein Klick auf target bewirkt */
+function noteFor(target) {
+  const p = target.path
+  if (props.selected.some((s) => within(p, s.path))) return 'im Gebiet, Klick entfernt'
+  const owner = props.taken.find((t) => within(p, t.path))
+  if (owner) return `vergeben an ${owner.partner}`
+  if (props.taken.some((t) => within(t.path, p))) return 'teilweise vergeben, Klick fügt die freien Teile hinzu'
+  if (props.selected.some((s) => within(s.path, p))) return 'teilweise im Gebiet, Klick nimmt alles auf'
+  return 'Klick fügt hinzu'
+}
+
+/** Hover hebt alle Flächen des Ziels hervor (im Modus Land das ganze Land) */
+function setHover(target) {
+  if (target?.key === hoveredKey) return
+  hoveredIds.forEach((id) => map.setFeatureState({ source: 'ap-units', id }, { hover: false }))
+  hoveredKey = target?.key ?? null
+  hoveredIds = target ? units.value.flatMap((u, i) => (within(u.path, target.path) ? [i] : [])) : []
+  hoveredIds.forEach((id) => map.setFeatureState({ source: 'ap-units', id }, { hover: true }))
+}
+
+// Shift + Ziehen: Rechteck aufziehen, alle berührten Flächen (bzw. deren Länder/Staaten) aufnehmen
+let boxStart = null
+let boxEl = null
+const pointOf = (e) => {
+  const r = map.getCanvasContainer().getBoundingClientRect()
+  return new maplibregl.Point(e.clientX - r.left, e.clientY - r.top)
+}
+function onBoxDown(e) {
+  if (!(e.shiftKey && e.button === 0)) return
+  e.preventDefault()
+  e.stopPropagation()
+  map.dragPan.disable()
+  boxStart = pointOf(e)
+  document.addEventListener('mousemove', onBoxMove)
+  document.addEventListener('mouseup', onBoxUp)
+  document.addEventListener('keydown', onBoxKey)
+}
+function onBoxMove(e) {
+  const p = pointOf(e)
+  if (!boxEl) {
+    boxEl = document.createElement('div')
+    boxEl.className = 'ap-box'
+    map.getCanvasContainer().appendChild(boxEl)
+  }
+  Object.assign(boxEl.style, {
+    left: `${Math.min(boxStart.x, p.x)}px`,
+    top: `${Math.min(boxStart.y, p.y)}px`,
+    width: `${Math.abs(boxStart.x - p.x)}px`,
+    height: `${Math.abs(boxStart.y - p.y)}px`,
+  })
+}
+function onBoxUp(e) {
+  const end = pointOf(e)
+  const start = boxStart
+  endBox()
+  // Kein echtes Rechteck: das ist ein Klick, den der Click-Handler übernimmt
+  if (Math.abs(start.x - end.x) < 4 && Math.abs(start.y - end.y) < 4) return
+  const hits = map.queryRenderedFeatures([start, end], { layers: ['ap-fill'] })
+  const keys = [...new Set(hits.map((f) => targetOf(f.properties.key)?.key).filter(Boolean))]
+  if (keys.length) emit('select', keys)
+}
+function onBoxKey(e) {
+  if (e.key === 'Escape') endBox()
+}
+function endBox() {
+  document.removeEventListener('mousemove', onBoxMove)
+  document.removeEventListener('mouseup', onBoxUp)
+  document.removeEventListener('keydown', onBoxKey)
+  boxEl?.remove()
+  boxEl = null
+  boxStart = null
+  map.dragPan.enable()
 }
 
 const outlineFc = (level) => ({
@@ -97,6 +190,9 @@ onMounted(() => {
     attributionControl: { compact: true },
   })
   map.addControl(new maplibregl.NavigationControl({ showCompass: false }), 'top-right')
+  // Shift + Ziehen gehört der Rechteckauswahl, nicht dem Box-Zoom
+  map.boxZoom.disable()
+  map.getCanvasContainer().addEventListener('mousedown', onBoxDown, true)
   // Im Dialog steht die Größe erst nach dem Öffnen fest
   resizeObserver = new ResizeObserver(() => map?.resize())
   resizeObserver.observe(container.value)
@@ -128,45 +224,64 @@ onMounted(() => {
     })
 
     map.on('mousemove', 'ap-fill', (e) => {
-      const f = e.features[0]
-      if (hoveredId !== null) map.setFeatureState({ source: 'ap-units', id: hoveredId }, { hover: false })
-      hoveredId = f.id
-      map.setFeatureState({ source: 'ap-units', id: hoveredId }, { hover: true })
+      const target = targetOf(e.features[0].properties.key)
+      setHover(target)
       map.getCanvas().style.cursor = 'pointer'
-      const { name, selected, owner } = f.properties
-      hover.value = { name, note: selected ? 'im Gebiet, Klick entfernt' : owner ? `vergeben an ${owner}` : 'Klick fügt hinzu' }
+      hover.value = { name: label(target), note: noteFor(target) }
     })
     map.on('mouseleave', 'ap-fill', () => {
-      if (hoveredId !== null) map.setFeatureState({ source: 'ap-units', id: hoveredId }, { hover: false })
-      hoveredId = null
+      setHover(null)
       map.getCanvas().style.cursor = ''
       hover.value = null
     })
-    map.on('click', 'ap-fill', (e) => emit('toggle', e.features[0].properties.key))
+    map.on('click', 'ap-fill', (e) => {
+      const target = targetOf(e.features[0].properties.key)
+      if (target) emit('toggle', target.key)
+    })
     ready = true
     initialView()
   })
 })
 
 onBeforeUnmount(() => {
+  if (boxStart) endBox()
   resizeObserver?.disconnect()
   map?.remove()
 })
 
 watch(() => [props.selected, props.taken], () => {
-  if (ready) map.getSource('ap-units').setData(unitFc())
+  if (!ready) return
+  map.getSource('ap-units').setData(unitFc())
+  // setData setzt den Hover-Zustand zurück: neu setzen, Hinweis aktualisieren
+  const target = hoveredKey && byKey.value[hoveredKey]
+  hoveredKey = null
+  setHover(target || null)
+  if (target) hover.value = { name: label(target), note: noteFor(target) }
 }, { deep: true })
+
+watch(mode, () => {
+  if (!ready) return
+  setHover(null)
+  hover.value = null
+})
 </script>
 
 <template>
   <div class="ap">
+    <div class="ap-mode" role="radiogroup" aria-label="Klick wählt">
+      <span>Klick wählt</span>
+      <label v-for="m in MODES" :key="m.level" :class="{ 'is-on': mode === m.level }" :title="m.title">
+        <input v-model="mode" type="radio" name="ap-mode" :value="m.level">
+        {{ m.label }}
+      </label>
+    </div>
     <div class="ap-jump" role="group" aria-label="Karte auf ein Land zoomen">
       <button v-for="c in countries" :key="c.key" type="button" @click="fit([c])">{{ COUNTRIES[c.key]?.name ?? c.name }}</button>
     </div>
     <div ref="container" class="ap-map" role="application" aria-label="Karte der Gebiete. Klick auf eine Fläche nimmt sie ins Gebiet auf oder entfernt sie." />
     <p class="ap-hover" aria-live="polite">
       <template v-if="hover"><strong>{{ hover.name }}</strong> · {{ hover.note }}</template>
-      <template v-else>Fläche anklicken, um sie hinzuzufügen oder zu entfernen. Ganze Länder und Staaten über die Suche.</template>
+      <template v-else>Klick fügt hinzu oder entfernt. Shift + Ziehen wählt alle Flächen im Rechteck.</template>
     </p>
     <ul class="ap-legend">
       <li><span class="ap-swatch" :style="{ background: fill }" /> Gebiet dieses Partners</li>
@@ -177,6 +292,15 @@ watch(() => [props.selected, props.taken], () => {
 
 <style scoped>
 .ap { display: grid; gap: 6px; }
+.ap-mode { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; font-size: 0.88rem; }
+.ap-mode > span { color: var(--page-muted); margin-right: 4px; }
+.ap-mode label {
+  display: flex; align-items: center; padding: 4px 10px; border-radius: 4px; cursor: pointer; font-weight: 600;
+  border: 1px solid var(--page-line); background: var(--page-surface); color: var(--page-muted);
+}
+.ap-mode label.is-on { border-color: var(--page-accent); color: var(--page-accent); }
+.ap-mode label:has(input:focus-visible) { outline: 2px solid var(--page-accent); outline-offset: 2px; }
+.ap-mode input { position: absolute; opacity: 0; pointer-events: none; }
 .ap-jump { display: flex; flex-wrap: wrap; gap: 4px; }
 .ap-jump button {
   font: inherit; font-size: 0.88rem; font-weight: 600; padding: 4px 10px; border-radius: 4px; cursor: pointer;
@@ -185,6 +309,10 @@ watch(() => [props.selected, props.taken], () => {
 .ap-jump button:hover { color: var(--page-text); border-color: var(--page-accent); }
 .ap-jump button:focus-visible { outline: 2px solid var(--page-accent); outline-offset: 2px; }
 .ap-map { height: 420px; border-radius: 8px; overflow: hidden; border: 1px solid var(--page-line); }
+.ap-map :deep(.ap-box) {
+  position: absolute; top: 0; left: 0; pointer-events: none;
+  border: 1.5px dashed #F5C400; background: rgb(245 196 0 / 0.12);
+}
 .ap-hover { margin: 0; min-height: 1.4em; color: var(--page-muted); font-size: 0.92rem; }
 .ap-hover strong { color: var(--page-text); }
 .ap-legend { display: flex; flex-wrap: wrap; gap: 4px 16px; margin: 0; padding: 0; list-style: none; color: var(--page-muted); font-size: 0.85rem; }

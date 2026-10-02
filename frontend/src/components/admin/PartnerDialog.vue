@@ -89,27 +89,47 @@ function freeParts(area) {
 }
 
 /**
- * Gebiet aufnehmen. Liegt es schon in einem größeren, passiert nichts; kleinere darin fallen weg.
+ * Gebiet aufnehmen, ohne Hinweis. Liegt es schon in einem größeren, passiert nichts; kleinere darin fallen weg.
  * Vergebene Regionen (gleiches Segment) gehen nicht; bei einem teilweise vergebenen Gebiet kommen die freien Teile.
  */
-function add(area) {
+function merge(area) {
   const parent = form.value.areas.find((a) => area.key !== a.key && within(area, a))
-  if (keys.value.includes(area.key) || parent) {
-    notice.value = { text: `${area.name} gehört schon zum Gebiet${parent ? ` (liegt in ${parent.name})` : ''}.` }
-    return
-  }
+  if (keys.value.includes(area.key) || parent) return { status: 'covered', parent }
   const conflicts = conflictsOf(area)
   const parts = conflicts.length ? freeParts(areaByKey.value[area.key] ?? area) : [area]
   if (!parts.length) {
-    const owner = conflicts.find((t) => within(area, t))
-    notice.value = { warn: true, text: `${area.name} ist schon vergeben an ${owner?.partner ?? owners(conflicts)}. Je Segment betreut nur ein Partner eine Region.` }
-    return
+    return { status: 'taken', owner: conflicts.find((t) => within(area, t))?.partner ?? owners(conflicts) }
   }
   const inside = form.value.areas.filter((a) => within(a, area))
   form.value.areas = [...form.value.areas.filter((a) => !within(a, area)), ...parts.map(toRef)]
-  notice.value = conflicts.length
-    ? { text: `${area.name} ist teilweise vergeben (${owners(conflicts)}). Übernommen: ${parts.length} freie ${parts.length === 1 ? 'Region' : 'Regionen'}.` }
-    : inside.length ? { text: `${area.name} ersetzt ${inside.map((a) => a.name).join(', ')}.` } : null
+  return { status: 'added', conflicts, parts, inside }
+}
+
+function add(area) {
+  const r = merge(area)
+  if (r.status === 'covered') {
+    notice.value = { text: `${area.name} gehört schon zum Gebiet${r.parent ? ` (liegt in ${r.parent.name})` : ''}.` }
+  } else if (r.status === 'taken') {
+    notice.value = { warn: true, text: `${area.name} ist schon vergeben an ${r.owner}. Je Segment betreut nur ein Partner eine Region.` }
+  } else {
+    notice.value = r.conflicts.length
+      ? { text: `${area.name} ist teilweise vergeben (${owners(r.conflicts)}). Übernommen: ${r.parts.length} freie ${r.parts.length === 1 ? 'Region' : 'Regionen'}.` }
+      : r.inside.length ? { text: `${area.name} ersetzt ${r.inside.map((a) => a.name).join(', ')}.` } : null
+  }
+}
+
+/** Mehrere Gebiete auf einmal (Rechteckauswahl in der Karte), ein gemeinsamer Hinweis */
+function addMany(keyList) {
+  const results = keyList.map((k) => areaByKey.value[k]).filter(Boolean).map(merge)
+  const added = results.filter((r) => r.status === 'added')
+  const covered = results.filter((r) => r.status === 'covered')
+  const blockedBy = [...new Set(results.filter((r) => r.status === 'taken').map((r) => r.owner))]
+  const partly = added.filter((r) => r.conflicts.length)
+  const bits = [`${added.length} ${added.length === 1 ? 'Gebiet' : 'Gebiete'} übernommen`]
+  if (partly.length) bits.push(`davon ${partly.length} nur mit den freien Teilen`)
+  if (covered.length) bits.push(`${covered.length} schon im Gebiet`)
+  if (blockedBy.length) bits.push(`${results.length - added.length - covered.length} vergeben an ${blockedBy.join(', ')}`)
+  notice.value = { warn: !added.length && blockedBy.length > 0, text: `Auswahl: ${bits.join(', ')}.` }
 }
 
 function remove(key) {
@@ -236,7 +256,7 @@ async function save() {
                 <button type="button" class="pd-x" :aria-label="`${a.name} entfernen`" @click="remove(a.key)">×</button>
               </li>
             </ul>
-            <p v-else class="pd-muted">Noch kein Gebiet. Suchen oder Flächen in der Karte anklicken.</p>
+            <p v-else class="pd-muted">Noch kein Gebiet. Suchen oder in der Karte wählen: einzelne Flächen, ganze Länder oder Staaten.</p>
           </fieldset>
 
           <fieldset class="pd-field pd-contact">
@@ -254,7 +274,7 @@ async function save() {
         </div>
 
         <div class="pd-col">
-          <AreaPickerMap v-if="areaMap" :areas="areaMap" :selected="form.areas" :taken="taken" @toggle="toggleArea" />
+          <AreaPickerMap v-if="areaMap" :areas="areaMap" :selected="form.areas" :taken="taken" @toggle="toggleArea" @select="addMany" />
           <div v-else class="pd-map-wait">Karte wird geladen …</div>
 
           <section class="pd-card" aria-live="polite">

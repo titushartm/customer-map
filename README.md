@@ -29,7 +29,7 @@ Admin
 : Nur SpeechMind intern: Liste aller Vertriebspartner mit Segment, Gebiet und Abdeckung. „Neuer Partner“ und „Bearbeiten“ öffnen einen Dialog, siehe [Vertriebspartner](#vertriebspartner). „Karte“ springt in die Partneransicht.
 
 Liste
-: Alle Ziele als Tabelle mit Kunden-Häkchen. Suche nach Name oder PLZ, „In der Nähe von“ mit Umkreis, Filter nach Status, Bundesland, Art (Segment bzw. Ebene) und Einwohnerklasse, sortierbare Spalten. Klick auf eine Zeile öffnet den Empfehlungsdialog. Filtern, Sortieren und Blättern macht der Server (`/api/map/<audience>/list/`, 25/50/100 je Seite); geladen wird immer nur eine Seite. Nur die Tabelle scrollt, Filter und Blätterleiste bleiben stehen.
+: Alle Ziele als Tabelle mit Kunden-Häkchen. Suche nach Name oder PLZ, „In der Nähe von“ mit Umkreis, Filter nach Status, Bundesland, Art (Segment bzw. Ebene) und Einwohnerklasse, sortierbare Spalten (Kundendauer nach Gruppe, siehe [Freigaben](#freigaben)). Klick auf eine Zeile öffnet den Empfehlungsdialog. Filtern, Sortieren und Blättern macht der Server (`/api/map/<audience>/list/`, 25/50/100 je Seite); geladen wird immer nur eine Seite. Nur die Tabelle scrollt, Filter und Blätterleiste bleiben stehen.
 
 Lange Listen in den anderen Tabs (Liste neben der Karte, Partner im Admin, Einladungen) rendern stückweise und laden beim Scrollen nach (`composables/useLazyList.js`).
 
@@ -164,11 +164,12 @@ frontend/src/
   mocks/recommendations.js             Empfehlungslogik
   lib/segments.js                      Segmente: Wörter, Einheiten, Artikel
   lib/referral.js                      Status-Texte, Einladungstext
+  lib/tenure.js                        Kundendauer-Gruppen (Neu, Etabliert, Lange dabei) statt Startdatum
   lib/sizeClasses.js, lib/geo.js
 backend/maps/                          Skizze
   models.py        Region (Geo), Target (Ziel + Kundenstatus), SalesPartner + PartnerTerritory,
                    ReferralCode + Referral
-  audiences.py     was jede Ansicht sehen darf
+  audiences.py     was jede Ansicht sehen darf, Kundendauer-Gruppen (TENURE_GROUPS)
   referrals.py     Rabattregeln, Code-Erzeugung
   views.py         /api/map/<audience>/targets/, /api/map/<audience>/list/ (Seiten), /api/map/<audience>/recent/, /api/referral/<code>/, /api/geo/…
   partner_admin.py /api/partners/…, /api/geo/areas/ (Admin-Tab, nur is_staff)
@@ -179,7 +180,7 @@ backend/maps/                          Skizze
 ## Datenmodell (Skizze)
 
 - `Region` ist die reine Geo-Referenz: Staaten, Länder, Kreise, Ämter/VG und Gemeinden mit Grenzen und Einwohnern, je Land. Schlüssel, Pfad und Import: siehe [Länder](#länder).
-- `Target` ist ein Ziel, dem wir verkaufen, mit `segment`, `size` (Einwohner bzw. Mitarbeitende), eigener Lage und der Region, in der es sitzt. Verwaltungen entstehen beim VG250-Import automatisch je Region. **Kunde = `customer_since` gesetzt.** `organization` ist optional und wird verknüpft, sobald es sie gibt.
+- `Target` ist ein Ziel, dem wir verkaufen, mit `segment`, `size` (Einwohner bzw. Mitarbeitende), eigener Lage und der Region, in der es sitzt. Verwaltungen entstehen beim VG250-Import automatisch je Region. **Kunde = `customer_since` gesetzt.** Das Datum bleibt intern, die API liefert nur die Kundendauer als Gruppe (`customer_tenure`, siehe [Freigaben](#freigaben)). `organization` ist optional und wird verknüpft, sobald es sie gibt.
 - `SalesPartner` wird im Admin-Tab angelegt und hat genau ein `segment`. Logins hängen als User daran. Kunden eines Partners erkennt man an `Organization.creater_user`. `Organization.is_partner` meint API-Partner und spielt hier keine Rolle.
 - `PartnerTerritory` = Partner + Region (Land, Kreis oder Gemeinde). Ein Ziel gehört zum Gebiet, wenn der Schlüssel seiner Region mit dem Schlüssel der Gebietsregion beginnt und sein Segment das des Partners ist.
 
@@ -208,3 +209,5 @@ Standortdaten werden im Browser und auf dem Server auf zwei Nachkommastellen ger
 ## Freigaben
 
 `Region.public_reference` steht standardmäßig auf `False`. Nicht freigegebene Kunden zählen auf der öffentlichen Karte nur anonym mit, in „Neu dabei“ erscheinen sie ohne Namen und ohne Koordinaten. E-Mail-Entwurf und One-Pager nennen nur freigegebene Kunden. Lege das Flag erst nach einer schriftlichen Referenzfreigabe um.
+
+Das genaue Startdatum eines Kunden (`Target.customer_since`) verlässt die API in keiner Ansicht. Karten, Liste und Empfehlungsdialog bekommen nur `customer_tenure`: `neu` („Neu“, unter 3 Monaten), `etabliert` („Etabliert“, 3 bis 12 Monate) oder `lange` („Lange dabei“, mehr als 12 Monate). Die Grenzen stehen in `TENURE_GROUPS` (`backend/maps/audiences.py`) und `frontend/src/lib/tenure.js`. Der Lichthof auf der Karte und „Neu dabei“ in der Liste neben der Karte stehen für die Gruppe „Neu“. „Neu dabei“ (die Leiste) rechnet seine Zeiträume serverseitig und liefert die Kunden nur in Reihenfolge, ohne Datum. Die Liste sortiert nach Gruppe, innerhalb der Gruppe nach Name.

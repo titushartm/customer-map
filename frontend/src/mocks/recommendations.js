@@ -4,6 +4,7 @@
 import { haversineKm } from '../lib/geo.js'
 import { sizeClassOf } from '../lib/sizeClasses.js'
 import { wordsFor, withArticle, sizeText } from '../lib/segments.js'
+import { tenureOf } from '../lib/tenure.js'
 
 const NEARBY_KM = 60
 
@@ -104,7 +105,7 @@ export function recommend(target, all) {
     target: {
       key: target.key, name: target.name, segment: target.segment, level: target.level, state: target.state, country: target.country,
       size: target.size, postcodes: target.postcodes, is_customer: target.is_customer,
-      customer_since: target.customer_since, licence: target.licence,
+      customer_tenure: tenureOf(target.customer_since), licence: target.licence, // kein Startdatum nach außen
     },
     licence,
     hardware,

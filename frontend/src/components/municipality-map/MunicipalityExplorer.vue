@@ -10,6 +10,7 @@ import { COUNTRIES } from '../../lib/countries.js'
 const capitalize = (s) => s.charAt(0).toUpperCase() + s.slice(1)
 import { fetchTargets, fetchRecent } from '../../api/map.js'
 import { SEGMENTS, sizeText, kindLabel } from '../../lib/segments.js'
+import { tenureLabel } from '../../lib/tenure.js'
 
 // Pro Zielgruppe: Ausschnitt, Popup-Felder und Texte. Welche Daten tatsächlich kommen,
 // entscheidet das Backend (audiences.py), nicht diese Tabelle.
@@ -17,7 +18,7 @@ const AUDIENCE_DEFAULTS = {
   kunden: {
     scope: 'radius',
     fields: [
-      { key: 'customer_since', label: 'Kunde seit', format: 'month' },
+      { key: 'customer_tenure', label: 'Kundendauer', format: 'tenure' },
       { key: 'distance_km', label: 'Entfernung', format: 'km' },
     ],
   },
@@ -27,7 +28,7 @@ const AUDIENCE_DEFAULTS = {
       { key: 'segment', label: 'Art', format: 'kind' },
       { key: 'status', label: 'Status', format: 'status' },
       { key: 'size', label: 'Größe', format: 'size' },
-      { key: 'customer_since', label: 'Kunde seit', format: 'month' },
+      { key: 'customer_tenure', label: 'Kundendauer', format: 'tenure' },
       { key: 'licence', label: 'Lizenz', format: 'text' },
     ],
   },
@@ -38,7 +39,7 @@ const AUDIENCE_DEFAULTS = {
       { key: 'status', label: 'Status', format: 'status' },
       { key: 'state', label: 'Land/Region', format: 'text' },
       { key: 'size', label: 'Größe', format: 'size' },
-      { key: 'customer_since', label: 'Kunde seit', format: 'month' },
+      { key: 'customer_tenure', label: 'Kundendauer', format: 'tenure' },
       { key: 'licence', label: 'Lizenz', format: 'text' },
     ],
   },
@@ -273,16 +274,13 @@ const visible = computed(() => {
 // Intern sind das Tausende: stückweise rendern, beim Scrollen der Liste mehr
 const { items: visibleItems, hasMore: moreVisible, sentinel: listSentinel } = useLazyList(visible, { step: 50 })
 
-const dateFmt = new Intl.DateTimeFormat('de-DE', { dateStyle: 'long' })
-const monthFmt = new Intl.DateTimeFormat('de-DE', { month: 'long', year: 'numeric' })
 const numFmt = new Intl.NumberFormat('de-DE')
 const pctFmt = new Intl.NumberFormat('de-DE', { style: 'percent' })
 
 function formatValue(value, format) {
   if (value == null || value === '') return null
   switch (format) {
-    case 'date': return dateFmt.format(new Date(value))
-    case 'month': return monthFmt.format(new Date(value))
+    case 'tenure': return tenureLabel(value) // Gruppe statt Startdatum
     case 'number': return numFmt.format(value)
     case 'km': return `${value} km`
     case 'status': return value === 'customer' ? 'Kunde' : 'Noch kein Kunde'
@@ -303,9 +301,11 @@ function popupRows(feature) {
 }
 
 function itemMeta(p) {
-  if (isRadius.value) return `${p.distance_km} km entfernt, dabei seit ${p.since_label}`
+  // Neue zeigen "Neu dabei" als Marke, die anderen ihre Kundendauer
+  const tenure = p.is_new ? null : p.tenure_label
+  if (isRadius.value) return [`${p.distance_km} km entfernt`, tenure].filter(Boolean).join(' · ')
   const kind = activeSegment.value ? null : kindLabel(p)
-  const state = p.status === 'customer' ? `Kunde seit ${p.since_label}` : 'Noch kein Kunde'
+  const state = p.status === 'customer' ? ['Kunde', tenure].filter(Boolean).join(' · ') : 'Noch kein Kunde'
   return [kind, state, sizeText(p.segment, p.size)].filter(Boolean).join(' · ')
 }
 </script>

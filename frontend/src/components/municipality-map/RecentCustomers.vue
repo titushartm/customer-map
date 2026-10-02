@@ -3,8 +3,9 @@ import { computed } from 'vue'
 import { wordsFor } from '../../lib/segments.js'
 
 // Die zuletzt dazugekommenen Kunden. Klein als Zeile auf der Karte, groß als Liste im Panel.
+// Ohne Datum je Kunde (Datenschutz), nur die Reihenfolge: neueste zuerst.
 const props = defineProps({
-  /** { days, total, items: [{ key?, name?, level, state, customer_since, lat?, lng? }] } */
+  /** { days, total, items: [{ key?, name?, level, state, lat?, lng? }] } */
   recent: { type: Object, default: null },
   compact: { type: Boolean, default: false },
   /** Wörter des Segments: { plural, label } */
@@ -15,12 +16,6 @@ const emit = defineEmits(['select'])
 const items = computed(() => props.recent?.items ?? [])
 const total = computed(() => props.recent?.total ?? 0)
 const more = computed(() => Math.max(0, total.value - items.value.length))
-
-const rtf = new Intl.RelativeTimeFormat('de-DE', { numeric: 'auto' })
-function ago(iso) {
-  const days = Math.round((Date.now() - new Date(iso).getTime()) / 86_400_000)
-  return days < 7 ? rtf.format(-days, 'day') : rtf.format(-Math.round(days / 7), 'week')
-}
 
 // 30 → "im letzten Monat", 90 → "in den letzten drei Monaten"
 const period = computed(() => {
@@ -58,11 +53,9 @@ const compactLine = computed(() => {
       <li v-for="(item, i) in items" :key="item.key ?? `anon-${i}`">
         <button v-if="item.name && item.lat != null" type="button" @click="emit('select', item)">
           <span class="mm-recent-name">{{ label(item) }}</span>
-          <span class="mm-recent-when">{{ ago(item.customer_since) }}</span>
         </button>
         <span v-else class="mm-recent-row is-anon">
           <span class="mm-recent-name">{{ label(item) }}</span>
-          <span class="mm-recent-when">{{ ago(item.customer_since) }}</span>
         </span>
       </li>
     </ul>
@@ -123,7 +116,6 @@ const compactLine = computed(() => {
 .mm-recent button:focus-visible { outline: 2px solid var(--mm-sign); outline-offset: 1px; }
 .mm-recent-name { font-weight: 600; }
 .is-anon .mm-recent-name { font-weight: 400; color: var(--mm-muted); font-style: italic; }
-.mm-recent-when { color: var(--mm-muted); font-size: 0.9rem; white-space: nowrap; }
 .mm-recent-more { margin: 6px 6px 0; color: var(--mm-muted); font-size: 0.9rem; }
 
 @media (prefers-reduced-motion: reduce) { .mm-recent-dot { animation: none; } }

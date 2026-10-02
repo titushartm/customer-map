@@ -6,19 +6,18 @@ import { MOCK_REFERRALS, REFERRAL_RULES, codeFor } from '../mocks/referrals.js'
 import { SEGMENTS, SEGMENT_KEYS } from '../lib/segments.js'
 import { sizeClassOf, SIZE_CLASSES } from '../lib/sizeClasses.js'
 import { haversineKm } from '../lib/geo.js'
+import { tenureOf, tenureLabel, tenureRank } from '../lib/tenure.js'
 import { recommend, suggestLicence } from '../mocks/recommendations.js'
 
 const USE_MOCK = import.meta.env.VITE_MAP_USE_MOCK !== 'false'
 const API_BASE = import.meta.env.VITE_API_BASE ?? '/api'
 
-/** Tage, in denen ein Kunde als "neu" gilt (Lichthof auf der Karte, Leiste "Neu dabei"). */
-export const NEW_WITHIN_DAYS = 30
-
 /**
  * Ziele (Verwaltungen, Stadtwerke, DRK, …) für eine Zielgruppe.
  * Rückgabe: { collection: GeoJSON FeatureCollection, meta }
  * properties: key, name, segment, level, state, status ('customer' | 'prospect'), dazu je nach
- * Zielgruppe customer_since, size, licence, postcodes, distance_km.
+ * Zielgruppe customer_tenure ('neu' | 'etabliert' | 'lange', siehe lib/tenure.js), size, licence, postcodes, distance_km.
+ * Das genaue Startdatum liefert keine Zielgruppe.
  *   kunden:  { segment, lat, lng, radiusKm }
  *   partner: { partnerId }   (später aus der Anmeldung); nur das Segment des Partners, meta.territory = Gebietsfläche als GeoJSON
  *   intern:  —
@@ -56,7 +55,7 @@ export async function fetchTargetPage({ audience, partnerId, filters = {}, sort 
   return mockTargetPage({ audience, partnerId, filters, sort, dir, page, pageSize })
 }
 
-/** Die zuletzt dazugekommenen Kunden: { days, total, items: [{ key?, name?, segment, level, state, customer_since, lat?, lng? }] } */
+/** Die zuletzt dazugekommenen Kunden, neueste zuerst: { days, total, items: [{ key?, name?, segment, level, state, lat?, lng? }] } */
 export async function fetchRecent({ audience, segment, partnerId }) {
   if (USE_MOCK && audience === 'partner') await loadAreas()
   return USE_MOCK
@@ -265,25 +264,20 @@ async function getJson(path, params, { signal } = {}) {
   return res.json()
 }
 
-const monthFmt = new Intl.DateTimeFormat('de-DE', { month: '2-digit', year: 'numeric' })
-
 function normalize(fc) {
-  const threshold = Date.now() - NEW_WITHIN_DAYS * 86_400_000
   return {
     meta: { hidden_count: 0, ...fc.meta },
     collection: {
       type: 'FeatureCollection',
-      features: fc.features.map((f) => {
-        const since = f.properties.customer_since ? new Date(f.properties.customer_since) : null
-        return {
-          ...f,
-          properties: {
-            ...f.properties,
-            since_label: since ? monthFmt.format(since) : '',
-            is_new: since ? since.getTime() >= threshold : false,
-          },
-        }
-      }),
+      features: fc.features.map((f) => ({
+        ...f,
+        properties: {
+          ...f.properties,
+          tenure_label: tenureLabel(f.properties.customer_tenure) ?? '',
+          // Lichthof auf der Karte und "Neu dabei" in der Liste
+          is_new: f.properties.customer_tenure === 'neu',
+        },
+      })),
     },
   }
 }
@@ -291,9 +285,9 @@ function normalize(fc) {
 // ---- Mock-Backend: verhält sich wie backend/maps/views.py ----
 
 // Spiegel von backend/maps/audiences.py
-const FIELDS_FULL = ['customer_since', 'size', 'licence', 'postcodes']
+const FIELDS_FULL = ['customer_tenure', 'size', 'licence', 'postcodes']
 const AUDIENCES = {
-  kunden: { scope: 'radius', includeProspects: false, namedOnly: true, fields: ['customer_since'], recentMin: 3 },
+  kunden: { scope: 'radius', includeProspects: false, namedOnly: true, fields: ['customer_tenure'], recentMin: 3 },
   partner: { scope: 'territory', includeProspects: true, namedOnly: false, fields: FIELDS_FULL, recentMin: 1 },
   intern: { scope: 'all', includeProspects: true, namedOnly: false, fields: FIELDS_FULL, recentMin: 1 },
 }
@@ -324,7 +318,7 @@ export function mockAllTargets() {
       postcodes: r.postcodes,
       population: r.population, // der Region, für Größenklassen bei Verwaltungen
       is_customer: Boolean(c),
-      customer_since: c?.since ?? null,
+      customer_since: c?.since ?? null, // nur intern, nach außen geht customer_tenure
       public_reference: c?.public_reference ?? false,
       licence: c?.licence ?? null,
     }
@@ -490,7 +484,7 @@ function mockTargets({ audience, segment, lat, lng, radiusKm, partnerId }) {
       state: t.state,
       country: t.country,
       status: t.is_customer ? 'customer' : 'prospect',
-      ...(cfg.fields.includes('customer_since') && t.customer_since ? { customer_since: t.customer_since } : {}),
+      ...(cfg.fields.includes('customer_tenure') && t.customer_since ? { customer_tenure: tenureOf(t.customer_since) } : {}),
       ...(cfg.fields.includes('size') ? { size: t.size } : {}),
       ...(cfg.fields.includes('licence') && t.licence ? { licence: t.licence } : {}),
       ...(cfg.fields.includes('postcodes') ? { postcodes: t.postcodes } : {}),
@@ -521,10 +515,11 @@ function mockTargetPage({ audience, partnerId, filters: f, sort, dir, page, page
       return true
     })
     .sort((a, b) => {
-      const va = a[sort] ?? ''
-      const vb = b[sort] ?? ''
-      if (typeof va === 'number' && typeof vb === 'number') return (va - vb) * dir
-      return String(va).localeCompare(String(vb), 'de') * dir
+      const va = sortValue(a, sort)
+      const vb = sortValue(b, sort)
+      if (va === '' || vb === '') return (va === '') - (vb === '') // leer immer zuletzt, wie nulls_last im Backend
+      const cmp = typeof va === 'number' && typeof vb === 'number' ? va - vb : String(va).localeCompare(String(vb), 'de')
+      return cmp * dir || a.name.localeCompare(b.name, 'de') // dann nach Name, wie im Backend
     })
 
   const customers = rows.filter((r) => r.status === 'customer').length
@@ -547,6 +542,11 @@ function mockTargetPage({ audience, partnerId, filters: f, sort, dir, page, page
     },
   }
 }
+
+// Kundendauer nach Gruppe, nicht nach Datum: kürzeste zuerst, innerhalb der Gruppe nach Name
+const sortValue = (r, sort) => (sort === 'customer_tenure'
+  ? (r.customer_tenure ? tenureRank(r.customer_tenure) : '')
+  : r[sort] ?? '')
 
 /** Verwaltungs-Kunden in der Größenklasse der Gemeinde am Standort, im selben Staat, ohne sie selbst. */
 function peers(verwaltungen, lat, lng) {
@@ -583,7 +583,7 @@ function mockRecent({ audience, segment, partnerId }) {
         level: t.level,
         state: t.state,
         country: t.country,
-        customer_since: t.customer_since,
+        // Kein Datum je Kunde, nur die Reihenfolge (neueste zuerst)
         // Anonyme bekommen keine Koordinaten: sonst wäre das Ziel trotzdem erkennbar
         lat: named ? t.lat : null,
         lng: named ? t.lng : null,

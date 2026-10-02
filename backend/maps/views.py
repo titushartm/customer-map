@@ -16,7 +16,7 @@ from django.views.decorators.cache import cache_control
 from django.views.decorators.http import require_GET
 
 from . import referrals as rules
-from .audiences import AUDIENCES, RECENT_LIMIT, RECENT_WINDOWS_DAYS
+from .audiences import AUDIENCES, RECENT_LIMIT, RECENT_WINDOWS_DAYS, TENURE_GROUPS, customer_tenure
 from .models import Country, ReferralCode, Region, RegionLevel, SalesPartner, Segment, Target
 
 
@@ -112,8 +112,8 @@ def _properties(t, fields):
         "country": t.region.country,
         "status": "customer" if t.is_customer else "prospect",
     }
-    if "customer_since" in fields and t.customer_since:
-        props["customer_since"] = t.customer_since.isoformat()
+    if "customer_tenure" in fields and t.customer_since:
+        props["customer_tenure"] = customer_tenure(t.customer_since)  # nur die Gruppe, nie das Datum
     if "size" in fields and t.size is not None:
         props["size"] = t.size
     if "licence" in fields and t.organization_id:  # neue Kunden haben oft noch keine
@@ -219,13 +219,29 @@ def targets(request, audience):
 
 
 LIST_PAGE_SIZES = (25, 50, 100)
-# Sortierbare Spalten der Liste -> ORM-Ausdruck
+
+
+def _tenure_rank():
+    """Kundendauer zum Sortieren: 0 = Neu, 1 = Etabliert, … (Noch-nicht-Kunden NULL). Nach Gruppe, nicht nach Datum."""
+    today = date.today()
+    groups = [When(customer_since__gt=today - timedelta(days=max_days), then=Value(i))
+              for i, (_, _, max_days) in enumerate(TENURE_GROUPS) if max_days is not None]
+    last = When(customer_since__isnull=False, then=Value(len(TENURE_GROUPS) - 1))
+    return Case(*groups, last, output_field=IntegerField())
+
+
+def _prospect_rank():
+    """0 = Kunde, 1 = Noch kein Kunde: "Kunde" aufsteigend = Kunden zuerst."""
+    return Case(When(customer_since__isnull=False, then=Value(0)), default=Value(1), output_field=IntegerField())
+
+
+# Sortierbare Spalten der Liste -> Feldname oder Funktion, die den ORM-Ausdruck baut
 LIST_SORT = {
     "name": "name",
     "size": "size",
     "state": "region__state__name",
-    "customer_since": "customer_since",
-    "status": "customer_since",  # Kunden zuerst bzw. zuletzt
+    "customer_tenure": _tenure_rank,
+    "status": _prospect_rank,
     "distance_km": "distance",
 }
 
@@ -273,9 +289,7 @@ def target_list(request, audience):
     if sort not in LIST_SORT or (sort == "distance_km" and point is None):
         sort = "size"
     desc = request.GET.get("dir", "desc") == "desc"
-    if sort == "status":
-        desc = not desc  # "Kunde" aufsteigend = Kunden zuerst = customer_since vorhanden zuerst
-    field = F(LIST_SORT[sort])
+    field = F(LIST_SORT[sort]) if isinstance(LIST_SORT[sort], str) else LIST_SORT[sort]()
     qs = qs.order_by(field.desc(nulls_last=True) if desc else field.asc(nulls_last=True), "name", "pk")
 
     try:
@@ -313,7 +327,7 @@ def target_list(request, audience):
 @cache_control(private=True, max_age=300)
 def recent(request, audience):
     """
-    Die zuletzt dazugekommenen Kunden. Bei "kunden" deutschlandweit, damit die Leiste
+    Die zuletzt dazugekommenen Kunden, neueste zuerst, ohne Datum. Bei "kunden" deutschlandweit, damit die Leiste
     nie leer ist; nicht freigegebene erscheinen dort nur mit Bundesland. Unter recent_min
     Kunden im Zeitraum wird der nächste Zeitraum versucht, danach bleibt die Liste leer.
     """
@@ -339,7 +353,7 @@ def recent(request, audience):
             "level": t.region.level if t.segment == Segment.VERWALTUNG else None,
             "state": _state_name(t.region),
         "country": t.region.country,
-            "customer_since": t.customer_since.isoformat(),
+            # Kein Datum je Kunde, nur die Reihenfolge (neueste zuerst)
             # Anonyme bekommen keine Koordinaten: sonst wäre das Ziel trotzdem erkennbar
             "lat": round(t.location.y, 2) if named else None,
             "lng": round(t.location.x, 2) if named else None,

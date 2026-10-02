@@ -4,6 +4,7 @@ import PlaceSearch from '../municipality-map/PlaceSearch.vue'
 import { fetchTargetPage } from '../../api/map.js'
 import { SEGMENTS, sizeText, kindLabel } from '../../lib/segments.js'
 import { SIZE_CLASSES } from '../../lib/sizeClasses.js'
+import { tenureLabel } from '../../lib/tenure.js'
 import { COUNTRIES, COUNTRY_CODES } from '../../lib/countries.js'
 
 // Alle Ziele (Verwaltungen, Stadtwerke, DRK, …) als Tabelle. Intern: alles, als Partner: nur das eigene Gebiet.
@@ -101,7 +102,7 @@ function sortBy(key) {
   if (sortKey.value === key) sortDir.value *= -1
   else {
     sortKey.value = key
-    sortDir.value = key === 'size' || key === 'customer_since' ? -1 : 1
+    sortDir.value = key === 'size' ? -1 : 1 // Kundendauer: Neu zuerst
   }
 }
 const ariaSort = (key) => (sortKey.value !== key ? 'none' : sortDir.value === 1 ? 'ascending' : 'descending')
@@ -143,7 +144,6 @@ const stateGroups = computed(() => COUNTRY_CODES
   .filter((g) => g.states.length))
 
 const numFmt = new Intl.NumberFormat('de-DE')
-const monthFmt = new Intl.DateTimeFormat('de-DE', { month: 'short', year: 'numeric' })
 </script>
 
 <template>
@@ -228,7 +228,7 @@ const monthFmt = new Intl.DateTimeFormat('de-DE', { month: 'short', year: 'numer
             <th scope="col" :aria-sort="ariaSort('state')"><button type="button" @click="sortBy('state')">Land/Region</button></th>
             <th scope="col">PLZ</th>
             <th scope="col" class="num" :aria-sort="ariaSort('size')"><button type="button" @click="sortBy('size')">Größe</button></th>
-            <th scope="col" :aria-sort="ariaSort('customer_since')"><button type="button" @click="sortBy('customer_since')">Kunde seit</button></th>
+            <th scope="col" :aria-sort="ariaSort('customer_tenure')"><button type="button" @click="sortBy('customer_tenure')">Kundendauer</button></th>
             <th scope="col">Lizenz</th>
             <th v-if="center" scope="col" class="num" :aria-sort="ariaSort('distance_km')"><button type="button" @click="sortBy('distance_km')">Entfernung</button></th>
           </tr>
@@ -247,12 +247,12 @@ const monthFmt = new Intl.DateTimeFormat('de-DE', { month: 'short', year: 'numer
                 <svg v-if="r.status === 'customer'" viewBox="0 0 16 16" aria-hidden="true"><path d="M3.5 8.5l3 3 6-7" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" /></svg>
               </span>
             </td>
-            <td class="rl-name">{{ r.name }}<span v-if="r.is_new" class="rl-new">Neu</span></td>
+            <td class="rl-name">{{ r.name }}</td>
             <td>{{ kindLabel(r) }}</td>
             <td>{{ r.state }} <span class="rl-muted">{{ r.country }}</span></td>
             <td class="rl-plz">{{ (r.postcodes ?? [])[0] ?? '–' }}<span v-if="(r.postcodes ?? []).length > 1" class="rl-muted"> +{{ r.postcodes.length - 1 }}</span></td>
             <td class="num">{{ sizeText(r.segment, r.size) ?? '–' }}</td>
-            <td>{{ r.customer_since ? monthFmt.format(new Date(r.customer_since)) : '–' }}</td>
+            <td>{{ tenureLabel(r.customer_tenure) ?? '–' }}</td>
             <td :class="{ 'rl-muted': !r.licence }">{{ r.licence ?? (r.status === 'customer' ? 'noch keine Orga' : '–') }}</td>
             <td v-if="center" class="num">{{ r.distance_km }} km</td>
           </tr>
@@ -373,10 +373,6 @@ const monthFmt = new Intl.DateTimeFormat('de-DE', { month: 'short', year: 'numer
 .rl-table tr:not(.is-customer) .rl-name { font-weight: 500; }
 .rl-plz { font-variant-numeric: tabular-nums; letter-spacing: 0.03em; }
 .rl-muted { color: var(--page-muted); }
-.rl-new {
-  margin-left: 8px; font-size: 0.75rem; font-weight: 600; padding: 1px 6px; border-radius: 3px;
-  color: var(--page-accent); border: 1px solid currentColor; vertical-align: 2px;
-}
 .rl-check {
   display: inline-grid; place-items: center; width: 18px; height: 18px; border-radius: 3px;
   border: 1.5px solid var(--page-line); color: #000; vertical-align: middle;

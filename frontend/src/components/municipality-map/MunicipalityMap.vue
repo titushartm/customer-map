@@ -148,7 +148,7 @@ function addLayers() {
     'format',
     ['get', 'name'], {},
     '\n', {},
-    ['concat', 'seit ', ['get', 'since_label']], { 'font-scale': 0.78 },
+    ['get', 'tenure_label'], { 'font-scale': 0.78 }, // Kundendauer als Gruppe, kein Datum
   ]
   // Noch keine Kunden: Name, darunter die Größe mit Einheit des Segments (nur wo das Backend sie liefert)
   const unit = ['match', ['get', 'segment'], ...Object.entries(SEGMENTS).flatMap(([k, s]) => [k, ` ${s.sizeUnit}`]), '']
@@ -220,7 +220,7 @@ function addLayers() {
     paint: { 'text-color': props.prospectInk },
   })
 
-  // Neue Einträge bekommen einen ruhigen Lichthof
+  // Neue Einträge (Kundendauer "Neu") bekommen einen ruhigen Lichthof
   map.addLayer({
     id: 'mm-new-halo',
     type: 'circle',
