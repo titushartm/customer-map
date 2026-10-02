@@ -279,8 +279,7 @@ const mapData = computed(() => {
 })
 
 // Lizenzarten sind Unterfälle von "Kunden": 'licence:orga-year' zeigt nur die mit Jahreslizenz
-const matchesStatus = (p) => {
-  const f = statusFilter.value
+const matchesStatus = (p, f = statusFilter.value) => {
   if (f === 'all') return true
   if (f.startsWith('licence:')) return p.licence_type === f.slice(8)
   return p.status === f
@@ -329,7 +328,6 @@ const ready = computed(() => (isRadius.value ? status.value === 'ready' : loaded
 const placeLabel = computed(() => place.value?.label ?? location.value?.label ?? null)
 
 const TERRITORY_INLINE = 6
-const numFmtCtx = new Intl.NumberFormat('de-DE')
 const longTerritory = computed(() => props.audience === 'partner' && (meta.value.territories?.length ?? 0) > TERRITORY_INLINE)
 
 const contextLine = computed(() => {
@@ -337,7 +335,7 @@ const contextLine = computed(() => {
     // Große Gebiete (ITEBO: über 150 Regionen) nur als Zahl, die Liste klappt darunter auf
     const t = meta.value.territories ?? []
     if (!meta.value.partner) return 'Ihr Gebiet'
-    return t.length <= TERRITORY_INLINE ? `Gebiet ${meta.value.partner}: ${t.join(', ')}` : `Gebiet ${meta.value.partner}: ${numFmtCtx.format(t.length)} Regionen`
+    return t.length <= TERRITORY_INLINE ? `Gebiet ${meta.value.partner}: ${t.join(', ')}` : `Gebiet ${meta.value.partner}: ${numFmt.format(t.length)} Regionen`
   }
   if (props.audience === 'intern') {
     const where = countryFilter.value === 'all' ? '' : ` ${COUNTRIES[countryFilter.value].in}`
@@ -405,6 +403,11 @@ const statusOptions = computed(() => {
     ...LICENCE_FILTERS.filter(([k]) => present.has(k)).map(([k, label]) => [`licence:${k}`, label]),
     ...(hasFree.value ? [['free', 'Kostenlos']] : []), ['prospect', 'Noch keine Kunden'],
   ]
+})
+// Anzahl je Statusfilter, mit Segment- und Länderfilter (also genau das, was ein Klick auf der Karte zeigt)
+const statusCounts = computed(() => {
+  const base = mapData.value.features.map((f) => f.properties).filter(inFilter)
+  return Object.fromEntries(statusOptions.value.map(([k]) => [k, base.filter((p) => matchesStatus(p, k)).length]))
 })
 
 function itemMeta(p) {
@@ -479,7 +482,7 @@ function itemMeta(p) {
                 type="button"
                 :aria-pressed="statusFilter === opt[0]"
                 @click="statusFilter = opt[0]"
-              >{{ opt[1] }}</button>
+              >{{ opt[1] }} <span class="mm-count">{{ numFmt.format(statusCounts[opt[0]] ?? 0) }}</span></button>
             </div>
           </div>
 
@@ -694,6 +697,7 @@ function itemMeta(p) {
   cursor: pointer;
 }
 .mm-seg button[aria-pressed='true'] { background: var(--mm-sign); color: var(--mm-ink); font-weight: 600; }
+.mm-count { font-variant-numeric: tabular-nums; opacity: 0.7; font-weight: 400; }
 .mm-seg button:focus-visible { outline: 2px solid var(--mm-sign); outline-offset: -2px; }
 
 .mm-recent-overlay { position: absolute; left: 10px; bottom: 10px; z-index: 3; max-width: calc(100% - 20px); }
