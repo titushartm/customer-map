@@ -158,6 +158,9 @@ for r in csv.reader(open(SRC / 'at_gem.csv', encoding='utf-8').read().splitlines
     if len(r) < 5 or not r[0].isdigit():
         continue
     gkz, name, _, status, plz, more = (r + [''])[:6]
+    if gkz == '90001' and regions[-1]['key'] == 'AT-G-90001':  # Wien steht je Gemeindebezirk einmal drin: PLZ zusammenführen
+        regions[-1]['postcodes'] = sorted(set(regions[-1]['postcodes']) | {plz, *more.split()})
+        continue
     p = (geo_at.get(gkz) or geo_at_by_name[name]).representative_point()
     if gkz == '90001':
         parent, same = 'AT-L-9', True

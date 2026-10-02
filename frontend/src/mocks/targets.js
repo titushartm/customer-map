@@ -42,14 +42,10 @@ const SAMPLE_TARGETS = [
   drk('DE-G-14511000', 'DRK-Kreisverband Chemnitz', 500),
   drk('DE-G-13003000', 'DRK-Kreisverband Rostock', 350),
 
-  // Rotes Kreuz in AT, CH, FR: gleiches Segment, anderer Name (siehe wordsFor in lib/segments.js)
+  // Rotes Kreuz in AT: gleiches Segment, anderer Name (siehe wordsFor in lib/segments.js)
   drk('AT-G-60101', 'Rotkreuz-Bezirksstelle Graz-Stadt', 450),
   drk('AT-G-70101', 'Rotkreuz-Bezirksstelle Innsbruck', 380),
   drk('AT-G-90001', 'Rotkreuz-Bezirksstelle Wien', 900),
-  drk('CH-G-261', 'SRK-Kantonalverband Zürich', 300),
-  drk('CH-G-351', 'SRK-Kantonalverband Bern', 250),
-  drk('FR-G-69123', 'Croix-Rouge-Delegation Rhône', 400),
-  drk('FR-G-67482', 'Croix-Rouge-Delegation Bas-Rhin', 300),
 ]
 
 const customerKeys = new Set(CUSTOMER_TARGETS.map((t) => t.key))
