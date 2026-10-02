@@ -5,7 +5,7 @@ import PlaceSearch from './PlaceSearch.vue'
 import RecentCustomers from './RecentCustomers.vue'
 import { useUserLocation } from '../../composables/useUserLocation.js'
 import { useLazyList } from '../../composables/useLazyList.js'
-import { COUNTRIES } from '../../lib/countries.js'
+import { COUNTRIES, COUNTRY_CODES } from '../../lib/countries.js'
 
 const capitalize = (s) => s.charAt(0).toUpperCase() + s.slice(1)
 import { fetchTargets, fetchRecent } from '../../api/map.js'
@@ -117,6 +117,7 @@ const mapRef = ref(null)
 // Filter nur, wenn auch Noch-nicht-Kunden geladen sind
 const statusFilter = ref('all') // 'all' | 'customer' | 'free' | 'prospect'
 const segmentFilter = ref('all') // 'all' | Segment-Schlüssel, nur ohne feste segment-Prop
+const countryFilter = ref('all') // 'all' | Ländercode, sobald mehr als ein Land geladen ist
 
 // Segmente, die tatsächlich vorkommen; Filter erst ab zwei
 const availableSegments = computed(() => {
@@ -124,6 +125,15 @@ const availableSegments = computed(() => {
   return (meta.value.segments ?? []).filter((s) => present.has(s))
 })
 // Ein Segment gilt, wenn es fest vorgegeben, gefiltert oder das einzige im Ausschnitt ist
+// Länder, die tatsächlich vorkommen; Filter erst ab zwei (nicht in der Kunden-Karte: dort zählt der Umkreis)
+const availableCountries = computed(() => {
+  if (isRadius.value) return []
+  const present = new Set(collection.value.features.map((f) => f.properties.country))
+  return COUNTRY_CODES.filter((c) => present.has(c))
+})
+watch(availableCountries, (list) => {
+  if (countryFilter.value !== 'all' && !list.includes(countryFilter.value)) countryFilter.value = 'all'
+})
 const activeSegment = computed(() => props.segment
   ?? (segmentFilter.value !== 'all' ? segmentFilter.value : null)
   ?? (availableSegments.value.length === 1 ? availableSegments.value[0] : null))
@@ -268,27 +278,30 @@ const mapData = computed(() => {
   return { ...collection.value, features: [...collection.value.features, ...areaFeatures.value.filter((f) => !keys.has(f.properties.key))] }
 })
 
+const unfiltered = computed(() => segmentFilter.value === 'all' && countryFilter.value === 'all')
+const inFilter = (p) => (segmentFilter.value === 'all' || p.segment === segmentFilter.value)
+  && (countryFilter.value === 'all' || p.country === countryFilter.value)
+
 const shown = computed(() => {
-  if (statusFilter.value === 'all' && segmentFilter.value === 'all') return mapData.value
+  if (statusFilter.value === 'all' && unfiltered.value) return mapData.value
   return {
     ...mapData.value,
     features: mapData.value.features.filter((f) =>
-      (statusFilter.value === 'all' || f.properties.status === statusFilter.value)
-      && (segmentFilter.value === 'all' || f.properties.segment === segmentFilter.value)),
+      (statusFilter.value === 'all' || f.properties.status === statusFilter.value) && inFilter(f.properties)),
   }
 })
 
-// Zahlen folgen dem Segmentfilter; der Statusfilter ändert nur, was zu sehen ist
-const inSegment = computed(() => (segmentFilter.value === 'all'
+// Zahlen folgen Segment- und Länderfilter; der Statusfilter ändert nur, was zu sehen ist
+const inSelection = computed(() => (unfiltered.value
   ? collection.value.features
-  : collection.value.features.filter((f) => f.properties.segment === segmentFilter.value)))
+  : collection.value.features.filter((f) => inFilter(f.properties))))
 
-const customerCount = computed(() => (segmentFilter.value === 'all' && meta.value.customer_count != null
+const customerCount = computed(() => (unfiltered.value && meta.value.customer_count != null
   ? meta.value.customer_count
-  : inSegment.value.filter((f) => f.properties.status === 'customer').length + (meta.value.hidden_count ?? 0)))
+  : inSelection.value.filter((f) => f.properties.status === 'customer').length + (meta.value.hidden_count ?? 0)))
 const regionCount = computed(() => (isRadius.value
   ? customerCount.value
-  : inSegment.value.length))
+  : inSelection.value.length))
 const coverage = computed(() => (regionCount.value ? customerCount.value / regionCount.value : 0))
 
 const headline = computed(() => {
@@ -312,7 +325,10 @@ const contextLine = computed(() => {
   if (props.audience === 'partner') {
     return meta.value.partner ? `Gebiet ${meta.value.partner}: ${(meta.value.territories ?? []).join(', ')}` : 'Ihr Gebiet'
   }
-  if (props.audience === 'intern') return 'Alle Ziele der Referenzliste: Verwaltungen, Stadtwerke, DRK'
+  if (props.audience === 'intern') {
+    const where = countryFilter.value === 'all' ? '' : ` ${COUNTRIES[countryFilter.value].in}`
+    return `Alle Ziele der Referenzliste${where}: Verwaltungen, Stadtwerke, DRK`
+  }
   if (status.value === 'locating') return 'Standort wird ermittelt …'
   const where = placeLabel.value ? `${placeLabel.value}${postcode.value ? `, ${postcode.value}` : ''}` : null
   if (!where) return `${words.value.plural} in Ihrer Nähe`
@@ -409,6 +425,16 @@ function itemMeta(p) {
             <button v-if="isRadius && canUseBrowser && source !== 'browser'" type="button" class="mm-btn" @click="useBrowserLocation">
               Meinen Standort verwenden
             </button>
+            <div v-if="availableCountries.length > 1" class="mm-seg" role="group" aria-label="Land filtern">
+              <button type="button" :aria-pressed="countryFilter === 'all'" @click="countryFilter = 'all'">Alle Länder</button>
+              <button
+                v-for="c in availableCountries"
+                :key="c"
+                type="button"
+                :aria-pressed="countryFilter === c"
+                @click="countryFilter = c"
+              >{{ COUNTRIES[c].name }}</button>
+            </div>
             <div v-if="!segment && availableSegments.length > 1" class="mm-seg" role="group" aria-label="Segment filtern">
               <button type="button" :aria-pressed="segmentFilter === 'all'" @click="segmentFilter = 'all'">Alle</button>
               <button
