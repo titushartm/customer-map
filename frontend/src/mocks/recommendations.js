@@ -68,8 +68,9 @@ export function suggestLicence(target, all) {
 /**
  * @param {object} target   Eintrag aus mockAllTargets()
  * @param {object[]} all    alle Ziele mit Kundenstatus
+ * @param {object} opts     withDate: Startdatum mitschicken (Zielgruppe partner/intern)
  */
-export function recommend(target, all) {
+export function recommend(target, all, { withDate = false } = {}) {
   const seg = wordsFor(target.segment, target.country)
   const others = all.filter((t) => t.key !== target.key)
   const customers = others.filter((t) => t.is_customer)
@@ -104,7 +105,8 @@ export function recommend(target, all) {
     target: {
       key: target.key, name: target.name, segment: target.segment, level: target.level, state: target.state, country: target.country,
       size: target.size, postcodes: target.postcodes, is_customer: target.is_customer,
-      customer_tenure: tenureOf(target.customer_since), licence: target.licence, // kein Startdatum nach außen
+      customer_tenure: tenureOf(target.customer_since), licence: target.licence,
+      ...(withDate ? { customer_since: target.customer_since } : {}), // Startdatum nur für partner und intern
     },
     licence,
     hardware,

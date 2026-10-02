@@ -15,7 +15,8 @@ named_only
     Nicht freigegebene Kunden nur anonym mitzählen.
 fields
     Zusatzfelder pro Eintrag, über das Grundgerüst key/name/level/state/status hinaus.
-    "customer_tenure" ist die Kundendauer als Gruppe (siehe TENURE_GROUPS), nie das Startdatum.
+    "customer_tenure" ist die Kundendauer als Gruppe (siehe TENURE_GROUPS), "customer_since" das
+    Startdatum. Das Datum nur für partner und intern, öffentlich (kunden) nur die Gruppe.
 """
 
 from datetime import date
@@ -26,7 +27,7 @@ AUDIENCES = {
         "include_prospects": False,
         "named_only": True,
         "fields": ["customer_tenure"],
-        "max_radius_km": 150,
+        "max_radius_km": 400,  # große Karte lädt den Ausschnitt nach (MunicipalityExplorer.loadArea)
         "limit": 300,
         "recent_named_only": True,
         # Öffentlich wirkt "1 neue Verwaltung" eher mager: erst ab 3, notfalls längerer Zeitraum
@@ -36,7 +37,7 @@ AUDIENCES = {
         "scope": "territory",
         "include_prospects": True,
         "named_only": False,
-        "fields": ["customer_tenure", "size", "licence", "postcodes"],
+        "fields": ["customer_tenure", "customer_since", "size", "licence", "postcodes"],
         "limit": 20_000,
         "recent_named_only": False,
         "recent_min": 1,
@@ -45,7 +46,7 @@ AUDIENCES = {
         "scope": "all",
         "include_prospects": True,
         "named_only": False,
-        "fields": ["customer_tenure", "size", "licence", "postcodes"],
+        "fields": ["customer_tenure", "customer_since", "size", "licence", "postcodes"],
         "limit": 20_000,
         "recent_named_only": False,
         "recent_min": 1,
@@ -57,8 +58,9 @@ AUDIENCES = {
 RECENT_WINDOWS_DAYS = (30, 90)
 RECENT_LIMIT = 5
 
-# Kundendauer in groben Gruppen statt Startdatum. Datenschutz: kein genaues Startdatum nach außen,
-# Target.customer_since bleibt intern (Gruppe, "Neu dabei"). Gleiche Grenzen wie frontend/src/lib/tenure.js.
+# Kundendauer in groben Gruppen. Datenschutz: die öffentliche Ansicht (kunden) bekommt nur die Gruppe,
+# kein genaues Startdatum; partner und intern sehen zusätzlich customer_since (siehe "fields").
+# Gleiche Grenzen wie frontend/src/lib/tenure.js.
 TENURE_GROUPS = (
     # (Schlüssel, Bezeichnung, Kunde seit weniger als … Tagen; None = ohne Grenze)
     ("neu", "Neu", 90),  # unter 3 Monaten

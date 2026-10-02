@@ -3,7 +3,7 @@ import { ref, watch, nextTick, computed } from 'vue'
 import { fetchRecommendation, fetchReferralAccount } from '../../api/map.js'
 import { SEGMENTS, kindLabel, wordsFor } from '../../lib/segments.js'
 import { STATUS_LABEL } from '../../lib/referral.js'
-import { tenureLabel } from '../../lib/tenure.js'
+import { tenureText } from '../../lib/tenure.js'
 
 const props = defineProps({
   /** Ziel, für das der Dialog offen ist. null = geschlossen */
@@ -103,7 +103,7 @@ function onClose() {
           <h2 id="rd-title" class="rd-title">{{ r?.name ?? ' ' }}</h2>
           <p v-if="r" class="rd-status">
             <span class="rd-badge" :class="r.is_customer ? 'is-customer' : 'is-prospect'">
-              {{ r.is_customer ? ['Kunde', tenureLabel(r.customer_tenure)].filter(Boolean).join(' · ') : 'Noch kein Kunde' }}
+              {{ r.is_customer ? ['Kunde', tenureText(r.customer_tenure, r.customer_since)].filter(Boolean).join(' · ') : 'Noch kein Kunde' }}
             </span>
             <span>{{ numFmt.format(r.size) }} {{ seg.sizeLabel }}</span>
           </p>

@@ -1,43 +1,46 @@
-// Vertriebspartner, wie sie das Team im Admin-Bereich angelegt hat (im Backend: SalesPartner + PartnerTerritory).
+// Vertriebspartner (im Backend: SalesPartner + PartnerTerritory), echte Partner von SpeechMind.
 // Jeder Partner betreut genau ein Segment. Wer Verwaltungen und Stadtwerke verkauft, ist zweimal angelegt.
 // Gebiet = Liste von Regionen aus der Referenz: Staat ('AT'), Land/Kanton/Région ('DE-L-15'), Kreis/Bezirk/Département
 // ('DE-K-14625') oder Gemeinde ('DE-G-14625240'). Ein Ziel gehört dazu, wenn seine Region darin liegt (Pfad, siehe api/map.js).
 // Je Segment gehört eine Region höchstens einem aktiven Partner.
-// Alle Partner, Personen und Kontaktdaten sind erfunden (Telefon aus dem Bereich für Film/Fiktion).
+// Gebiete erster Entwurf nach öffentlichen Angaben (Gesellschafter, Standorte, Einzugsgebiet), Stand 02.10.2026;
+// im Admin-Tab anpassen. Ansprechpartner fehlen noch.
 export const SEED_PARTNERS = [
   {
-    id: 101, name: 'Lausitz Kommunal Vertrieb', segment: 'verwaltung', active: true,
-    contact: { name: 'Anna Beispiel', email: 'vertrieb@lausitz-kommunal.example', phone: '030 23125 101', website: 'lausitz-kommunal.example' },
-    areas: ['DE-K-14625', 'DE-K-14626', 'DE-K-12066', 'DE-K-12071', 'DE-K-12052'],
+    // IT-Dienstleister in Osnabrück für Kommunen in ganz Niedersachsen (Gesellschafter u. a. Osnabrück, Braunschweig,
+    // Landkreise Osnabrück, Emsland, Grafschaft Bentheim)
+    id: 101, name: 'ITEBO', segment: 'verwaltung', active: true,
+    contact: { name: '', email: '', phone: '', website: 'itebo.de' },
+    areas: ['DE-L-03'],
   },
   {
-    id: 102, name: 'Mitteldeutsche Verwaltungsberatung', segment: 'verwaltung', active: true,
-    contact: { name: 'Bernd Muster', email: 'info@md-verwaltung.example', phone: '030 23125 102', website: 'md-verwaltung.example' },
-    areas: ['DE-L-15', 'DE-L-16'],
+    // Kommunale ADV-Anwendergemeinschaft West, Zweckverband in Ibbenbüren, Schwerpunkt westliches Münsterland
+    id: 102, name: 'KAAW', segment: 'verwaltung', active: true,
+    contact: { name: '', email: '', phone: '', website: 'kaaw.de' },
+    areas: ['DE-K-05554', 'DE-K-05558', 'DE-K-05566'],
   },
   {
-    id: 103, name: 'Nordost Digital Kommunal', segment: 'verwaltung', active: true,
-    contact: { name: 'Clara Probe', email: 'kontakt@nordost-digital.example', phone: '030 23125 103', website: 'nordost-digital.example' },
-    areas: ['DE-L-13', 'DE-L-11', 'DE-K-12051', 'DE-K-12053', 'DE-K-12054', 'DE-K-12060'],
+    // Kommunaler IT-Dienstleister für Baden-Württemberg (AöR, Kommunen und Land)
+    id: 103, name: 'Komm.ONE', segment: 'verwaltung', active: true,
+    contact: { name: '', email: '', phone: '', website: 'komm.one' },
+    areas: ['DE-L-08'],
   },
   {
-    id: 104, name: 'Soziale Dienste Digital Ost', segment: 'drk', active: true,
-    contact: { name: 'David Test', email: 'hallo@sozial-digital.example', phone: '030 23125 104', website: 'sozial-digital.example' },
-    areas: ['DE-L-14', 'DE-L-12'],
+    // Kufstein und Zirl; Gemeindesoftware für Tirol, Salzburg (auch Südtirol und Bayern, hier nicht im Gebiet)
+    id: 104, name: 'Kufgem', segment: 'verwaltung', active: true,
+    contact: { name: '', email: '', phone: '', website: 'kufgem.at' },
+    areas: ['AT-L-7', 'AT-L-5'],
   },
   {
-    id: 105, name: 'Energie & Kommune Ost', segment: 'stadtwerk', active: true,
-    contact: { name: 'Eva Platzhalter', email: 'team@energie-kommune.example', phone: '030 23125 105', website: 'energie-kommune.example' },
-    areas: ['DE-L-14', 'DE-K-12052', 'DE-K-12054'],
+    // Linz; Gesellschafter u. a. der Oberösterreichische Gemeindebund
+    id: 105, name: 'Gemdat OÖ', segment: 'verwaltung', active: true,
+    contact: { name: '', email: '', phone: '', website: 'gemdat.at' },
+    areas: ['AT-L-4'],
   },
   {
-    id: 106, name: 'Alpen Kommunal Partner', segment: 'verwaltung', active: true,
-    contact: { name: 'Florian Muster', email: 'office@alpen-kommunal.example', phone: '+43 1 234 5106', website: 'alpen-kommunal.example' },
-    areas: ['AT-L-6', 'AT-L-2', 'AT-L-7', 'AT-L-8'],
-  },
-  {
-    id: 107, name: 'Donau Verwaltung Digital', segment: 'verwaltung', active: true,
-    contact: { name: 'Greta Beispiel', email: 'hallo@donau-digital.example', phone: '+43 1 234 5107', website: 'donau-digital.example' },
-    areas: ['AT-L-9', 'AT-L-3', 'AT-L-4'],
+    // PSC Public Software & Consulting, Raaba mit Standorten in Klagenfurt und Wien, rund 300 Gemeinden
+    id: 106, name: 'PSC', segment: 'verwaltung', active: true,
+    contact: { name: '', email: '', phone: '', website: '' },
+    areas: ['AT-L-6', 'AT-L-2'],
   },
 ]

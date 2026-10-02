@@ -1,13 +1,13 @@
 // Zielorganisationen außerhalb der Verwaltungen (im Backend: Target mit segment != verwaltung).
 // Jede sitzt in einer Region (region = AGS bzw. Kreisschlüssel), daher Bundesland, PLZ und Partnergebiet.
-// Echte Kunden (Stadtwerke, DRK) kommen aus customerRegions.js; die Liste hier sind weitere mögliche Ziele,
+// Echte Kunden (Stadtwerke, DRK) kommen aus customers.js (erzeugt); die Liste hier sind weitere mögliche Ziele,
 // Namen nach dem üblichen Muster, Größen (Mitarbeitende) geschätzt.
 // Verwaltungen brauchen keinen Eintrag: Jede Region ist automatisch eine Ziel-Verwaltung.
 
 const sw = (region, name, size) => ({ key: `sw-${region}`, segment: 'stadtwerk', region, name, size })
 const drk = (region, name, size) => ({ key: `drk-${region}`, segment: 'drk', region, name, size })
 
-import { CUSTOMER_TARGETS } from './customerRegions.js'
+import { CUSTOMER_TARGETS } from './customers.js'
 
 const SAMPLE_TARGETS = [
   sw('DE-G-14625240', 'Stadtwerke Hoyerswerda', 150),

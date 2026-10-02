@@ -6,7 +6,7 @@ import { MOCK_REFERRALS, REFERRAL_RULES, codeFor } from '../mocks/referrals.js'
 import { SEGMENTS, SEGMENT_KEYS } from '../lib/segments.js'
 import { sizeClassOf, SIZE_CLASSES } from '../lib/sizeClasses.js'
 import { haversineKm } from '../lib/geo.js'
-import { tenureOf, tenureLabel, tenureRank } from '../lib/tenure.js'
+import { tenureOf, tenureRank, tenureText } from '../lib/tenure.js'
 import { recommend, suggestLicence } from '../mocks/recommendations.js'
 
 const USE_MOCK = import.meta.env.VITE_MAP_USE_MOCK !== 'false'
@@ -15,9 +15,10 @@ const API_BASE = import.meta.env.VITE_API_BASE ?? '/api'
 /**
  * Ziele (Verwaltungen, Stadtwerke, DRK, …) für eine Zielgruppe.
  * Rückgabe: { collection: GeoJSON FeatureCollection, meta }
- * properties: key, name, segment, level, state, status ('customer' | 'prospect'), dazu je nach
- * Zielgruppe customer_tenure ('neu' | 'etabliert' | 'lange', siehe lib/tenure.js), size, licence, postcodes, distance_km.
- * Das genaue Startdatum liefert keine Zielgruppe.
+ * properties: key, name, segment, level, state, status ('customer' | 'free' | 'prospect'; free = kostenlose Lizenz, zählt
+ * nicht als Kunde), dazu je nach
+ * Zielgruppe customer_tenure ('neu' | 'etabliert' | 'lange', siehe lib/tenure.js), customer_since, size, licence, postcodes, distance_km.
+ * Das Startdatum (customer_since) bekommen nur partner und intern, kunden nur die Gruppe.
  *   kunden:  { segment, lat, lng, radiusKm }
  *   partner: { partnerId }   (später aus der Anmeldung); nur das Segment des Partners, meta.territory = Gebietsfläche als GeoJSON
  *   intern:  —
@@ -35,10 +36,10 @@ export async function fetchTargets({ audience, segment, lat, lng, radiusKm, part
  * Eine Seite der Zieltabelle (Tab Liste). Filtern, Sortieren und Blättern macht der Server,
  * damit nie alle Ziele auf einmal geladen werden.
  *   audience 'intern' | 'partner' (+ partnerId)
- *   filters: { q (Name oder PLZ-Anfang), status ('customer' | 'prospect'), state (Name), kind ('stadtwerk' | 'verwaltung:kreis'),
+ *   filters: { q (Name oder PLZ-Anfang), status ('customer' | 'free' | 'prospect'), state (Name), kind ('stadtwerk' | 'verwaltung:kreis'),
  *              sizeClass (Index in SIZE_CLASSES), near: { lat, lng }, radiusKm }
  *   sort: Feldname, dir: 1 | -1, page (ab 1), pageSize
- * Rückgabe: { count, customers, prospects, page, pages, page_size, results: [Zeile], meta: { partner, states, segments } }
+ * Rückgabe: { count, customers, free, prospects, page, pages, page_size, results: [Zeile], meta: { partner, states, segments } }
  * Zeile = properties wie bei fetchTargets plus lat, lng, distance_km (nur mit near).
  */
 export async function fetchTargetPage({ audience, partnerId, filters = {}, sort = 'size', dir = -1, page = 1, pageSize = 50 }) {
@@ -55,7 +56,7 @@ export async function fetchTargetPage({ audience, partnerId, filters = {}, sort 
   return mockTargetPage({ audience, partnerId, filters, sort, dir, page, pageSize })
 }
 
-/** Die zuletzt dazugekommenen Kunden, neueste zuerst: { days, total, items: [{ key?, name?, segment, level, state, lat?, lng? }] } */
+/** Die zuletzt dazugekommenen Kunden, neueste zuerst: { days, total, items: [{ key?, name?, segment, level, state, customer_since? (nicht bei kunden), lat?, lng? }] } */
 export async function fetchRecent({ audience, segment, partnerId }) {
   if (USE_MOCK && audience === 'partner') await loadAreas()
   return USE_MOCK
@@ -72,7 +73,7 @@ export async function fetchRecommendation(key, { audience = 'intern', partnerId 
   const all = mockAllTargets()
   const target = all.find((t) => t.key === key)
   if (!target) throw new Error('Dieses Ziel ist nicht in der Liste.')
-  return recommend(target, all)
+  return recommend(target, all, { withDate: AUDIENCES[audience]?.fields.includes('customer_since') })
 }
 
 /**
@@ -182,7 +183,7 @@ export function listReferrers() {
 /** Nur im Prototyp: alle Kunden als simulierte Anmeldung. canRefer = mit Organisation und Lizenz. */
 export function listCustomerLogins() {
   return mockAllTargets()
-    .filter((t) => t.is_customer)
+    .filter((t) => t.is_customer || t.is_free)
     .map((t) => ({ key: t.key, name: t.name, segment: t.segment, country: t.country, licence: t.licence, canRefer: canRefer(t) }))
     .sort((a, b) => a.name.localeCompare(b.name, 'de'))
 }
@@ -273,9 +274,11 @@ function normalize(fc) {
         ...f,
         properties: {
           ...f.properties,
-          tenure_label: tenureLabel(f.properties.customer_tenure) ?? '',
+          // "Etabliert", bei Partner/Intern "Etabliert · seit 12.03.2025"; kurz fürs Ortsschild "Etabliert · 03/2025"
+          tenure_label: tenureText(f.properties.customer_tenure, f.properties.customer_since),
+          tenure_short: tenureText(f.properties.customer_tenure, f.properties.customer_since, { short: true }),
           // Lichthof auf der Karte und "Neu dabei" in der Liste
-          is_new: f.properties.customer_tenure === 'neu',
+          is_new: f.properties.status === 'customer' && f.properties.customer_tenure === 'neu', // "Neu dabei" nur für zahlende
         },
       })),
     },
@@ -285,7 +288,7 @@ function normalize(fc) {
 // ---- Mock-Backend: verhält sich wie backend/maps/views.py ----
 
 // Spiegel von backend/maps/audiences.py
-const FIELDS_FULL = ['customer_tenure', 'size', 'licence', 'postcodes']
+const FIELDS_FULL = ['customer_tenure', 'customer_since', 'size', 'licence', 'created_by', 'postcodes']
 const AUDIENCES = {
   kunden: { scope: 'radius', includeProspects: false, namedOnly: true, fields: ['customer_tenure'], recentMin: 3 },
   partner: { scope: 'territory', includeProspects: true, namedOnly: false, fields: FIELDS_FULL, recentMin: 1 },
@@ -312,16 +315,21 @@ export function mockAllTargets() {
   return [...verwaltungen, ...others].map((t) => {
     const r = REGION_BY_KEY[t.region_key]
     const c = MOCK_CUSTOMERS[t.key]
+    // Kunde = zahlende Lizenz (Jahres-, Monatslizenz, Pilot, Pay-per-Use, Budget). Kostenlose zählen nicht mit.
+    const free = c?.licence_type === 'free'
     return {
       ...t,
       state: r.state,
       postcodes: r.postcodes,
       population: r.population, // der Region, für Größenklassen bei Verwaltungen
-      is_customer: Boolean(c),
-      customer_since: c?.since ?? null, // nur intern, nach außen geht customer_tenure
+      is_customer: Boolean(c) && !free,
+      is_free: free,
+      customer_since: c?.since ?? null, // geht nur an partner und intern, kunden bekommen customer_tenure
       public_reference: c?.public_reference ?? false,
       licence: c?.licence ?? null,
       seats: c?.seats ?? null, // nur intern, für die Lizenzempfehlung
+      licence_type: c?.licence_type ?? null,
+      created_by: c?.created_by ?? null, // SpeechMind, Partner oder Dienstleister (wer die Orga angelegt hat)
     }
   })
 }
@@ -379,18 +387,27 @@ function areaRef(key) {
     country: (a ?? r).country,
     state: a?.level === 'land' || a?.level === 'staat' ? null : stateName(key),
     path: pathOf(key),
+    // Gemeinden haben im Mock keine Fläche: die Übersichtskarte im Admin zeigt sie als Punkt
+    ...(r ? { lat: r.lat, lng: r.lng } : {}),
   }
 }
 const areaName = (key) => areaRef(key).name
 
 const inPartnerArea = (partner, t) => t.segment === partner.segment && partner.areas.some((a) => within(t.region_key, a))
 
-function coverage(segment, areas) {
+/** Ziele im Gebiet, zahlende Kunden, davon vom Partner selbst angelegt (via_partner), und kostenlose */
+function coverage(segment, areas, partnerName = null) {
   const rows = mockAllTargets().filter((t) => t.segment === segment && areas.some((a) => within(t.region_key, a)))
-  return { targets: rows.length, customers: rows.filter((t) => t.is_customer).length }
+  const customers = rows.filter((t) => t.is_customer)
+  return {
+    targets: rows.length,
+    customers: customers.length,
+    via_partner: partnerName ? customers.filter((t) => t.created_by === partnerName).length : 0,
+    free: rows.filter((t) => t.is_free).length,
+  }
 }
 
-const partnerOut = (p) => ({ ...p, contact: { ...p.contact }, areas: p.areas.map(areaRef), stats: coverage(p.segment, p.areas) })
+const partnerOut = (p) => ({ ...p, contact: { ...p.contact }, areas: p.areas.map(areaRef), stats: coverage(p.segment, p.areas, p.name) })
 
 function validatePartner({ name, segment, areas }) {
   if (!name) return 'Bitte einen Namen angeben.'
@@ -472,7 +489,8 @@ function mockTargets({ audience, segment, lat, lng, radiusKm, partnerId }) {
     rows = rows.filter((t) => !t.is_customer || t.public_reference)
   }
   meta.customer_count = rows.filter((t) => t.is_customer).length + meta.hidden_count
-  meta.prospect_count = rows.filter((t) => !t.is_customer).length
+  meta.free_count = rows.filter((t) => t.is_free).length
+  meta.prospect_count = rows.filter((t) => !t.is_customer && !t.is_free).length
 
   const features = rows.map((t) => ({
     type: 'Feature',
@@ -484,10 +502,12 @@ function mockTargets({ audience, segment, lat, lng, radiusKm, partnerId }) {
       level: t.level,
       state: t.state,
       country: t.country,
-      status: t.is_customer ? 'customer' : 'prospect',
+      status: t.is_customer ? 'customer' : t.is_free ? 'free' : 'prospect',
       ...(cfg.fields.includes('customer_tenure') && t.customer_since ? { customer_tenure: tenureOf(t.customer_since) } : {}),
+      ...(cfg.fields.includes('customer_since') && t.customer_since ? { customer_since: t.customer_since } : {}),
       ...(cfg.fields.includes('size') ? { size: t.size } : {}),
-      ...(cfg.fields.includes('licence') && t.licence ? { licence: t.licence } : {}),
+      ...(cfg.fields.includes('licence') && t.licence ? { licence: t.licence, licence_type: t.licence_type } : {}),
+      ...(cfg.fields.includes('created_by') && t.created_by ? { created_by: t.created_by } : {}),
       ...(cfg.fields.includes('postcodes') ? { postcodes: t.postcodes } : {}),
       ...(t.distance_km != null ? { distance_km: Math.round(t.distance_km) } : {}),
     },
@@ -520,16 +540,18 @@ function mockTargetPage({ audience, partnerId, filters: f, sort, dir, page, page
       const vb = sortValue(b, sort)
       if (va === '' || vb === '') return (va === '') - (vb === '') // leer immer zuletzt, wie nulls_last im Backend
       const cmp = typeof va === 'number' && typeof vb === 'number' ? va - vb : String(va).localeCompare(String(vb), 'de')
-      return cmp * dir || a.name.localeCompare(b.name, 'de') // dann nach Name, wie im Backend
+      return cmp * dir || sinceOrder(a, b, sort, dir) || a.name.localeCompare(b.name, 'de') // dann nach Name, wie im Backend
     })
 
   const customers = rows.filter((r) => r.status === 'customer').length
+  const free = rows.filter((r) => r.status === 'free').length
   const pages = Math.max(1, Math.ceil(rows.length / pageSize))
   const current = Math.min(Math.max(1, page), pages)
   return {
     count: rows.length,
     customers,
-    prospects: rows.length - customers,
+    free,
+    prospects: rows.length - customers - free,
     page: current,
     pages,
     page_size: pageSize,
@@ -544,10 +566,14 @@ function mockTargetPage({ audience, partnerId, filters: f, sort, dir, page, page
   }
 }
 
-// Kundendauer nach Gruppe, nicht nach Datum: kürzeste zuerst, innerhalb der Gruppe nach Name
+// Kundendauer nach Gruppe: kürzeste zuerst. Innerhalb der Gruppe nach Datum, wo es geliefert wird
+// (aufsteigend neueste zuerst, also insgesamt wie nach Datum), sonst nach Name.
 const sortValue = (r, sort) => (sort === 'customer_tenure'
   ? (r.customer_tenure ? tenureRank(r.customer_tenure) : '')
   : r[sort] ?? '')
+const sinceOrder = (a, b, sort, dir) => (sort === 'customer_tenure' && a.customer_since && b.customer_since
+  ? b.customer_since.localeCompare(a.customer_since) * dir
+  : 0)
 
 /** Verwaltungs-Kunden in der Größenklasse der Gemeinde am Standort, im selben Staat, ohne sie selbst. */
 function peers(verwaltungen, lat, lng) {
@@ -584,7 +610,8 @@ function mockRecent({ audience, segment, partnerId }) {
         level: t.level,
         state: t.state,
         country: t.country,
-        // Kein Datum je Kunde, nur die Reihenfolge (neueste zuerst)
+        // Datum je Kunde nur für partner und intern, öffentlich nur die Reihenfolge (neueste zuerst)
+        ...(cfg.fields.includes('customer_since') ? { customer_since: t.customer_since } : {}),
         // Anonyme bekommen keine Koordinaten: sonst wäre das Ziel trotzdem erkennbar
         lat: named ? t.lat : null,
         lng: named ? t.lng : null,

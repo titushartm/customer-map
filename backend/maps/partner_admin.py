@@ -28,7 +28,7 @@ from django.views.decorators.http import require_GET, require_http_methods
 from .models import PartnerTerritory, Region, RegionLevel, SalesPartner, Segment, Target
 
 AREA_LEVELS = PartnerTerritory.ALLOWED_LEVELS
-AREA_FIELDS = ("key", "name", "level", "kind", "country", "path", "parent_id", "state_id")
+AREA_FIELDS = ("key", "name", "level", "kind", "country", "path", "parent_id", "state_id", "location")
 MAP_TOLERANCE = 0.003  # Grad, etwa 200-300 m: reicht für die Übersicht im Dialog
 
 
@@ -46,6 +46,8 @@ def _area(r):
     return {
         "key": r.key, "name": r.name, "level": r.level, "kind": r.kind or None, "country": r.country, "path": r.path,
         "state": r.state.name if r.state_id and r.state_id != r.pk else None,
+        # Lage für die Übersichtskarte im Admin (Gemeinden als Punkt)
+        "lat": r.location.y if r.location else None, "lng": r.location.x if r.location else None,
     }
 
 

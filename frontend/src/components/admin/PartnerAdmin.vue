@@ -1,8 +1,11 @@
 <script setup>
-import { ref, computed } from 'vue'
+import { ref, computed, onMounted, defineAsyncComponent } from 'vue'
 import { SEGMENTS, wordsFor, commonCountry } from '../../lib/segments.js'
 import PartnerDialog from './PartnerDialog.vue'
 import { useLazyList } from '../../composables/useLazyList.js'
+import { fetchAreaMap } from '../../api/map.js'
+
+const PartnerOverviewMap = defineAsyncComponent(() => import('./PartnerOverviewMap.vue'))
 
 // Admin-Bereich (SpeechMind intern): Vertriebspartner anlegen, Segment und Gebiet festlegen, deaktivieren.
 const props = defineProps({
@@ -15,6 +18,8 @@ const segment = ref('all')
 const query = ref('')
 const editing = ref(null) // null = zu, 'new' oder ein Partner
 const numFmt = new Intl.NumberFormat('de-DE')
+const areaMap = ref(null) // Flächen für die Übersichtskarte, einmal geladen
+onMounted(async () => { areaMap.value = await fetchAreaMap() })
 
 const rows = computed(() => {
   const q = query.value.trim().toLowerCase()
@@ -56,6 +61,9 @@ function onSaved(p) {
       <button type="button" class="pa-btn" @click="editing = 'new'">Neuer Partner</button>
     </div>
 
+    <PartnerOverviewMap v-if="areaMap" :areas="areaMap" :partners="partners" :segment="segment" @edit="editing = $event" />
+    <div v-else class="pa-map-wait">Karte der Gebiete wird geladen …</div>
+
     <div class="pa-table-wrap">
       <table class="pa-table" :aria-busy="loading">
         <thead>
@@ -64,7 +72,7 @@ function onSaved(p) {
             <th scope="col">Segment</th>
             <th scope="col">Gebiet</th>
             <th scope="col" class="pa-num" title="Alle Organisationen des Segments im Gebiet, Kunden und Noch-nicht-Kunden">Im Gebiet</th>
-            <th scope="col">Davon Kunden</th>
+            <th scope="col" title="Zahlende Kunden (ohne kostenlose Lizenzen); darunter, wie viele der Partner selbst angelegt hat">Davon Kunden</th>
             <th scope="col"><span class="pa-sr">Aktionen</span></th>
           </tr>
         </thead>
@@ -73,7 +81,7 @@ function onSaved(p) {
             <td>
               <span class="pa-name">{{ p.name }}</span>
               <span v-if="!p.active" class="pa-badge">deaktiviert</span>
-              <span class="pa-sub">{{ p.contact.name }}<template v-if="p.contact.email"> · {{ p.contact.email }}</template></span>
+              <span class="pa-sub">{{ p.contact.name || p.contact.website || 'Ansprechpartner fehlt' }}<template v-if="p.contact.email"> · {{ p.contact.email }}</template></span>
             </td>
             <td>{{ plural(p) }}</td>
             <td class="pa-areas" :title="p.areas.map((a) => a.name).join(', ')">{{ areaSummary(p.areas) }}</td>
@@ -82,6 +90,9 @@ function onSaved(p) {
               <span class="pa-cov">
                 <span class="pa-bar-track"><span :style="{ width: `${pct(p.stats)}%` }" /></span>
                 {{ numFmt.format(p.stats.customers) }} · {{ pct(p.stats) }} %
+              </span>
+              <span class="pa-sub" :title="`Von ${p.name} selbst angelegt; die übrigen hat SpeechMind oder ein Dienstleister angelegt`">
+                davon {{ numFmt.format(p.stats.via_partner ?? 0) }} über {{ p.name }}<template v-if="p.stats.free"> · {{ numFmt.format(p.stats.free) }} kostenlos</template>
               </span>
             </td>
             <td class="pa-actions">
@@ -126,6 +137,7 @@ function onSaved(p) {
 .pa-btn-quiet:hover { border-color: var(--page-accent); }
 .pa button:focus-visible, .pa-search:focus-visible { outline: 2px solid var(--page-accent); outline-offset: 2px; }
 
+.pa-map-wait { height: 440px; margin-bottom: 20px; display: grid; place-items: center; border: 1px solid var(--page-line); border-radius: 8px; color: var(--page-muted); }
 .pa-table-wrap { overflow-x: auto; border: 1px solid var(--page-line); border-radius: 8px; background: var(--page-surface); }
 .pa-table { width: 100%; border-collapse: collapse; }
 .pa-table th, .pa-table td { text-align: left; padding: 10px 12px; vertical-align: top; }

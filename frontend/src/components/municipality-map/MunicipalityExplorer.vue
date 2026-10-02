@@ -10,7 +10,9 @@ import { COUNTRIES } from '../../lib/countries.js'
 const capitalize = (s) => s.charAt(0).toUpperCase() + s.slice(1)
 import { fetchTargets, fetchRecent } from '../../api/map.js'
 import { SEGMENTS, sizeText, kindLabel } from '../../lib/segments.js'
-import { tenureLabel } from '../../lib/tenure.js'
+import { tenureText } from '../../lib/tenure.js'
+import { haversineKm } from '../../lib/geo.js'
+import { LICENCE_TYPES } from '../../lib/licences.js'
 
 // Pro Zielgruppe: Ausschnitt, Popup-Felder und Texte. Welche Daten tatsächlich kommen,
 // entscheidet das Backend (audiences.py), nicht diese Tabelle.
@@ -30,6 +32,7 @@ const AUDIENCE_DEFAULTS = {
       { key: 'size', label: 'Größe', format: 'size' },
       { key: 'customer_tenure', label: 'Kundendauer', format: 'tenure' },
       { key: 'licence', label: 'Lizenz', format: 'text' },
+      { key: 'created_by', label: 'Angelegt von', format: 'text' },
     ],
   },
   intern: {
@@ -41,6 +44,7 @@ const AUDIENCE_DEFAULTS = {
       { key: 'size', label: 'Größe', format: 'size' },
       { key: 'customer_tenure', label: 'Kundendauer', format: 'tenure' },
       { key: 'licence', label: 'Lizenz', format: 'text' },
+      { key: 'created_by', label: 'Angelegt von', format: 'text' },
     ],
   },
 }
@@ -96,6 +100,8 @@ const {
 } = useUserLocation()
 
 const collection = shallowRef({ type: 'FeatureCollection', features: [] })
+// Kunden-Karte groß: nachgeladene Kunden rund um den Kartenausschnitt (Zahlen und Überschrift bleiben beim Umkreis)
+const areaFeatures = shallowRef([])
 const meta = ref({ hidden_count: 0 })
 const recent = ref(null)
 const loading = ref(false)
@@ -109,7 +115,7 @@ const expanded = ref(isPage.value)
 const mapRef = ref(null)
 
 // Filter nur, wenn auch Noch-nicht-Kunden geladen sind
-const statusFilter = ref('all') // 'all' | 'customer' | 'prospect'
+const statusFilter = ref('all') // 'all' | 'customer' | 'free' | 'prospect'
 const segmentFilter = ref('all') // 'all' | Segment-Schlüssel, nur ohne feste segment-Prop
 
 // Segmente, die tatsächlich vorkommen; Filter erst ab zwei
@@ -135,6 +141,7 @@ onMounted(() => {
 onBeforeUnmount(() => {
   window.removeEventListener('keydown', onKeydown)
   document.body.style.overflow = ''
+  clearTimeout(areaTimer)
 })
 
 async function load() {
@@ -153,6 +160,8 @@ async function load() {
     })
     collection.value = res.collection
     meta.value = res.meta
+    areaFeatures.value = []
+    loadedCircles = []
     loaded.value = true
     if (pendingSelect.value && res.collection.features.some((f) => f.properties.key === pendingSelect.value)) {
       await nextTick()
@@ -185,10 +194,55 @@ watch(location, (loc) => {
   else mapRef.value?.flyTo({ lng: loc.lng, lat: loc.lat, zoom: 10 })
 })
 
+/**
+ * Kunden-Karte in groß: Wer die Karte verschiebt oder herauszoomt, sieht auch die Kunden dort. Geladen wird ein
+ * Umkreis um die Kartenmitte (bis MAX_AREA_KM), was schon geladen ist, nicht noch einmal. Die Entfernung
+ * bleibt die zum eigenen Standort.
+ */
+const MAX_AREA_KM = 400
+let loadedCircles = [] // [{ lat, lng, km }]
+let areaTimer = null
+let areaSeq = 0
+function onBoundsChange(b) {
+  bounds.value = b
+  if (!isRadius.value || !expanded.value || !location.value) return
+  clearTimeout(areaTimer)
+  areaTimer = setTimeout(() => loadArea(b), 350)
+}
+async function loadArea([w, s, e, n]) {
+  const lat = (s + n) / 2
+  const lng = (w + e) / 2
+  const km = Math.min(MAX_AREA_KM, Math.ceil(haversineKm(lat, lng, n, e)))
+  const covered = (c) => haversineKm(lat, lng, c.lat, c.lng) + km <= c.km
+  const own = { lat: location.value.lat, lng: location.value.lng, km: props.radiusKm }
+  if ([own, ...loadedCircles].some(covered)) return
+  const seq = ++areaSeq
+  try {
+    const res = await fetchTargets({ audience: props.audience, segment: props.segment, lat, lng, radiusKm: km })
+    if (seq !== areaSeq) return
+    loadedCircles = [...loadedCircles, { lat, lng, km }]
+    const here = location.value
+    const known = new Set(areaFeatures.value.map((f) => f.properties.key))
+    const fresh = res.collection.features
+      .filter((f) => !known.has(f.properties.key))
+      .map((f) => {
+        const [x, y] = f.geometry.coordinates
+        return { ...f, properties: { ...f.properties, distance_km: Math.round(haversineKm(here.lat, here.lng, y, x)) } }
+      })
+    if (fresh.length) areaFeatures.value = [...areaFeatures.value, ...fresh]
+  } catch {
+    // Nachladen ist Beiwerk: die Karte zeigt weiter, was schon da ist
+  }
+}
+
 // Klein ↔ groß: Seite festhalten und den Kartenausschnitt der neuen Fläche anpassen
 watch(expanded, async (isOpen) => {
   if (isPage.value) return
-  if (!isOpen) selectedId.value = null
+  if (!isOpen) {
+    selectedId.value = null
+    areaFeatures.value = [] // klein wieder nur der Umkreis, passend zur Überschrift
+    loadedCircles = []
+  }
   document.body.style.overflow = isOpen ? 'hidden' : ''
   await nextTick()
   mapRef.value?.fitToData({ duration: 0 })
@@ -208,11 +262,17 @@ function focusRecent(item) {
   usePlace({ name: item.name, lat: item.lat, lng: item.lng, plz: null })
 }
 
+const mapData = computed(() => {
+  if (!areaFeatures.value.length) return collection.value
+  const keys = new Set(collection.value.features.map((f) => f.properties.key))
+  return { ...collection.value, features: [...collection.value.features, ...areaFeatures.value.filter((f) => !keys.has(f.properties.key))] }
+})
+
 const shown = computed(() => {
-  if (statusFilter.value === 'all' && segmentFilter.value === 'all') return collection.value
+  if (statusFilter.value === 'all' && segmentFilter.value === 'all') return mapData.value
   return {
-    ...collection.value,
-    features: collection.value.features.filter((f) =>
+    ...mapData.value,
+    features: mapData.value.features.filter((f) =>
       (statusFilter.value === 'all' || f.properties.status === statusFilter.value)
       && (segmentFilter.value === 'all' || f.properties.segment === segmentFilter.value)),
   }
@@ -280,10 +340,9 @@ const pctFmt = new Intl.NumberFormat('de-DE', { style: 'percent' })
 function formatValue(value, format) {
   if (value == null || value === '') return null
   switch (format) {
-    case 'tenure': return tenureLabel(value) // Gruppe statt Startdatum
     case 'number': return numFmt.format(value)
     case 'km': return `${value} km`
-    case 'status': return value === 'customer' ? 'Kunde' : 'Noch kein Kunde'
+    case 'status': return value === 'customer' ? 'Kunde' : value === 'free' ? 'Kostenlos (zählt nicht als Kunde)' : 'Noch kein Kunde'
     default: return String(value)
   }
 }
@@ -295,17 +354,27 @@ function popupRows(feature) {
       ...f,
       text: f.format === 'size' ? sizeText(p.segment, p[f.key])
         : f.format === 'kind' ? kindLabel(p)
+        : f.format === 'tenure' ? p.tenure_label // Gruppe, bei Partner/Intern mit Startdatum
         : formatValue(p[f.key], f.format),
     }))
     .filter((r) => r.text)
 }
 
+// Legende der Schildfarben (Partner/Intern): nur Lizenzarten, die im Ausschnitt vorkommen
+const legend = computed(() => {
+  const present = new Set(collection.value.features.map((f) => f.properties.licence_type).filter(Boolean))
+  return Object.entries(LICENCE_TYPES).filter(([k]) => present.has(k))
+})
+const hasFree = computed(() => collection.value.features.some((f) => f.properties.status === 'free'))
+const statusOptions = computed(() => [['all', 'Alle'], ['customer', 'Kunden'], ...(hasFree.value ? [['free', 'Kostenlos']] : []), ['prospect', 'Noch keine Kunden']])
+
 function itemMeta(p) {
-  // Neue zeigen "Neu dabei" als Marke, die anderen ihre Kundendauer
-  const tenure = p.is_new ? null : p.tenure_label
+  // Neue zeigen "Neu dabei" als Marke (daneben nur das Datum, falls geliefert), die anderen ihre Kundendauer
+  const tenure = p.is_new ? tenureText(null, p.customer_since) : p.tenure_label
   if (isRadius.value) return [`${p.distance_km} km entfernt`, tenure].filter(Boolean).join(' · ')
   const kind = activeSegment.value ? null : kindLabel(p)
-  const state = p.status === 'customer' ? ['Kunde', tenure].filter(Boolean).join(' · ') : 'Noch kein Kunde'
+  const state = p.status === 'prospect' ? 'Noch kein Kunde'
+    : [p.status === 'free' ? 'Kostenlos' : 'Kunde', tenure].filter(Boolean).join(' · ')
   return [kind, state, sizeText(p.segment, p.size)].filter(Boolean).join(' · ')
 }
 </script>
@@ -352,7 +421,7 @@ function itemMeta(p) {
             </div>
             <div v-if="!isRadius" class="mm-seg" role="group" aria-label="Status filtern">
               <button
-                v-for="opt in [['all', 'Alle'], ['customer', 'Kunden'], ['prospect', 'Noch keine Kunden']]"
+                v-for="opt in statusOptions"
                 :key="opt[0]"
                 type="button"
                 :aria-pressed="statusFilter === opt[0]"
@@ -360,6 +429,14 @@ function itemMeta(p) {
               >{{ opt[1] }}</button>
             </div>
           </div>
+
+          <ul v-if="!isRadius && legend.length" class="mm-legend" aria-label="Lizenzarten">
+            <li v-for="[k, t] in legend" :key="k">
+              <span class="mm-legend-sign" :style="{ background: t.fill, color: t.ink }">Aa</span>{{ t.label }}
+            </li>
+            <li><span class="mm-legend-sign is-prospect">Aa</span>Noch kein Kunde</li>
+          </ul>
+          <p v-if="!isRadius && hasFree" class="mm-legend-note">Kostenlose zählen nicht als Kunde, auch nicht in den Clustern.</p>
 
           <div v-if="surroundingPlz.length" class="mm-plz-cloud">
             <p class="mm-plz-cloud-label">Postleitzahlen in Ihrer Umgebung</p>
@@ -382,7 +459,7 @@ function itemMeta(p) {
               class="mm-item"
               :class="{
                 'is-active': selectedId === f.properties.key || hoveredId === f.properties.key,
-                'is-prospect': f.properties.status === 'prospect',
+                'is-prospect': f.properties.status !== 'customer',
               }"
               @mouseenter="hoveredId = f.properties.key"
               @mouseleave="hoveredId = null"
@@ -413,7 +490,7 @@ function itemMeta(p) {
           :scroll-zoom="expanded"
           :cluster-ratio="!isRadius"
           :area="meta.territory ?? null"
-          @bounds-change="bounds = $event"
+          @bounds-change="onBoundsChange"
         >
           <template #popup="{ feature }">
             <div class="mm-pop">
@@ -542,6 +619,11 @@ function itemMeta(p) {
 .mm-coverage-bar span { display: block; height: 100%; background: var(--mm-sign); }
 .mm-coverage-pct { font-variant-numeric: tabular-nums; font-weight: 600; color: var(--mm-sign); }
 
+.mm-legend { display: flex; flex-wrap: wrap; gap: 6px 12px; margin: 10px 0 0; padding: 0; list-style: none; font-size: 0.82rem; color: var(--mm-muted); }
+.mm-legend li { display: flex; align-items: center; gap: 6px; }
+.mm-legend-sign { display: inline-block; padding: 0 4px; border-radius: 2px; border: 1px solid currentColor; font-size: 0.72rem; font-weight: 700; line-height: 1.4; }
+.mm-legend-sign.is-prospect { background: #C9D3D6; color: #1E2E34; }
+.mm-legend-note { margin: 6px 0 0; font-size: 0.8rem; color: var(--mm-muted); }
 .mm-seg { display: inline-flex; border: 1px solid var(--mm-line); border-radius: 4px; overflow: hidden; }
 .mm-seg button {
   font: inherit;

@@ -4,9 +4,11 @@ import maplibregl from 'maplibre-gl'
 import 'maplibre-gl/dist/maplibre-gl.css'
 import { createSignImage } from './signImage.js'
 import { SEGMENTS } from '../../lib/segments.js'
+import { LICENCE_TYPES } from '../../lib/licences.js'
 
 const props = defineProps({
-  /** GeoJSON FeatureCollection, properties.key ist die ID, properties.status 'customer' | 'prospect' */
+  /** GeoJSON FeatureCollection, properties.key ist die ID, properties.status 'customer' | 'free' | 'prospect',
+   * bei Partner/Intern properties.licence_type (Farbe des Schilds, siehe lib/licences.js) */
   data: { type: Object, required: true },
   userLocation: { type: Object, default: null },
   hoveredId: { type: String, default: null },
@@ -104,6 +106,13 @@ function addImages() {
   const prospectActive = createSignImage({ fill: props.prospectInk, ink: props.prospectFill })
   map.addImage('mm-sign-prospect', prospect.image, prospect.options)
   map.addImage('mm-sign-prospect-active', prospectActive.image, prospectActive.options)
+  // Je Lizenzart ein eigenes Schild (Partner/Intern); ohne Lizenzart (öffentliche Karte) das gelbe
+  for (const [type, { fill, ink }] of Object.entries(LICENCE_TYPES)) {
+    const sign = createSignImage({ fill, ink })
+    const signActive = createSignImage({ fill: ink, ink: fill })
+    map.addImage(`mm-sign-${type}`, sign.image, sign.options)
+    map.addImage(`mm-sign-${type}-active`, signActive.image, signActive.options)
+  }
 }
 
 function addLayers() {
@@ -144,11 +153,17 @@ function addLayers() {
   const notCluster = ['!', ['has', 'point_count']]
   const isCustomer = ['==', ['get', 'status'], 'customer']
   const isProspect = ['==', ['get', 'status'], 'prospect']
+  const hasSign = ['in', ['get', 'status'], ['literal', ['customer', 'free']]] // zahlend oder kostenlos
+  const types = Object.keys(LICENCE_TYPES)
+  const signImage = (suffix = '') => ['match', ['coalesce', ['get', 'licence_type'], ''],
+    ...types.flatMap((t) => [t, `mm-sign-${t}${suffix}`]), `mm-sign${suffix}`]
+  const signColor = (key, fallback) => ['match', ['coalesce', ['get', 'licence_type'], ''],
+    ...types.flatMap((t) => [t, LICENCE_TYPES[t][key]]), fallback]
   const label = [
     'format',
     ['get', 'name'], {},
     '\n', {},
-    ['get', 'tenure_label'], { 'font-scale': 0.78 }, // Kundendauer als Gruppe, kein Datum
+    ['get', 'tenure_short'], { 'font-scale': 0.78 }, // Kundendauer, bei Partner/Intern mit Monat: "Etabliert · 03/2025"
   ]
   // Noch keine Kunden: Name, darunter die Größe mit Einheit des Segments (nur wo das Backend sie liefert)
   const unit = ['match', ['get', 'segment'], ...Object.entries(SEGMENTS).flatMap(([k, s]) => [k, ` ${s.sizeUnit}`]), '']
@@ -233,13 +248,15 @@ function addLayers() {
     id: 'mm-signs',
     type: 'symbol',
     source: SRC,
-    filter: ['all', notCluster, isCustomer],
-    // Näher bzw. größer zuerst, wenn Schilder sich überdecken
+    filter: ['all', notCluster, hasSign],
+    // Zahlende vor kostenlosen, dann näher bzw. größer zuerst, wenn Schilder sich überdecken
     layout: {
-      ...signLayout('mm-sign'),
-      'symbol-sort-key': ['coalesce', ['get', 'distance_km'], ['-', 0, ['coalesce', ['get', 'size'], 0]]],
+      ...signLayout(signImage()),
+      'symbol-sort-key': ['+',
+        ['case', isCustomer, 0, 1e9],
+        ['coalesce', ['get', 'distance_km'], ['-', 0, ['coalesce', ['get', 'size'], 0]]]],
     },
-    paint: { 'text-color': props.signInk },
+    paint: { 'text-color': signColor('ink', props.signInk) },
   })
 
   // Hervorgehobenes Schild (Hover/Auswahl), immer sichtbar
@@ -248,8 +265,8 @@ function addLayers() {
     type: 'symbol',
     source: SRC,
     filter: ['in', ['get', 'key'], ['literal', []]],
-    layout: { ...signLayout('mm-sign-active'), 'icon-allow-overlap': true, 'text-allow-overlap': true },
-    paint: { 'text-color': props.signFill },
+    layout: { ...signLayout(signImage('-active')), 'icon-allow-overlap': true, 'text-allow-overlap': true },
+    paint: { 'text-color': signColor('fill', props.signFill) },
   })
   map.addLayer({
     id: 'mm-prospects-active',
@@ -344,7 +361,7 @@ function fitToData({ duration = 900 } = {}) {
 function syncHighlight() {
   if (!ready) return
   const ids = [props.hoveredId, props.selectedId].filter(Boolean)
-  map.setFilter('mm-signs-active', ['all', ['==', ['get', 'status'], 'customer'], ['in', ['get', 'key'], ['literal', ids]]])
+  map.setFilter('mm-signs-active', ['all', ['in', ['get', 'status'], ['literal', ['customer', 'free']]], ['in', ['get', 'key'], ['literal', ids]]])
   map.setFilter('mm-prospects-active', ['all', ['==', ['get', 'status'], 'prospect'], ['in', ['get', 'key'], ['literal', ids]]])
 }
 

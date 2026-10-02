@@ -113,7 +113,9 @@ def _properties(t, fields):
         "status": "customer" if t.is_customer else "prospect",
     }
     if "customer_tenure" in fields and t.customer_since:
-        props["customer_tenure"] = customer_tenure(t.customer_since)  # nur die Gruppe, nie das Datum
+        props["customer_tenure"] = customer_tenure(t.customer_since)
+    if "customer_since" in fields and t.customer_since:  # Datum nur, wo die Zielgruppe es darf (nicht kunden)
+        props["customer_since"] = t.customer_since.isoformat()
     if "size" in fields and t.size is not None:
         props["size"] = t.size
     if "licence" in fields and t.organization_id:  # neue Kunden haben oft noch keine
@@ -222,7 +224,7 @@ LIST_PAGE_SIZES = (25, 50, 100)
 
 
 def _tenure_rank():
-    """Kundendauer zum Sortieren: 0 = Neu, 1 = Etabliert, … (Noch-nicht-Kunden NULL). Nach Gruppe, nicht nach Datum."""
+    """Kundendauer zum Sortieren: 0 = Neu, 1 = Etabliert, … (Noch-nicht-Kunden NULL). Innerhalb der Gruppe nach Datum, siehe target_list."""
     today = date.today()
     groups = [When(customer_since__gt=today - timedelta(days=max_days), then=Value(i))
               for i, (_, _, max_days) in enumerate(TENURE_GROUPS) if max_days is not None]
@@ -290,7 +292,10 @@ def target_list(request, audience):
         sort = "size"
     desc = request.GET.get("dir", "desc") == "desc"
     field = F(LIST_SORT[sort]) if isinstance(LIST_SORT[sort], str) else LIST_SORT[sort]()
-    qs = qs.order_by(field.desc(nulls_last=True) if desc else field.asc(nulls_last=True), "name", "pk")
+    order = [field.desc(nulls_last=True) if desc else field.asc(nulls_last=True)]
+    if sort == "customer_tenure":  # innerhalb der Gruppe nach Datum: aufsteigend neueste zuerst, also wie nach Datum
+        order.append(F("customer_since").asc() if desc else F("customer_since").desc())
+    qs = qs.order_by(*order, "name", "pk")
 
     try:
         page_size = int(request.GET.get("page_size", 50))
@@ -327,7 +332,7 @@ def target_list(request, audience):
 @cache_control(private=True, max_age=300)
 def recent(request, audience):
     """
-    Die zuletzt dazugekommenen Kunden, neueste zuerst, ohne Datum. Bei "kunden" deutschlandweit, damit die Leiste
+    Die zuletzt dazugekommenen Kunden, neueste zuerst, mit Datum nur für partner und intern. Bei "kunden" deutschlandweit, damit die Leiste
     nie leer ist; nicht freigegebene erscheinen dort nur mit Bundesland. Unter recent_min
     Kunden im Zeitraum wird der nächste Zeitraum versucht, danach bleibt die Liste leer.
     """
@@ -353,7 +358,8 @@ def recent(request, audience):
             "level": t.region.level if t.segment == Segment.VERWALTUNG else None,
             "state": _state_name(t.region),
         "country": t.region.country,
-            # Kein Datum je Kunde, nur die Reihenfolge (neueste zuerst)
+            # Datum je Kunde nur für partner und intern, öffentlich nur die Reihenfolge (neueste zuerst)
+            **({"customer_since": t.customer_since.isoformat()} if "customer_since" in cfg["fields"] else {}),
             # Anonyme bekommen keine Koordinaten: sonst wäre das Ziel trotzdem erkennbar
             "lat": round(t.location.y, 2) if named else None,
             "lng": round(t.location.x, 2) if named else None,

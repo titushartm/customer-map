@@ -15,8 +15,8 @@ const daysAgo = (n) => new Date(Date.now() - n * 86_400_000).toISOString().slice
 export const MOCK_REFERRALS = [
   { referrer: 'DE-G-14625020', invited: 'DE-G-14625330', status: 'won', date: '2026-09-15' }, // Bautzen → Lohsa
   { referrer: 'DE-G-14625020', invited: 'sw-DE-G-14625020', status: 'meeting', date: daysAgo(10) }, // → eigene Stadtwerke
-  { referrer: 'DE-G-14625020', invited: 'DE-G-14625520', status: 'meeting', date: daysAgo(6) }, // → Wittichenau
-  { referrer: 'DE-G-14625020', invited: 'DE-G-14626620', status: 'invited', date: daysAgo(3) }, // → Elsterheide
+  { referrer: 'DE-G-14625020', invited: 'DE-G-14625640', status: 'meeting', date: daysAgo(6) }, // → Wittichenau
+  { referrer: 'DE-G-14625020', invited: 'DE-G-14625120', status: 'invited', date: daysAgo(3) }, // → Elsterheide
   { referrer: 'DE-G-12052000', invited: 'DE-G-12066304', status: 'won', date: '2026-05-20' }, // Cottbus → Senftenberg
   { referrer: 'DE-G-12052000', invited: 'DE-G-12071372', status: 'won', date: '2026-06-24' }, // → Spremberg
   { referrer: 'DE-G-12052000', invited: 'sw-DE-G-12052000', status: 'meeting', date: daysAgo(14) }, // → Stadtwerke Cottbus

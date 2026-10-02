@@ -17,7 +17,7 @@ Die Ansichten sind Tabs (`#kunden`, `#partner`, `#intern`, `#admin`, `#liste`, `
 ## Die Ansichten
 
 Kunden (öffentliche Startseite)
-: Eine Startseite je Segment („Stadtwerke in Ihrer Nähe“). Kleine Karte, groß per Klick. Zeigt Kunden im Umkreis des Besuchers (IP → Browser auf Klick → Ort/PLZ-Suche). Nicht freigegebene Kunden zählen nur als Zahl. Für FOMO: „Neu im letzten Monat“ (deutschlandweit, Anonyme nur mit Bundesland; erst ab 3 Kunden, sonst „in den letzten drei Monaten“, sonst ausgeblendet) und „In Deutschland (bzw. Österreich, der Schweiz, Frankreich) arbeiten N Verwaltungen in Ihrer Größenklasse mit SpeechMind“ (im Land des Besuchers, erst ab 3). Angemeldete Kunden mit Organisation sehen direkt über der Karte ihren Einladungslink zum Kopieren; Besucher und Kunden ohne Orga sehen ihn nicht. Unter der Karte „Welche Lizenz passt zu Ihnen?“, siehe [Lizenzempfehlung](#lizenzempfehlung).
+: Eine Startseite je Segment („Stadtwerke in Ihrer Nähe“). Kleine Karte, groß per Klick. Zeigt Kunden im Umkreis des Besuchers (IP → Browser auf Klick → Ort/PLZ-Suche); in der großen Karte lädt jedes Verschieben oder Herauszoomen die Kunden im Ausschnitt nach (bis 400 km um die Kartenmitte), Überschrift und Zahlen bleiben beim eigenen Umkreis. Nicht freigegebene Kunden zählen nur als Zahl. Für FOMO: „Neu im letzten Monat“ (deutschlandweit, Anonyme nur mit Bundesland; erst ab 3 Kunden, sonst „in den letzten drei Monaten“, sonst ausgeblendet) und „In Deutschland (bzw. Österreich, der Schweiz, Frankreich) arbeiten N Verwaltungen in Ihrer Größenklasse mit SpeechMind“ (im Land des Besuchers, erst ab 3). Angemeldete Kunden mit Organisation sehen direkt über der Karte ihren Einladungslink zum Kopieren; Besucher und Kunden ohne Orga sehen ihn nicht. Unter der Karte „Welche Lizenz passt zu Ihnen?“, siehe [Lizenzempfehlung](#lizenzempfehlung).
 
 Partner
 : Vertriebspartner sehen ihr Gebiet (Staaten, Länder/Kantone/Régions, Kreise/Bezirke/Départements oder Gemeinden, auch über Ländergrenzen) und darin nur ihr Segment. Das Gebiet ist auf der Karte gelb umrandet und leicht getönt. Kunden sind gelbe Ortsschilder, Noch-nicht-Kunden graue (mit Einwohnerzahl). Dazu die Abdeckung in Prozent und die Lizenz. Cluster zeigen „Kunden/Gesamt“.
@@ -29,7 +29,7 @@ Admin
 : Nur SpeechMind intern: Liste aller Vertriebspartner mit Segment, Gebiet und Abdeckung. „Neuer Partner“ und „Bearbeiten“ öffnen einen Dialog, siehe [Vertriebspartner](#vertriebspartner). „Karte“ springt in die Partneransicht.
 
 Liste
-: Alle Ziele als Tabelle mit Kunden-Häkchen. Suche nach Name oder PLZ, „In der Nähe von“ mit Umkreis, Filter nach Status, Bundesland, Art (Segment bzw. Ebene) und Einwohnerklasse, sortierbare Spalten (Kundendauer nach Gruppe, siehe [Freigaben](#freigaben)). Klick auf eine Zeile öffnet den Empfehlungsdialog. Filtern, Sortieren und Blättern macht der Server (`/api/map/<audience>/list/`, 25/50/100 je Seite); geladen wird immer nur eine Seite. Nur die Tabelle scrollt, Filter und Blätterleiste bleiben stehen.
+: Alle Ziele als Tabelle mit Kunden-Häkchen. Suche nach Name oder PLZ, „In der Nähe von“ mit Umkreis, Filter nach Status, Bundesland, Art (Segment bzw. Ebene) und Einwohnerklasse, sortierbare Spalten (Kundendauer nach Gruppe, darin nach Datum, siehe [Freigaben](#freigaben)). Klick auf eine Zeile öffnet den Empfehlungsdialog. Filtern, Sortieren und Blättern macht der Server (`/api/map/<audience>/list/`, 25/50/100 je Seite); geladen wird immer nur eine Seite. Nur die Tabelle scrollt, Filter und Blätterleiste bleiben stehen.
 
 Lange Listen in den anderen Tabs (Liste neben der Karte, Partner im Admin, Einladungen) rendern stückweise und laden beim Scrollen nach (`composables/useLazyList.js`).
 
@@ -62,7 +62,9 @@ Partner legt das Team im Tab Admin an, es gibt keine Liste zum Hochladen. Der Di
 
 Im Backend sind das `SalesPartner` (mit `segment`) und je Gebietsregion ein `PartnerTerritory` (FK auf `Region`), gepflegt über `backend/maps/partner_admin.py` (nur `is_staff`). Ein Ziel gehört zum Gebiet, wenn seine Region darin liegt (`Region.path`, siehe [Länder](#länder)) und sein Segment das des Partners ist. Die Exklusivität prüft `_save` unter Sperre der Partner des Segments (409 bei Konflikt), weil sich Pfad-Überschneidungen nicht als DB-Constraint ausdrücken lassen. Ämter/VG gehen als Gebiet nicht: Sie hängen im Baum neben dem Kreis, nicht dazwischen.
 
-Im Mock liegen die Partner in `mocks/partners.js`; Änderungen im Dialog leben bis zum Neuladen der Seite.
+Im Mock liegen die Partner in `mocks/partners.js`: die echten Partner ITEBO, KAAW, Komm.ONE, Kufgem, Gemdat OÖ und PSC, ihre Gebiete als erster Entwurf nach öffentlichen Angaben (Gesellschafter, Standorte); Ansprechpartner fehlen noch. Änderungen im Dialog leben bis zum Neuladen der Seite.
+
+Über der Partnerliste zeigt eine Übersichtskarte die Gebiete aller aktiven Partner (ohne Kunden), je Partner eine Farbe, mit Namen auf der Fläche und Legende. Sie folgt dem Segmentfilter; unter „Alle“ scheinen Gebiete verschiedener Segmente durcheinander durch. Klick auf ein Gebiet öffnet den Partner, Klick in der Legende zoomt hin (`components/admin/PartnerOverviewMap.vue`).
 
 ## Länder
 
@@ -152,20 +154,21 @@ frontend/src/
   components/admin/
     PartnerAdmin.vue                   Partnerliste im Tab Admin
     PartnerDialog.vue                  Partner anlegen/bearbeiten: Segment, Gebiet, Vorschau
+    PartnerOverviewMap.vue             Übersichtskarte der Partnergebiete
     AreaPickerMap.vue                  Karte der Kreise zum Anklicken
   api/map.js                           fetch + Mock-Backend (VITE_MAP_USE_MOCK)
   composables/useLazyList.js           lange Listen stückweise rendern (Nachladen beim Scrollen)
-  mocks/regions.js                     Geo-Referenz: Kundenorte (amtlich) + Auszug weiterer Ziele (Ostdeutschland, Großstädte)
-  mocks/customerRegions.js             Orte der echten Kunden und echte Stadtwerke/DRK (erzeugt, siehe Kundendaten)
+  mocks/regions.js                     Geo-Referenz: DE und AT aus regions.json, CH und FR als Auszug der größeren Städte
+  mocks/regions.json                   alle Verwaltungen in DE und AT, amtlich (erzeugt, siehe Referenzliste)
   mocks/targets.js                     Stadtwerke und DRK-Verbände je Region (Verwaltungen = alle Regionen)
-  mocks/customers.js                   Kundenstatus je Ziel: echte Kunden mit Lizenz (erzeugt, siehe Kundendaten)
-  mocks/partners.js                    Vertriebspartner (erfunden), Startzustand für den Admin-Tab
+  mocks/customers.js                   Kundenstatus je Ziel und echte Stadtwerke/DRK (erzeugt, siehe Kundendaten)
+  mocks/partners.js                    echte Vertriebspartner mit Gebietsentwurf, Startzustand für den Admin-Tab
   mocks/referrals.js                   Regeln, Beispiel-Empfehlungen, Codes
   mocks/areas.json                     Staaten, Länder, Kreise in DE/AT/CH/FR mit Fläche (aus scripts/build_areas.py)
   mocks/recommendations.js             Empfehlungslogik
   lib/segments.js                      Segmente: Wörter, Einheiten, Artikel
   lib/referral.js                      Status-Texte, Einladungstext
-  lib/tenure.js                        Kundendauer-Gruppen (Neu, Etabliert, Lange dabei) statt Startdatum
+  lib/tenure.js                        Kundendauer-Gruppen (Neu, Etabliert, Lange dabei), Anzeige mit Startdatum
   lib/sizeClasses.js, lib/geo.js
 backend/maps/                          Skizze
   models.py        Region (Geo), Target (Ziel + Kundenstatus), SalesPartner + PartnerTerritory,
@@ -181,7 +184,7 @@ backend/maps/                          Skizze
 ## Datenmodell (Skizze)
 
 - `Region` ist die reine Geo-Referenz: Staaten, Länder, Kreise, Ämter/VG und Gemeinden mit Grenzen und Einwohnern, je Land. Schlüssel, Pfad und Import: siehe [Länder](#länder).
-- `Target` ist ein Ziel, dem wir verkaufen, mit `segment`, `size` (Einwohner bzw. Mitarbeitende), eigener Lage und der Region, in der es sitzt. Verwaltungen entstehen beim VG250-Import automatisch je Region. **Kunde = `customer_since` gesetzt.** Das Datum bleibt intern, die API liefert nur die Kundendauer als Gruppe (`customer_tenure`, siehe [Freigaben](#freigaben)). `organization` ist optional und wird verknüpft, sobald es sie gibt.
+- `Target` ist ein Ziel, dem wir verkaufen, mit `segment`, `size` (Einwohner bzw. Mitarbeitende), eigener Lage und der Region, in der es sitzt. Verwaltungen entstehen beim VG250-Import automatisch je Region. **Kunde = `customer_since` gesetzt.** Öffentlich liefert die API nur die Kundendauer als Gruppe (`customer_tenure`), Partner und Intern zusätzlich das Datum (siehe [Freigaben](#freigaben)). `organization` ist optional und wird verknüpft, sobald es sie gibt.
 - `SalesPartner` wird im Admin-Tab angelegt und hat genau ein `segment`. Logins hängen als User daran. Kunden eines Partners erkennt man an `Organization.creater_user`. `Organization.is_partner` meint API-Partner und spielt hier keine Rolle.
 - `PartnerTerritory` = Partner + Region (Land, Kreis oder Gemeinde). Ein Ziel gehört zum Gebiet, wenn der Schlüssel seiner Region mit dem Schlüssel der Gebietsregion beginnt und sein Segment das des Partners ist.
 
@@ -192,15 +195,31 @@ Die Flächen im Mock (`mocks/areas.json`, gebaut mit `scripts/build_areas.py`) s
 Die Kunden im Mock sind echt: der Organisations-Export `backend/data/api_organization_*.csv` mit den Lizenzen aus `backend/data/licence_data_orga.csv`. Der Export ist bereinigt und hat zusätzliche Spalten:
 
 - `region_key`, `region_name`: die Region aus den amtlichen Verzeichnissen (Gemeinde `DE-G-<AGS>`, Amt/VG/Samtgemeinde `DE-V-<Regionalschlüssel>`, Kreis `DE-K-…`, österreichische Gemeinde `AT-G-<GKZ>`). Ortsgemeinden ohne eigene Verwaltung (Rheinland-Pfalz, Samtgemeinden in Niedersachsen) zählen als ihre Verbandsgemeinde.
-- `segment` (verwaltung, stadtwerk, drk oder leer), `channel` (direkt, Dienstleister wie S24/kdvz/regio iT, Test/Demo).
+- `segment` (verwaltung, stadtwerk, drk oder leer), `created_by` (wer die Organisation angelegt hat, aus der E-Mail-Domain des Anlegers in `orgas_with_creater_user.csv`: SpeechMind, ein Partner wie Kufgem oder Gemdat OÖ, oder ein Dienstleister wie more! rubin oder Sternberg/S24) und daraus `channel` (direkt, Partner, Dienstleister, Test/Demo). E-Mail-Adressen selbst stehen nicht in der Datei.
 - `licence_type`, `licence_name`, `licence_hours`, `licence_used` aus der Lizenzdatei (Stunden statt Sekunden; bei kostenlos und Pay-per-Use ohne Stunden).
 - `on_map`: ja nur mit Segment und Lizenz. Firmen, Landesbehörden, Hochschulen, Kammern, Test-/Demokonten und Privatpersonen bleiben weg; `note` sagt, warum, und was korrigiert wurde (Land, Bundesland, PLZ, Typ, unsichere Zuordnungen).
 
-Leere Felder (Land, Bundesland, Typ, PLZ) sind ergänzt, wo die Zuordnung eindeutig ist. `scripts/build_customers.py` baut daraus `mocks/customers.js` und `mocks/customerRegions.js` (Einwohner, PLZ und Mittelpunkt aus Destatis bzw. Statistik Austria, Quellen im Kopf des Skripts). Mehrere Einträge für dasselbe Ziel werden zusammengefasst (frühestes Datum, stärkste Lizenz). Alle Kunden sind als Referenz freigegeben (so entschieden am 02.10.2026). Für einen neuen Export braucht jede Zeile `region_key`, `segment` und `on_map`; am einfachsten bekommt die Organisation im Backend gleich einen Verweis auf ihre `Region`.
+Leere Felder (Land, Bundesland, Typ, PLZ) sind ergänzt, wo die Zuordnung eindeutig ist. `scripts/build_regions.py` baut daraus `mocks/customers.js`, zusammen mit der Referenzliste (siehe unten). Mehrere Einträge für dasselbe Ziel werden zusammengefasst (frühestes Datum, stärkste Lizenz). Alle Kunden sind als Referenz freigegeben (so entschieden am 02.10.2026). Für einen neuen Export braucht jede Zeile `region_key`, `segment` und `on_map`; am einfachsten bekommt die Organisation im Backend gleich einen Verweis auf ihre `Region`.
+
+### Referenzliste
+
+`mocks/regions.json` enthält alle Verwaltungen in Deutschland und Österreich, erzeugt mit `scripts/build_regions.py` (Quellen und Download im Kopf des Skripts):
+
+- **Deutschland** (Destatis-Gemeindeverzeichnis, Stand 31.12.2024; alle PLZ je Gemeinde aus dem OpenPLZ-Straßenverzeichnis, OpenStreetMap/ODbL): jede Gemeinde mit eigener Verwaltung, dazu Ämter, Samtgemeinden, Verbandsgemeinden und die Verwaltungsgemeinschaften in Bayern und Thüringen *statt* ihrer Mitgliedsgemeinden (die haben keine eigene Verwaltung), und alle 294 Landkreise. In Baden-Württemberg (VVG, GVV) und Sachsen behalten die Mitglieder ihr Rathaus und bleiben einzeln Ziel. Ist eine Mitgliedsgemeinde oder ein GVV Kunde, steht sie trotzdem in der Liste.
+- **Österreich** (Statistik Austria, Stand 2026): alle Gemeinden mit Einwohnern und allen PLZ; Mittelpunkt aus den Gemeindegrenzen 2021.
+- Schweiz und Frankreich sind noch ein Auszug der größeren Städte in `mocks/regions.js`.
+
+Das sind rund 7.600 Verwaltungen. Der Mock lädt sie mit dem Bundle (etwa 270 kB gzip); im Betrieb kommen sie aus `Region` (`import_regions`), dort fehlen für DE noch die Ämter/VG (VG250 hat sie als `VG250_VWG`) und die Regel, welche Gemeinden kein eigenes Ziel sind.
+
+### Kunde oder kostenlos
+
+Kunde ist, wer eine zahlende Lizenz hat: Jahreslizenz, Monatslizenz, Pilot, Pay-per-Use oder Budget. Organisationen mit kostenloser Lizenz (`free`) haben den Status `free`: Sie stehen in Partner-, Intern- und Listenansicht mit eigenem, dunklem Schild, zählen aber in keiner Zahl als Kunde (Abdeckung, Cluster „Kunden/Gesamt“, „Neu dabei“, Partnerstatistik, Empfehlungscode) und fehlen auf der öffentlichen Kundenkarte. In Partner- und Intern-Karte hat jede Lizenzart ihre Schildfarbe (`lib/licences.js`), mit Legende im Seitenfeld; das Popup nennt die Lizenz und wer die Organisation angelegt hat. Im Admin steht je Partner, wie viele Kunden im Gebiet er selbst angelegt hat und wie viele kostenlose es gibt.
 
 ## Noch offen
 
-- Echte Referenzliste: Die Kundenorte sind amtlich, die übrigen Ziele in `mocks/regions.js` aus dem Gedächtnis zusammengestellt und gerundet, einige kleine Codes (AGS, GKZ) nur illustrativ. Noch-nicht-Kunden gibt es im Mock nur in Ostdeutschland und in den größeren Städten von AT, CH, FR; Kunden in Baden-Württemberg, NRW oder Tirol stehen daher fast allein auf der Karte, und die Abdeckung in Prozent ist dort zu hoch.
+- Backend: `Target` kennt die Lizenzart noch nicht. Für die Trennung zahlend/kostenlos braucht `views.py` sie aus der Lizenz der Organisation (Status `free`, Zählungen nur zahlende); im Mock steht sie in `customers.js`.
+
+- Schweiz und Frankreich vollständig (swisstopo bzw. IGN, wie bei `import_regions`).
 - Lizenzempfehlung: Die echten Lizenzen laufen über Stunden (Jahres-/Monatslizenz, Pilot), die Empfehlung rechnet noch mit Plätzen und den Stufen Basis/Professional/Enterprise.
 - Welche Felder die Karten der Partner und Intern zeigen, und woher Lizenz- und Hardwaredaten kommen.
 - Kontaktdaten der Noch-nicht-Kunden liegen nicht vor. Eventuell per Anreicherung über die Website der Verwaltung (Impressum).
@@ -223,4 +242,4 @@ Standortdaten werden im Browser und auf dem Server auf zwei Nachkommastellen ger
 
 `Region.public_reference` steht standardmäßig auf `False`. Nicht freigegebene Kunden zählen auf der öffentlichen Karte nur anonym mit, in „Neu dabei“ erscheinen sie ohne Namen und ohne Koordinaten. E-Mail-Entwurf und One-Pager nennen nur freigegebene Kunden. Lege das Flag erst nach einer schriftlichen Referenzfreigabe um.
 
-Das genaue Startdatum eines Kunden (`Target.customer_since`) verlässt die API in keiner Ansicht. Karten, Liste und Empfehlungsdialog bekommen nur `customer_tenure`: `neu` („Neu“, unter 3 Monaten), `etabliert` („Etabliert“, 3 bis 12 Monate) oder `lange` („Lange dabei“, mehr als 12 Monate). Die Grenzen stehen in `TENURE_GROUPS` (`backend/maps/audiences.py`) und `frontend/src/lib/tenure.js`. Der Lichthof auf der Karte und „Neu dabei“ in der Liste neben der Karte stehen für die Gruppe „Neu“. „Neu dabei“ (die Leiste) rechnet seine Zeiträume serverseitig und liefert die Kunden nur in Reihenfolge, ohne Datum. Die Liste sortiert nach Gruppe, innerhalb der Gruppe nach Name.
+Kundendauer: Die öffentliche Ansicht (`kunden`) bekommt nur die Gruppe, nie das genaue Startdatum (`Target.customer_since`): `customer_tenure` = `neu` („Neu“, unter 3 Monaten), `etabliert` („Etabliert“, 3 bis 12 Monate) oder `lange` („Lange dabei“, mehr als 12 Monate). Partner und Intern bekommen zusätzlich `customer_since` und sehen es neben der Gruppe, überall im gleichen Format: „Etabliert · seit 12.03.2025“, auf dem Ortsschild kurz „Etabliert · 03/2025“. Das gilt für Karte, Liste, Empfehlungsdialog und „Neu dabei“. Die Grenzen stehen in `TENURE_GROUPS` (`backend/maps/audiences.py`) und `frontend/src/lib/tenure.js`, welche Zielgruppe das Datum bekommt, in den `fields` in `audiences.py`. Der Lichthof auf der Karte und „Neu dabei“ in der Liste neben der Karte stehen für die Gruppe „Neu“. „Neu dabei“ (die Leiste) rechnet seine Zeiträume serverseitig; öffentlich kommen die Kunden nur in Reihenfolge, ohne Datum. Die Liste sortiert nach Gruppe, darin nach Datum.

@@ -4,7 +4,7 @@ import PlaceSearch from '../municipality-map/PlaceSearch.vue'
 import { fetchTargetPage } from '../../api/map.js'
 import { SEGMENTS, sizeText, kindLabel } from '../../lib/segments.js'
 import { SIZE_CLASSES } from '../../lib/sizeClasses.js'
-import { tenureLabel } from '../../lib/tenure.js'
+import { tenureText } from '../../lib/tenure.js'
 import { COUNTRIES, COUNTRY_CODES } from '../../lib/countries.js'
 
 // Alle Ziele (Verwaltungen, Stadtwerke, DRK, …) als Tabelle. Intern: alles, als Partner: nur das eigene Gebiet.
@@ -18,14 +18,14 @@ const emit = defineEmits(['open'])
 const PAGE_SIZES = [25, 50, 100]
 
 const rows = shallowRef([])
-const result = ref({ count: 0, customers: 0, prospects: 0, page: 1, pages: 1, meta: { states: [], segments: [] } })
+const result = ref({ count: 0, customers: 0, free: 0, prospects: 0, page: 1, pages: 1, meta: { states: [], segments: [] } })
 const loading = ref(false)
 const loadError = ref(null)
 const scroller = ref(null)
 
 const q = ref('')
 const qDebounced = ref('')
-const status = ref('all') // 'all' | 'customer' | 'prospect'
+const status = ref('all') // 'all' | 'customer' | 'free' | 'prospect'
 const state = ref('')
 const kind = ref('') // '' | Segment | 'verwaltung:<ebene>'
 const size = ref('') // Index in SIZE_CLASSES, nur für Verwaltungen (Einwohner)
@@ -102,7 +102,7 @@ function sortBy(key) {
   if (sortKey.value === key) sortDir.value *= -1
   else {
     sortKey.value = key
-    sortDir.value = key === 'size' ? -1 : 1 // Kundendauer: Neu zuerst
+    sortDir.value = key === 'size' ? -1 : 1 // Kundendauer: Neu (und neueste) zuerst
   }
 }
 const ariaSort = (key) => (sortKey.value !== key ? 'none' : sortDir.value === 1 ? 'ascending' : 'descending')
@@ -172,6 +172,7 @@ const numFmt = new Intl.NumberFormat('de-DE')
         <select v-model="status">
           <option value="all">Alle</option>
           <option value="customer">Kunden</option>
+          <option value="free">Kostenlos</option>
           <option value="prospect">Noch keine Kunden</option>
         </select>
       </label>
@@ -210,6 +211,7 @@ const numFmt = new Intl.NumberFormat('de-DE')
       <p>
         <strong>{{ numFmt.format(result.count) }}</strong> {{ kind ? SEGMENTS[kind.split(':')[0]].plural : 'Einträge' }} ·
         <span class="rl-yes">{{ numFmt.format(result.customers) }} Kunden</span> ·
+        <template v-if="result.free">{{ numFmt.format(result.free) }} kostenlos · </template>
         {{ numFmt.format(result.prospects) }} noch nicht
         <template v-if="result.meta.partner"> · Gebiet {{ result.meta.partner }}</template>
       </p>
@@ -243,7 +245,7 @@ const numFmt = new Intl.NumberFormat('de-DE')
             @keydown.enter="emit('open', r.key)"
           >
             <td>
-              <span class="rl-check" :class="{ 'is-on': r.status === 'customer' }" role="img" :aria-label="r.status === 'customer' ? 'Kunde' : 'Kein Kunde'">
+              <span class="rl-check" :class="{ 'is-on': r.status === 'customer' }" role="img" :aria-label="r.status === 'customer' ? 'Kunde' : r.status === 'free' ? 'Kostenlos, kein zahlender Kunde' : 'Kein Kunde'">
                 <svg v-if="r.status === 'customer'" viewBox="0 0 16 16" aria-hidden="true"><path d="M3.5 8.5l3 3 6-7" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" /></svg>
               </span>
             </td>
@@ -252,7 +254,7 @@ const numFmt = new Intl.NumberFormat('de-DE')
             <td>{{ r.state }} <span class="rl-muted">{{ r.country }}</span></td>
             <td class="rl-plz">{{ (r.postcodes ?? [])[0] ?? '–' }}<span v-if="(r.postcodes ?? []).length > 1" class="rl-muted"> +{{ r.postcodes.length - 1 }}</span></td>
             <td class="num">{{ sizeText(r.segment, r.size) ?? '–' }}</td>
-            <td>{{ tenureLabel(r.customer_tenure) ?? '–' }}</td>
+            <td>{{ tenureText(r.customer_tenure, r.customer_since) || '–' }}</td>
             <td :class="{ 'rl-muted': !r.licence }">{{ r.licence ?? (r.status === 'customer' ? 'noch keine Orga' : '–') }}</td>
             <td v-if="center" class="num">{{ r.distance_km }} km</td>
           </tr>
