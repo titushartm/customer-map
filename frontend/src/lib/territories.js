@@ -145,6 +145,7 @@ export function outline(geometries, eps = 0.003) {
   const rings = geometries.flatMap((g) => (g.type === 'Polygon' ? [g.coordinates] : g.type === 'MultiPolygon' ? g.coordinates : []))
     .map((poly) => poly[0])
   rings.forEach((r) => {
+    if (r.bbox) return
     const xs = r.map((c) => c[0]); const ys = r.map((c) => c[1])
     r.bbox = [Math.min(...xs), Math.min(...ys), Math.max(...xs), Math.max(...ys)]
   })

@@ -130,6 +130,7 @@ function onTabKey(e, i) {
           @keydown="onTabKey($event, i)"
         >{{ t.label }}</button>
       </nav>
+      <a class="showcase-link" href="#showcase" target="_blank" rel="noopener">Showcase-Karte</a>
     </header>
     <p class="tab-note"><span class="tab-note-tag">Ansicht {{ current.label }}</span> {{ current.note }}</p>
 
@@ -309,6 +310,12 @@ body {
   border-bottom: 1px solid var(--page-line);
 }
 .brand { font-size: 1.25rem; font-weight: 700; letter-spacing: 0.02em; }
+.showcase-link {
+  margin-left: auto; padding: 6px 12px; border-radius: 4px; border: 1px solid var(--page-line);
+  color: var(--page-muted); font-weight: 600; text-decoration: none; white-space: nowrap;
+}
+.showcase-link:hover { color: var(--page-text); border-color: var(--page-accent); }
+.showcase-link:focus-visible { outline: 2px solid var(--page-accent); outline-offset: 2px; }
 .tabs { display: flex; flex-wrap: wrap; gap: 4px; }
 .tabs button {
   font: inherit;

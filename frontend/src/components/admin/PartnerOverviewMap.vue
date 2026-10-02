@@ -1,5 +1,5 @@
 <script setup>
-import { ref, computed, watch, onMounted, onBeforeUnmount } from 'vue'
+import { ref, computed, watch, toRaw, onMounted, onBeforeUnmount } from 'vue'
 import maplibregl from 'maplibre-gl'
 import 'maplibre-gl/dist/maplibre-gl.css'
 import { SEGMENTS } from '../../lib/segments.js'
@@ -26,6 +26,17 @@ let map = null
 let ready = false
 let resizeObserver = null
 
+// Umriss und Namenspunkt je Flächenmenge merken: Beides ist teuer und ändert sich beim Segmentwechsel nicht
+const geomIds = new WeakMap()
+const geomId = (g) => geomIds.get(g) ?? (geomIds.set(g, geomIds.size + 1), geomIds.size)
+const shapeCache = new Map()
+function shapeOf(geometries) {
+  const sig = geometries.map(geomId).join(',')
+  let hit = shapeCache.get(sig)
+  if (!hit) shapeCache.set(sig, hit = { line: outline(geometries), label: interiorPoint(geometries) })
+  return hit
+}
+
 const active = computed(() => props.partners.filter((p) => p.active).sort((a, b) => a.id - b.id))
 const colorOf = computed(() => partnerColors(props.partners))
 const shown = computed(() => active.value.filter((p) => props.segment === 'all' || p.segment === props.segment))
@@ -38,7 +49,7 @@ const countries = computed(() => props.areas.filter((a) => a.level === 'staat')
  */
 function featureCollections() {
   const fc = (features) => ({ type: 'FeatureCollection', features })
-  const shapes = partnerShapes(shown.value, props.areas)
+  const shapes = partnerShapes(shown.value, toRaw(props.areas))
   const fills = []
   const lines = []
   const labels = []
@@ -48,8 +59,9 @@ function featureCollections() {
     const { geometries, names, towns } = shapes[p.id]
     geometries.forEach((geometry, i) => fills.push({ type: 'Feature', geometry, properties: { ...base, area: names[i] } }))
     if (geometries.length) {
-      lines.push({ type: 'Feature', geometry: outline(geometries), properties: base })
-      labels.push({ type: 'Feature', geometry: { type: 'Point', coordinates: interiorPoint(geometries) }, properties: base })
+      const { line, label } = shapeOf(geometries)
+      lines.push({ type: 'Feature', geometry: line, properties: base })
+      labels.push({ type: 'Feature', geometry: { type: 'Point', coordinates: label }, properties: base })
     }
     towns.forEach((a) => points.push({ type: 'Feature', geometry: { type: 'Point', coordinates: [a.lng, a.lat] }, properties: { ...base, area: a.name } }))
   })
@@ -77,12 +89,13 @@ function fit(features, duration = 700) {
 }
 
 function sync() {
-  if (!ready) return
-  const { fills, lines, labels, points } = featureCollections()
-  map.getSource('po-fills').setData(fills)
-  map.getSource('po-lines').setData(lines)
-  map.getSource('po-labels').setData(labels)
-  map.getSource('po-points').setData(points)
+  if (!ready) return null
+  const fcs = featureCollections()
+  map.getSource('po-fills').setData(fcs.fills)
+  map.getSource('po-lines').setData(fcs.lines)
+  map.getSource('po-labels').setData(fcs.labels)
+  map.getSource('po-points').setData(fcs.points)
+  return fcs
 }
 
 onMounted(() => {
@@ -130,9 +143,8 @@ onMounted(() => {
       if (partner) emit('edit', partner)
     })
     ready = true
-    sync()
     // Start auf den Gebieten der Partner, ohne Partner auf allen Ländern
-    const { fills, points } = featureCollections()
+    const { fills, points } = sync()
     const own = [...fills.features, ...points.features]
     fit(own.length ? own : countries.value, 0)
   })
@@ -143,7 +155,10 @@ onBeforeUnmount(() => {
   map?.remove()
 })
 
-watch(() => [props.partners, props.segment, props.areas], sync, { deep: true })
+// Kein deep-Watch: Das würde die ganze Geometrie durchlaufen. Es reicht, was die Karte von den Partnern braucht.
+const signature = () => props.segment + '|' + props.areas.length + '|' + props.partners
+  .map((p) => `${p.id}:${p.active}:${p.segment}:${p.areas.map((a) => a.key).join(',')}`).join(';')
+watch(signature, sync)
 
 /** Legende: Klick zoomt auf das Gebiet des Partners */
 function focus(p) {

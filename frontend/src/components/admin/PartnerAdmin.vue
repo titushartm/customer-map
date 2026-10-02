@@ -1,5 +1,5 @@
 <script setup>
-import { ref, computed, onMounted, defineAsyncComponent } from 'vue'
+import { ref, shallowRef, computed, onMounted, defineAsyncComponent } from 'vue'
 import { SEGMENT_KEYS, VISIBLE_SEGMENTS, wordsFor, commonCountry } from '../../lib/segments.js'
 import PartnerDialog from './PartnerDialog.vue'
 import { useLazyList } from '../../composables/useLazyList.js'
@@ -18,7 +18,7 @@ const segment = ref('all')
 const query = ref('')
 const editing = ref(null) // null = zu, 'new' oder ein Partner
 const numFmt = new Intl.NumberFormat('de-DE')
-const areaMap = ref(null) // Flächen für die Übersichtskarte, einmal geladen
+const areaMap = shallowRef(null) // Flächen für die Übersichtskarte, einmal geladen; flach, sonst läuft jede Koordinate durch einen Proxy
 onMounted(async () => { areaMap.value = await fetchAreaMap() })
 
 const rows = computed(() => {
