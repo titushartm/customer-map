@@ -3,7 +3,7 @@ import { ref, shallowRef, computed, onMounted, onBeforeUnmount } from 'vue'
 import MunicipalityMap from '../municipality-map/MunicipalityMap.vue'
 import { fetchTargets, fetchPartners, fetchAreaMap } from '../../api/map.js'
 import { PARTNER_PALETTE, partnerColors } from '../../lib/partnerColors.js'
-import { polysOf, thin, labelPoint, outline } from '../../lib/labelPlacement.js'
+import { polysOf, thin, labelPoint, outline, partnerShapes } from '../../lib/territories.js'
 
 // Showcase (#showcase, z. B. für LinkedIn): ganze Fläche Karte, nur Kunden, dahinter die Partnergebiete, Namen daneben.
 // Keine Noch-nicht-Kunden, keine Lizenzfarben, ohne Städtenamen: einzelne Kunden als Kreis mit "1". Taste H blendet die Steuerung aus.
@@ -47,22 +47,8 @@ const colorOf = computed(() => partnerColors(partners.value, PALETTE))
 
 /** Flächen je Partnergebiet und ein Namenspunkt je Partner (neben dem Gebiet, siehe labelPoint) */
 const territories = computed(() => {
-  const byKey = Object.fromEntries(areas.value.map((a) => [a.key, a]))
-  // Gemeinden haben keine Fläche: Ein aufgeteilter Kreis bekommt die Farbe des Partners mit den meisten Gemeinden darin
-  const split = {} // Kreisschlüssel → { Partner-ID: Anzahl Gemeinden }
-  for (const p of activePartners.value) {
-    for (const a of p.areas) {
-      if (byKey[a.key]) continue
-      const kreis = a.path?.split('/').filter((k) => byKey[k]).at(-1)
-      if (kreis) (split[kreis] ??= {})[p.id] = (split[kreis][p.id] ?? 0) + 1
-    }
-  }
-  const majority = Object.fromEntries(Object.entries(split)
-    .map(([kreis, counts]) => [kreis, Number(Object.entries(counts).sort((x, y) => y[1] - x[1])[0][0])]))
-  const geomsOf = (p) => [
-    ...p.areas.map((a) => byKey[a.key]?.geometry).filter(Boolean),
-    ...Object.keys(majority).filter((k) => majority[k] === p.id).map((k) => byKey[k].geometry),
-  ]
+  const shapes = partnerShapes(activePartners.value, areas.value)
+  const geomsOf = (p) => shapes[p.id].geometries
   const allPolys = activePartners.value.flatMap((p) => polysOf(geomsOf(p)).map(thin))
   const customers = data.value.features.map((f) => f.geometry.coordinates)
   const placed = [] // Boxen schon gesetzter Namen

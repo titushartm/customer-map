@@ -1,4 +1,63 @@
-// Partnergebiete im Showcase: Umriss ohne innere Grenzen, Namen so gesetzt, dass Cluster sie nicht verdecken.
+// Partnergebiete auf der Karte (Admin-Übersicht, Showcase): Flächen je Partner, Umriss ohne innere Grenzen, ein Name je Partner.
+
+/**
+ * Flächen je Partner aus seinen Gebieten. Gemeinden haben im Mock keine Fläche: Ein aufgeteilter Kreis bekommt die
+ * Fläche für den Partner (je Segment) mit den meisten Gemeinden darin; die Gemeinden der übrigen bleiben Punkte.
+ * partners: aus fetchPartners (areas mit key, path, lat/lng bei Gemeinden), areas: aus fetchAreaMap.
+ * Rückgabe: { [Partner-ID]: { geometries, names (je Fläche der Gebietsname), towns: [Gebiet mit lat, lng] } }
+ */
+export function partnerShapes(partners, areas) {
+  const byKey = Object.fromEntries(areas.map((a) => [a.key, a]))
+  const kreisOf = (a) => a.path?.split('/').filter((k) => byKey[k]).at(-1)
+  const counts = {} // "Segment|Kreis" → { Partner-ID: Anzahl Gemeinden }
+  for (const p of partners) {
+    for (const a of p.areas) {
+      const kreis = byKey[a.key] ? null : kreisOf(a)
+      if (!kreis) continue
+      const c = (counts[`${p.segment}|${kreis}`] ??= {})
+      c[p.id] = (c[p.id] ?? 0) + 1
+    }
+  }
+  const owner = Object.fromEntries(Object.entries(counts)
+    .map(([k, c]) => [k, Number(Object.entries(c).sort((x, y) => y[1] - x[1])[0][0])]))
+  return Object.fromEntries(partners.map((p) => {
+    const own = p.areas.filter((a) => byKey[a.key]?.geometry)
+    const geometries = own.map((a) => byKey[a.key].geometry)
+    const names = own.map((a) => a.name)
+    const kreise = new Set()
+    const towns = []
+    for (const a of p.areas) {
+      if (byKey[a.key]) continue
+      const kreis = kreisOf(a)
+      if (kreis && owner[`${p.segment}|${kreis}`] === p.id) kreise.add(kreis)
+      else if (a.lat != null) towns.push(a)
+    }
+    kreise.forEach((k) => { geometries.push(byKey[k].geometry); names.push(byKey[k].name) })
+    return [p.id, { geometries, names, towns }]
+  }))
+}
+
+/** Punkt tief im Inneren der Flächen (möglichst weit vom Rand), für einen Namen in der Fläche */
+export function interiorPoint(geometries) {
+  const rings = polysOf(geometries).map(thin)
+  if (!rings.length) return null
+  let w = Infinity; let s = Infinity; let e = -Infinity; let n = -Infinity
+  rings.forEach((r) => { w = Math.min(w, r.bbox[0]); s = Math.min(s, r.bbox[1]); e = Math.max(e, r.bbox[2]); n = Math.max(n, r.bbox[3]) })
+  const k = Math.cos((((s + n) / 2) * Math.PI) / 180)
+  const edge = rings.flat()
+  let best = null
+  const STEPS = 24
+  for (let i = 1; i < STEPS; i++) {
+    for (let j = 1; j < STEPS; j++) {
+      const pt = [w + ((e - w) * i) / STEPS, s + ((n - s) * j) / STEPS]
+      if (!rings.some((r) => inThin(pt, r))) continue
+      const d = Math.min(...edge.map(([x, y]) => Math.hypot((x - pt[0]) * k, y - pt[1])))
+      if (!best || d > best.d) best = { pt, d }
+    }
+  }
+  return best?.pt ?? [(w + e) / 2, (s + n) / 2]
+}
+
 
 export const polysOf = (geometries) => geometries.flatMap((g) => (g.type === 'Polygon' ? [g.coordinates] : g.type === 'MultiPolygon' ? g.coordinates : []))
   .map((rings) => rings[0]) // Außenringe reichen

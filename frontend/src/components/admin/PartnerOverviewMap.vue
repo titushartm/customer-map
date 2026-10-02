@@ -5,6 +5,7 @@ import 'maplibre-gl/dist/maplibre-gl.css'
 import { SEGMENTS } from '../../lib/segments.js'
 import { COUNTRIES, COUNTRY_CODES } from '../../lib/countries.js'
 import { partnerColors } from '../../lib/partnerColors.js'
+import { partnerShapes, outline, interiorPoint } from '../../lib/territories.js'
 
 // Übersicht im Admin: die Gebiete aller aktiven Partner auf einer Karte, ohne Kunden. Je Segment sind die Gebiete
 // exklusiv; unter "Alle" liegen Partner verschiedener Segmente übereinander und scheinen durch.
@@ -28,23 +29,31 @@ let resizeObserver = null
 const active = computed(() => props.partners.filter((p) => p.active).sort((a, b) => a.id - b.id))
 const colorOf = computed(() => partnerColors(props.partners))
 const shown = computed(() => active.value.filter((p) => props.segment === 'all' || p.segment === props.segment))
-const byKey = computed(() => Object.fromEntries(props.areas.map((a) => [a.key, a])))
 const countries = computed(() => props.areas.filter((a) => a.level === 'staat')
   .sort((a, b) => COUNTRY_CODES.indexOf(a.country) - COUNTRY_CODES.indexOf(b.country)))
 
-/** Eine Fläche je Partnergebiet, Gemeinden ohne Fläche als Punkt */
+/**
+ * Flächen je Partner (aufgeteilte Kreise beim Partner mit den meisten Gemeinden darin, siehe partnerShapes), dazu der
+ * Außenrand ohne Kreisgrenzen und ein Name je Partner. Übrige Gemeinden ohne Fläche als Punkt.
+ */
 function featureCollections() {
+  const fc = (features) => ({ type: 'FeatureCollection', features })
+  const shapes = partnerShapes(shown.value, props.areas)
   const fills = []
+  const lines = []
+  const labels = []
   const points = []
   shown.value.forEach((p) => {
-    p.areas.forEach((a) => {
-      const props = { id: p.id, name: p.name, segment: p.segment, area: a.name, color: colorOf.value[p.id] }
-      const geometry = byKey.value[a.key]?.geometry
-      if (geometry) fills.push({ type: 'Feature', geometry, properties: props })
-      else if (a.lat != null) points.push({ type: 'Feature', geometry: { type: 'Point', coordinates: [a.lng, a.lat] }, properties: props })
-    })
+    const base = { id: p.id, name: p.name, segment: p.segment, color: colorOf.value[p.id] }
+    const { geometries, names, towns } = shapes[p.id]
+    geometries.forEach((geometry, i) => fills.push({ type: 'Feature', geometry, properties: { ...base, area: names[i] } }))
+    if (geometries.length) {
+      lines.push({ type: 'Feature', geometry: outline(geometries), properties: base })
+      labels.push({ type: 'Feature', geometry: { type: 'Point', coordinates: interiorPoint(geometries) }, properties: base })
+    }
+    towns.forEach((a) => points.push({ type: 'Feature', geometry: { type: 'Point', coordinates: [a.lng, a.lat] }, properties: { ...base, area: a.name } }))
   })
-  return { fills: { type: 'FeatureCollection', features: fills }, points: { type: 'FeatureCollection', features: points } }
+  return { fills: fc(fills), lines: fc(lines), labels: fc(labels), points: fc(points) }
 }
 
 const outlineFc = () => ({
@@ -69,8 +78,10 @@ function fit(features, duration = 700) {
 
 function sync() {
   if (!ready) return
-  const { fills, points } = featureCollections()
+  const { fills, lines, labels, points } = featureCollections()
   map.getSource('po-fills').setData(fills)
+  map.getSource('po-lines').setData(lines)
+  map.getSource('po-labels').setData(labels)
   map.getSource('po-points').setData(points)
 }
 
@@ -84,19 +95,22 @@ onMounted(() => {
   map.on('load', () => {
     const empty = { type: 'FeatureCollection', features: [] }
     map.addSource('po-fills', { type: 'geojson', data: empty, attribution: '© GeoBasis-DE / BKG · © Statistik Austria · © BFS/swisstopo · © IGN' })
+    map.addSource('po-lines', { type: 'geojson', data: empty })
+    map.addSource('po-labels', { type: 'geojson', data: empty })
     map.addSource('po-points', { type: 'geojson', data: empty })
     map.addSource('po-staaten', { type: 'geojson', data: outlineFc() })
-    map.addLayer({ id: 'po-fill', type: 'fill', source: 'po-fills', paint: { 'fill-color': ['get', 'color'], 'fill-opacity': 0.34 } })
-    // 2 px Rand in der Partnerfarbe, darunter die Kartenfläche als Abstand zwischen Nachbarn
-    map.addLayer({ id: 'po-line', type: 'line', source: 'po-fills', paint: { 'line-color': ['get', 'color'], 'line-width': 2 } })
+    // Ohne Antialiasing keine hellen Nähte zwischen den Kreisen eines Partners
+    map.addLayer({ id: 'po-fill', type: 'fill', source: 'po-fills', paint: { 'fill-color': ['get', 'color'], 'fill-opacity': 0.34, 'fill-antialias': false } })
+    // 2 px Rand in der Partnerfarbe, nur außen
+    map.addLayer({ id: 'po-line', type: 'line', source: 'po-lines', paint: { 'line-color': ['get', 'color'], 'line-width': 2 } })
     map.addLayer({ id: 'po-staat-line', type: 'line', source: 'po-staaten', paint: { 'line-color': '#FFFFFF', 'line-width': 1.6, 'line-opacity': 0.75 } })
     map.addLayer({
       id: 'po-point', type: 'circle', source: 'po-points',
       paint: { 'circle-radius': 8, 'circle-color': ['get', 'color'], 'circle-stroke-color': '#0C1A20', 'circle-stroke-width': 2 },
     })
-    // Name direkt an der Fläche (je Gebietsteil einmal), damit die Farbe nicht allein trägt
+    // Name einmal je Partner in seiner Fläche, damit die Farbe nicht allein trägt
     map.addLayer({
-      id: 'po-label', type: 'symbol', source: 'po-fills',
+      id: 'po-label', type: 'symbol', source: 'po-labels',
       layout: { 'text-field': ['get', 'name'], 'text-size': 12, 'text-font': ['Noto Sans Bold'], 'text-max-width': 9, 'symbol-placement': 'point' },
       paint: { 'text-color': '#FFFFFF', 'text-halo-color': '#0C1A20', 'text-halo-width': 1.6 },
     })
