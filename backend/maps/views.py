@@ -240,6 +240,7 @@ def _prospect_rank():
 # Sortierbare Spalten der Liste -> Feldname oder Funktion, die den ORM-Ausdruck baut
 LIST_SORT = {
     "name": "name",
+    "domain": "email_domains",
     "size": "size",
     "state": "region__state__name",
     "customer_tenure": _tenure_rank,
@@ -254,7 +255,7 @@ def target_list(request, audience):
     """
     Eine Seite der Zieltabelle (Tab Liste), nur intern und partner. Filtern, Sortieren und Blättern hier,
     damit das Frontend nie alle Ziele lädt.
-    ?q= (Name oder PLZ-Anfang) &status=customer|prospect &state=<Name> &kind=stadtwerk|verwaltung:kreis
+    ?q= (Name, PLZ-Anfang oder Domain) &status=customer|prospect &state=<Name> &kind=stadtwerk|verwaltung:kreis
     &size_class=<Index> &lat=&lng=&radius= &sort=<Spalte> &dir=asc|desc &page= &page_size=25|50|100
     """
     cfg = _audience(audience)
@@ -267,7 +268,8 @@ def target_list(request, audience):
         if q.isdigit():
             qs = qs.annotate(plz_text=ArrayToString("region__postcodes", Value(","))).filter(plz_text__regex=r"(^|,)" + re.escape(q))
         else:
-            qs = qs.filter(name__icontains=q)
+            qs = qs.annotate(domain_text=ArrayToString("email_domains", Value(","))).filter(
+                Q(name__icontains=q) | Q(domain_text__icontains=q))
     if (status := request.GET.get("status")) in ("customer", "prospect"):
         qs = qs.filter(customer_since__isnull=(status == "prospect"))
     if state := request.GET.get("state"):
@@ -307,7 +309,8 @@ def target_list(request, audience):
     page = paginator.get_page(request.GET.get("page", 1))  # außerhalb des Bereichs: letzte bzw. erste Seite
 
     def row(t):
-        return {**_properties(t, cfg["fields"]), "lat": round(t.location.y, 5), "lng": round(t.location.x, 5)}
+        return {**_properties(t, cfg["fields"]), "lat": round(t.location.y, 5), "lng": round(t.location.x, 5),
+                "domain": ", ".join(t.email_domains) or None}
 
     return JsonResponse({
         "count": counts["count"],

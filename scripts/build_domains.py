@@ -24,7 +24,7 @@ ROOT = Path(__file__).resolve().parent.parent
 SRC = Path(sys.argv[1])
 
 # Hosts, die nicht der Verwaltung gehören (Plattformen, Land, Provider): lieber keine Domain als eine fremde
-NOT_OWN = {'riskommunal.at', 'land-oberoesterreich.gv.at', 'members.aon.at'}
+NOT_OWN = {'riskommunal.at', 'riskommunal.net', 'land-oberoesterreich.gv.at', 'members.aon.at'}
 # Vorsilben, unter denen die Website liegt, die Mails aber meist nicht (gemeinde.lech.at → lech.at)
 PREFIX = re.compile(r'^(www\d?|gemeinde|marktgemeinde|stadt|rathaus|verwaltung|ssl|barrierefrei|vg|nu)\.(?=[^.]+\.[^.]+)')
 # Von Hand ergänzt oder korrigiert, Kunden ohne Wikidata-Eintrag: { Regionsschlüssel: Domain oder [Domains] }
@@ -84,7 +84,9 @@ def pick(cands):
     found = [f for f in found if f[0]]
     if not found:
         return None, None
-    best = collections.Counter(d for d, _ in found).most_common(1)[0][0]
+    # Bei mehreren Websites die mit Landesendung (.de, .at) vor .com/.eu (Hamburg: hamburg.de statt hamburg.com)
+    counts = collections.Counter(d for d, _ in found)
+    best = min(counts, key=lambda d: (not d.endswith(('.de', '.at')), -counts[d]))
     return best, next(w for d, w in found if d == best)
 
 

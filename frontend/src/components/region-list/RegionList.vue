@@ -150,8 +150,8 @@ const numFmt = new Intl.NumberFormat('de-DE')
   <section class="rl" :aria-busy="loading">
     <div class="rl-filters">
       <label class="rl-field rl-q">
-        <span>Name oder PLZ</span>
-        <input v-model="q" type="search" placeholder="z. B. Pirna oder 017">
+        <span>Name, PLZ oder Domain</span>
+        <input v-model="q" type="search" placeholder="z. B. Pirna, 017 oder pirna.de">
       </label>
 
       <div class="rl-field rl-near">
@@ -226,6 +226,7 @@ const numFmt = new Intl.NumberFormat('de-DE')
           <tr>
             <th scope="col" :aria-sort="ariaSort('status')"><button type="button" @click="sortBy('status')">Kunde</button></th>
             <th scope="col" :aria-sort="ariaSort('name')"><button type="button" @click="sortBy('name')">Name</button></th>
+            <th scope="col" :aria-sort="ariaSort('domain')"><button type="button" @click="sortBy('domain')">Domain</button></th>
             <th scope="col">Art</th>
             <th scope="col" :aria-sort="ariaSort('state')"><button type="button" @click="sortBy('state')">Land/Region</button></th>
             <th scope="col">PLZ</th>
@@ -250,6 +251,7 @@ const numFmt = new Intl.NumberFormat('de-DE')
               </span>
             </td>
             <td class="rl-name">{{ r.name }}</td>
+            <td :class="r.domain ? 'rl-domain' : 'rl-muted'">{{ r.domain ?? '–' }}</td>
             <td>{{ kindLabel(r) }}</td>
             <td>{{ r.state }} <span class="rl-muted">{{ r.country }}</span></td>
             <td class="rl-plz">{{ (r.postcodes ?? [])[0] ?? '–' }}<span v-if="(r.postcodes ?? []).length > 1" class="rl-muted"> +{{ r.postcodes.length - 1 }}</span></td>
@@ -259,7 +261,7 @@ const numFmt = new Intl.NumberFormat('de-DE')
             <td v-if="center" class="num">{{ r.distance_km }} km</td>
           </tr>
           <tr v-if="!loading && !rows.length" class="rl-empty">
-            <td :colspan="center ? 9 : 8">Nichts passt zu diesen Filtern.</td>
+            <td :colspan="center ? 10 : 9">Nichts passt zu diesen Filtern.</td>
           </tr>
         </tbody>
       </table>
@@ -372,6 +374,7 @@ const numFmt = new Intl.NumberFormat('de-DE')
 .rl-table tbody tr:hover, .rl-table tbody tr:focus-visible { background: var(--page-surface); outline: none; }
 .rl-table tbody tr:focus-visible td:first-child { box-shadow: inset 3px 0 0 var(--page-accent); }
 .rl-name { font-weight: 600; }
+.rl-domain { color: var(--page-muted); font-size: 0.9em; }
 .rl-table tr:not(.is-customer) .rl-name { font-weight: 500; }
 .rl-plz { font-variant-numeric: tabular-nums; letter-spacing: 0.03em; }
 .rl-muted { color: var(--page-muted); }

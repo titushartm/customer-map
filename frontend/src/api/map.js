@@ -40,7 +40,8 @@ export async function fetchTargets({ audience, segment, lat, lng, radiusKm, part
  *              sizeClass (Index in SIZE_CLASSES), near: { lat, lng }, radiusKm }
  *   sort: Feldname, dir: 1 | -1, page (ab 1), pageSize
  * Rückgabe: { count, customers, free, prospects, page, pages, page_size, results: [Zeile], meta: { partner, states, segments } }
- * Zeile = properties wie bei fetchTargets plus lat, lng, distance_km (nur mit near).
+ * Zeile = properties wie bei fetchTargets plus lat, lng, distance_km (nur mit near), domain (E-Mail-Domain der
+ * Organisation, mehrere mit Komma, sonst null; siehe scripts/build_domains.py). q sucht auch in der Domain.
  */
 export async function fetchTargetPage({ audience, partnerId, filters = {}, sort = 'size', dir = -1, page = 1, pageSize = 50 }) {
   if (!USE_MOCK) {
@@ -52,6 +53,7 @@ export async function fetchTargetPage({ audience, partnerId, filters = {}, sort 
     })
   }
   if (audience === 'partner') await loadAreas()
+  await loadDomains()
   await new Promise((r) => setTimeout(r, 120)) // wie ein Request, damit Ladezustände sichtbar sind
   return mockTargetPage({ audience, partnerId, filters, sort, dir, page, pageSize })
 }
@@ -198,10 +200,13 @@ export function listCustomerLogins() {
 // Die Karte auf der Startseite sehen nur dienstliche Adressen von Verwaltungen (und Kunden unter den Stadtwerken/DRK),
 // damit Mitbewerber die Kunden nicht abgreifen. Domains je Verwaltung aus Wikidata, siehe scripts/build_domains.py.
 const STAFF_DOMAINS = ['speechmind.de', 'speechmind.com']
+let DOMAINS = null // Schlüssel → Domain oder [Domains]
+const loadDomains = async () => (DOMAINS ??= (await import('../mocks/domains.json')).default)
+const domainOf = (key) => (DOMAINS?.[key] ? [DOMAINS[key]].flat().join(', ') : null)
 let DOMAIN_INDEX = null // Domain → Schlüssel
 async function loadDomainIndex() {
   if (DOMAIN_INDEX) return DOMAIN_INDEX
-  const byKey = (await import('../mocks/domains.json')).default
+  const byKey = await loadDomains()
   DOMAIN_INDEX = new Map()
   Object.entries(byKey).forEach(([key, d]) => [d].flat().forEach((dom) => DOMAIN_INDEX.has(dom) || DOMAIN_INDEX.set(dom, key)))
   return DOMAIN_INDEX
@@ -557,7 +562,9 @@ function mockTargets({ audience, segment, lat, lng, radiusKm, partnerId }) {
 
 function mockTargetPage({ audience, partnerId, filters: f, sort, dir, page, pageSize }) {
   const { collection, meta } = normalize(mockTargets({ audience, partnerId }))
-  const all = collection.features.map((ft) => ({ ...ft.properties, lng: ft.geometry.coordinates[0], lat: ft.geometry.coordinates[1] }))
+  const all = collection.features.map((ft) => ({
+    ...ft.properties, lng: ft.geometry.coordinates[0], lat: ft.geometry.coordinates[1], domain: domainOf(ft.properties.key),
+  }))
   const needle = (f.q ?? '').trim().toLowerCase()
   const isPlz = /^\d+$/.test(needle)
   const cls = f.sizeClass == null || f.sizeClass === '' ? null : SIZE_CLASSES[f.sizeClass]
@@ -566,7 +573,7 @@ function mockTargetPage({ audience, partnerId, filters: f, sort, dir, page, page
   const rows = all
     .map((r) => (f.near ? { ...r, distance_km: Math.round(haversineKm(f.near.lat, f.near.lng, r.lat, r.lng)) } : r))
     .filter((r) => {
-      if (needle && !(isPlz ? (r.postcodes ?? []).some((p) => p.startsWith(needle)) : r.name.toLowerCase().includes(needle))) return false
+      if (needle && !(isPlz ? (r.postcodes ?? []).some((p) => p.startsWith(needle)) : r.name.toLowerCase().includes(needle) || r.domain?.includes(needle))) return false
       if (f.status && r.status !== f.status) return false
       if (f.state && r.state !== f.state) return false
       if (seg && (r.segment !== seg || (lvl && r.level !== lvl))) return false

@@ -149,6 +149,11 @@ class Target(models.Model):
     # Verwaltung: Einwohner (aus der Region), sonst Mitarbeitende. Einheit steht am Segment.
     size = models.PositiveIntegerField("Größe", null=True, blank=True)
     website = models.URLField(blank=True)
+    email_domains = ArrayField(
+        models.CharField(max_length=253), default=list, blank=True,
+        help_text="Mail-Domains der Organisation (wesel.de); Freigabe der Kundenkarte und Spalte in der Liste. "
+                  "Import aus backend/data/region_domains.csv (scripts/build_domains.py).",
+    )
 
     organization = models.ForeignKey(
         "api.Organization", on_delete=models.SET_NULL, null=True, blank=True, related_name="targets",
