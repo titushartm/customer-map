@@ -14,6 +14,10 @@ npm run dev
 
 Die Ansichten sind Tabs (`#kunden`, `#partner`, `#intern`, `#admin`, `#liste`, `#empfehlen`). Die Anmeldung ist simuliert: Partner, Kunde und Scope wählst du oben rechts aus. Einen Einladungslink probierst du mit `?ref=BAU-9EMI#kunden` aus.
 
+`#showcase` zeigt nur die Karte über das ganze Fenster, für Screenshots (z. B. LinkedIn): zahlende Kunden als gelbe Schilder, dahinter die Partnergebiete in Farbe, ihre Namen daneben (außerhalb der Fläche, damit die Cluster sie nicht verdecken), keine Noch-nicht-Kunden. Testlizenzen und Titel lassen sich zuschalten, die Taste H blendet die Steuerung aus.
+
+Vorerst nur Verwaltungen: Stadtwerke und DRK sind in `segments.js` ausgeblendet (`hidden: true`) und fehlen damit in Karte, Zahlen und Filtern.
+
 ## Die Ansichten
 
 Kunden (öffentliche Startseite)

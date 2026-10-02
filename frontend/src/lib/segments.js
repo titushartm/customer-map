@@ -9,6 +9,7 @@ export const SEGMENTS = {
     nom: '', acc: '',
   },
   stadtwerk: {
+    hidden: true, // vorerst ausgeblendet: erst Verwaltungen, Stadtwerke kommen später dazu
     label: 'Stadtwerk', plural: 'Stadtwerke', dative: 'Stadtwerken', one: 'Ein Stadtwerk',
     sizeLabel: 'Mitarbeitende', sizeUnit: 'Mitarb.', meetings: 'Aufsichtsrats- und Gremiensitzungen',
     nom: 'die', acc: 'die',

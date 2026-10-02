@@ -34,6 +34,12 @@ const props = defineProps({
   /** Hervorgehobene Fläche, z. B. das Partnergebiet: GeoJSON-Geometrie (Polygon/MultiPolygon) */
   area: { type: Object, default: null },
   areaAttribution: { type: String, default: '© GeoBasis-DE / BKG 2025' },
+  /** Partnergebiete im Hintergrund (Showcase): Flächen mit properties.color, Linien als Umriss, Punkte mit properties.name und color als Beschriftung */
+  territories: { type: Object, default: null },
+  /** Ortsnamen des Grundstils (Städte, Gemeinden, Ortsteile); Länder und Staaten bleiben */
+  placeLabels: { type: Boolean, default: true },
+  /** Einzelne Kunden als Ortsschild mit Namen; aus = nur ein Punkt (Showcase) */
+  signNames: { type: Boolean, default: true },
 })
 const emit = defineEmits(['update:selectedId', 'update:hoveredId', 'bounds-change'])
 
@@ -71,6 +77,7 @@ onMounted(() => {
     addLayers()
     bindEvents()
     ready = true
+    syncLabels()
     syncData()
     syncUser()
     emitBounds()
@@ -98,6 +105,16 @@ function syncScrollZoom() {
   if (!map) return
   if (props.scrollZoom) map.scrollZoom.enable()
   else map.scrollZoom.disable()
+}
+
+// Ortsnamen im Grundstil (OpenFreeMap-Ebenen); andere Stile ohne diese Ebenen bleiben unverändert
+const PLACE_LAYERS = ['place_other', 'place_suburb', 'place_village', 'place_town', 'place_city', 'place_city_large']
+function syncLabels() {
+  if (!ready) return
+  const vis = (on) => (on ? 'visible' : 'none')
+  for (const id of PLACE_LAYERS) if (map.getLayer(id)) map.setLayoutProperty(id, 'visibility', vis(props.placeLabels))
+  for (const id of ['mm-signs', 'mm-signs-active', 'mm-new-halo']) map.setLayoutProperty(id, 'visibility', vis(props.signNames))
+  for (const id of ['mm-sign-dots', 'mm-sign-one']) map.setLayoutProperty(id, 'visibility', vis(!props.signNames))
 }
 
 // Staatsgrenzen kräftiger als im Grundstil (fiord: 56 % Deckkraft); andere Stile ohne diese Ebenen bleiben unverändert
@@ -141,6 +158,29 @@ function addLayers() {
   })
   map.addSource('mm-user', { type: 'geojson', data: emptyFc() })
   map.addSource('mm-area', { type: 'geojson', data: areaFc(), attribution: props.areaAttribution })
+  map.addSource('mm-territories', { type: 'geojson', data: props.territories ?? emptyFc() })
+
+  // Partnergebiete (Showcase): getönte Fläche in der Partnerfarbe, Name groß am Punkt aus territories (Showcase: neben dem Gebiet). Die Namen blockieren
+  // keine anderen Beschriftungen, Cluster und Schilder liegen darüber.
+  const isPolygon = ['in', ['geometry-type'], ['literal', ['Polygon', 'MultiPolygon']]]
+  map.addLayer({ id: 'mm-territory-fill', type: 'fill', source: 'mm-territories', filter: isPolygon, paint: { 'fill-color': ['get', 'color'], 'fill-opacity': 0.2, 'fill-antialias': false } }) // ohne Antialiasing keine hellen Nähte zwischen Kreisen
+  map.addLayer({
+    id: 'mm-territory-line', type: 'line', source: 'mm-territories', filter: ['in', ['geometry-type'], ['literal', ['LineString', 'MultiLineString']]],
+    layout: { 'line-join': 'round' }, paint: { 'line-color': ['get', 'color'], 'line-width': 1.6, 'line-opacity': 0.85 },
+  })
+  map.addLayer({
+    id: 'mm-territory-label', type: 'symbol', source: 'mm-territories', filter: ['==', ['geometry-type'], 'Point'],
+    layout: {
+      'text-field': ['get', 'name'],
+      'text-font': props.labelFont,
+      'text-size': ['interpolate', ['linear'], ['zoom'], 4, 15, 6, 22, 9, 34],
+      'text-transform': 'uppercase',
+      'text-letter-spacing': 0.08,
+      'text-allow-overlap': true,
+      'text-ignore-placement': true,
+    },
+    paint: { 'text-color': ['get', 'color'], 'text-opacity': 0.9, 'text-halo-color': '#0C1A20', 'text-halo-width': 2 },
+  })
 
   // Partnergebiet: leicht getönte Fläche und klarer Umriss, ganz unten unter allen Markern
   map.addLayer({
@@ -274,6 +314,24 @@ function addLayers() {
     paint: { 'text-color': signColor('ink', props.signInk) },
   })
 
+  // Ohne Namen (signNames aus): einzelne Kunden wie ein Cluster mit "1"
+  map.addLayer({
+    id: 'mm-sign-dots',
+    type: 'circle',
+    source: SRC,
+    filter: ['all', notCluster, hasSign],
+    layout: { visibility: 'none' },
+    paint: { 'circle-radius': props.clusterRatio ? 20 : 16, 'circle-color': props.signInk, 'circle-stroke-color': props.signFill, 'circle-stroke-width': 2 },
+  })
+  map.addLayer({
+    id: 'mm-sign-one',
+    type: 'symbol',
+    source: SRC,
+    filter: ['all', notCluster, hasSign],
+    layout: { visibility: 'none', 'text-field': '1', 'text-font': props.labelFont, 'text-size': 13 },
+    paint: { 'text-color': props.signFill },
+  })
+
   // Hervorgehobenes Schild (Hover/Auswahl), immer sichtbar
   map.addLayer({
     id: 'mm-signs-active',
@@ -339,6 +397,16 @@ function syncArea() {
   fitToData()
 }
 
+function syncTerritories() {
+  if (!ready) return
+  map.getSource('mm-territories').setData(props.territories ?? emptyFc())
+}
+
+function territoryCoords() {
+  return (props.territories?.features ?? []).flatMap(({ geometry: g }) =>
+    g.type === 'Polygon' ? g.coordinates[0] : g.type === 'MultiPolygon' ? g.coordinates.map((rings) => rings[0]).flat() : [])
+}
+
 function areaFc() {
   return props.area ? { type: 'FeatureCollection', features: [{ type: 'Feature', geometry: props.area, properties: {} }] } : emptyFc()
 }
@@ -361,7 +429,7 @@ function syncUser() {
 function fitToData({ duration = 900 } = {}) {
   // Mit Gebiet: das ganze Gebiet zeigen, nicht nur die Einträge darin
   const area = areaCoords()
-  const coords = area.length ? area : props.data.features.map((f) => f.geometry.coordinates)
+  const coords = area.length ? area : [...props.data.features.map((f) => f.geometry.coordinates), ...territoryCoords()]
   if (props.userLocation) coords.push([props.userLocation.lng, props.userLocation.lat])
   if (!coords.length) return
   // Erst die neue Fläche übernehmen: fitBounds rechnet sonst mit der alten Canvas-Größe
@@ -416,6 +484,8 @@ watch(() => props.scrollZoom, syncScrollZoom)
 watch(() => props.data, syncData)
 watch(() => props.userLocation, syncUser)
 watch(() => props.area, syncArea)
+watch(() => props.territories, syncTerritories)
+watch(() => [props.placeLabels, props.signNames], syncLabels)
 watch(() => [props.hoveredId, props.selectedId], syncHighlight)
 watch(() => props.selectedId, syncPopup)
 

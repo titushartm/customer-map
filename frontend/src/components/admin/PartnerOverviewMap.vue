@@ -4,6 +4,7 @@ import maplibregl from 'maplibre-gl'
 import 'maplibre-gl/dist/maplibre-gl.css'
 import { SEGMENTS } from '../../lib/segments.js'
 import { COUNTRIES, COUNTRY_CODES } from '../../lib/countries.js'
+import { partnerColors } from '../../lib/partnerColors.js'
 
 // Übersicht im Admin: die Gebiete aller aktiven Partner auf einer Karte, ohne Kunden. Je Segment sind die Gebiete
 // exklusiv; unter "Alle" liegen Partner verschiedener Segmente übereinander und scheinen durch.
@@ -18,11 +19,6 @@ const props = defineProps({
 })
 const emit = defineEmits(['edit'])
 
-// Kategorische Palette (dunkel, gegen die Kartenfläche geprüft). Die Farbe gehört zum Partner, nicht zum Filter:
-// Reihenfolge nach id aller aktiven Partner. Ab dem neunten Partner grau, erkennbar am Namen auf der Karte.
-const PALETTE = ['#3987e5', '#d95926', '#199e70', '#c98500', '#d55181', '#008300', '#9085e9', '#e66767']
-const OTHER = '#8a9aa3'
-
 const container = ref(null)
 const hover = ref(null) // { x, y, lines: [{ name, color, segment, area }] }
 let map = null
@@ -30,7 +26,7 @@ let ready = false
 let resizeObserver = null
 
 const active = computed(() => props.partners.filter((p) => p.active).sort((a, b) => a.id - b.id))
-const colorOf = computed(() => Object.fromEntries(active.value.map((p, i) => [p.id, PALETTE[i] ?? OTHER])))
+const colorOf = computed(() => partnerColors(props.partners))
 const shown = computed(() => active.value.filter((p) => props.segment === 'all' || p.segment === props.segment))
 const byKey = computed(() => Object.fromEntries(props.areas.map((a) => [a.key, a])))
 const countries = computed(() => props.areas.filter((a) => a.level === 'staat')

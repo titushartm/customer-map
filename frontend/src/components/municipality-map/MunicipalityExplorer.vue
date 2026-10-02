@@ -9,7 +9,7 @@ import { COUNTRIES, COUNTRY_CODES } from '../../lib/countries.js'
 
 const capitalize = (s) => s.charAt(0).toUpperCase() + s.slice(1)
 import { fetchTargets, fetchRecent } from '../../api/map.js'
-import { SEGMENTS, sizeText, kindLabel } from '../../lib/segments.js'
+import { SEGMENTS, SEGMENT_KEYS, sizeText, kindLabel } from '../../lib/segments.js'
 import { tenureText } from '../../lib/tenure.js'
 import { haversineKm } from '../../lib/geo.js'
 import { LICENCE_TYPES } from '../../lib/licences.js'
@@ -334,7 +334,7 @@ const contextLine = computed(() => {
   }
   if (props.audience === 'intern') {
     const where = countryFilter.value === 'all' ? '' : ` ${COUNTRIES[countryFilter.value].in}`
-    return `Alle Ziele der Referenzliste${where}: Verwaltungen, Stadtwerke, DRK`
+    return `Alle Ziele der Referenzliste${where}: ${SEGMENT_KEYS.map((k) => SEGMENTS[k].plural).join(', ')}`
   }
   if (status.value === 'locating') return 'Standort wird ermittelt …'
   const where = placeLabel.value ? `${placeLabel.value}${postcode.value ? `, ${postcode.value}` : ''}` : null

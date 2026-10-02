@@ -12,18 +12,21 @@ const RegionList = defineAsyncComponent(() => import('./components/region-list/R
 const RecommendationDialog = defineAsyncComponent(() => import('./components/region-list/RecommendationDialog.vue'))
 const ReferralView = defineAsyncComponent(() => import('./components/referral/ReferralView.vue'))
 const PartnerAdmin = defineAsyncComponent(() => import('./components/admin/PartnerAdmin.vue'))
+const ShowcaseMap = defineAsyncComponent(() => import('./components/showcase/ShowcaseMap.vue'))
 
 // Prototyp: Die Anmeldung wird simuliert. Tabs und Partnerauswahl stehen für "wer ist eingeloggt".
 const TABS = [
   { id: 'kunden', label: 'Kunden', note: 'Öffentliche Startseite, eine je Segment. Besucher sehen Kunden im Umkreis, nicht freigegebene nur als Zahl.' },
   { id: 'partner', label: 'Partner', note: 'Vertriebspartner sehen ihr Gebiet und nur ihr Segment: Kunden und Noch-nicht-Kunden, mit Größe und Lizenz.' },
-  { id: 'intern', label: 'Intern', note: 'SpeechMind-Team: alle Ziele aller Segmente, Kunden und Noch-nicht-Kunden.' },
+  { id: 'intern', label: 'Intern', note: 'SpeechMind-Team: alle Ziele, Kunden und Noch-nicht-Kunden.' },
   { id: 'admin', label: 'Admin', note: 'SpeechMind intern: Vertriebspartner anlegen, ihr Segment und Gebiet festlegen, deaktivieren oder löschen.' },
   { id: 'liste', label: 'Liste', note: 'Alle Ziele als Tabelle. Filtern, suchen, Umkreis wählen; Klick öffnet Empfehlung und E-Mail.' },
   { id: 'empfehlen', label: 'Empfehlen', note: 'Eingeloggte Kunden mit Lizenz: eigener Empfehlungscode, Einladungen und Rabattstand.' },
 ]
 
 const tab = ref(readHash())
+// Showcase (#showcase): nur die Karte für Screenshots, ohne Tabs und Seitenrahmen
+const showcase = ref(window.location.hash === '#showcase')
 
 // Vertriebspartner: gepflegt im Admin-Tab, danach sofort in Partner- und Listenansicht
 const partners = ref([])
@@ -93,7 +96,10 @@ function select(id) {
   tab.value = id
   history.replaceState(null, '', `#${id}`)
 }
-const onHash = () => { tab.value = readHash() }
+const onHash = () => {
+  tab.value = readHash()
+  showcase.value = window.location.hash === '#showcase'
+}
 onMounted(() => window.addEventListener('hashchange', onHash))
 onBeforeUnmount(() => window.removeEventListener('hashchange', onHash))
 
@@ -107,7 +113,8 @@ function onTabKey(e, i) {
 </script>
 
 <template>
-  <div class="page">
+  <ShowcaseMap v-if="showcase" />
+  <div v-else class="page">
     <header class="top">
       <span class="brand">SpeechMind</span>
       <nav class="tabs" role="tablist" aria-label="Ansicht">
