@@ -14,13 +14,16 @@ export const SEGMENTS = {
     nom: 'die', acc: 'die',
   },
   drk: {
+    hidden: true, // vorerst ausgeblendet: keine Filter, keine Ziele, nicht wählbar
     label: 'DRK-Verband', plural: 'DRK-Verbände', dative: 'DRK-Verbänden', one: 'Ein DRK-Verband',
     sizeLabel: 'Mitarbeitende', sizeUnit: 'Mitarb.', meetings: 'Vorstandssitzungen und Mitgliederversammlungen',
     nom: 'der', acc: 'den',
   },
 }
 
-export const SEGMENT_KEYS = Object.keys(SEGMENTS)
+// Nur die sichtbaren; SEGMENTS behält alle, damit Texte für ausgeblendete weiter funktionieren
+export const SEGMENT_KEYS = Object.keys(SEGMENTS).filter((k) => !SEGMENTS[k].hidden)
+export const VISIBLE_SEGMENTS = Object.fromEntries(SEGMENT_KEYS.map((k) => [k, SEGMENTS[k]]))
 
 // Wie ein Segment in einem Land heißt, wenn es dort anders heißt als in SEGMENTS (= Deutschland).
 // Gleiche Felder, nur die abweichenden. Der Segment-Schlüssel bleibt überall derselbe.

@@ -1,6 +1,6 @@
 <script setup>
 import { ref, computed, onMounted, defineAsyncComponent } from 'vue'
-import { SEGMENTS, wordsFor, commonCountry } from '../../lib/segments.js'
+import { SEGMENT_KEYS, VISIBLE_SEGMENTS, wordsFor, commonCountry } from '../../lib/segments.js'
 import PartnerDialog from './PartnerDialog.vue'
 import { useLazyList } from '../../composables/useLazyList.js'
 import { fetchAreaMap } from '../../api/map.js'
@@ -29,7 +29,7 @@ const rows = computed(() => {
     .sort((a, b) => Number(b.active) - Number(a.active) || a.name.localeCompare(b.name, 'de'))
 })
 const { items: shownRows, hasMore, sentinel } = useLazyList(rows, { step: 30 })
-const countBySegment = computed(() => Object.fromEntries(Object.keys(SEGMENTS).map((k) =>
+const countBySegment = computed(() => Object.fromEntries(SEGMENT_KEYS.map((k) =>
   [k, props.partners.filter((p) => p.segment === k && p.active).length])))
 
 // Partner mit Gebiet in einem Land: Segmentname dieses Landes (Rotkreuz-Bezirksstellen statt DRK-Verbände)
@@ -52,7 +52,7 @@ function onSaved(p) {
       <div class="pa-filters">
         <div class="pa-seg" role="group" aria-label="Segment">
           <button type="button" :aria-pressed="segment === 'all'" @click="segment = 'all'">Alle</button>
-          <button v-for="(s, k) in SEGMENTS" :key="k" type="button" :aria-pressed="segment === k" @click="segment = k">
+          <button v-for="(s, k) in VISIBLE_SEGMENTS" :key="k" type="button" :aria-pressed="segment === k" @click="segment = k">
             {{ s.plural }} <span class="pa-count">{{ countBySegment[k] }}</span>
           </button>
         </div>

@@ -1,7 +1,7 @@
 <script setup>
 import { ref, computed, watch, nextTick, defineAsyncComponent } from 'vue'
 import { fetchAreaMap, previewPartner, savePartner, searchAreas } from '../../api/map.js'
-import { SEGMENTS, wordsFor, commonCountry } from '../../lib/segments.js'
+import { VISIBLE_SEGMENTS, wordsFor, commonCountry } from '../../lib/segments.js'
 import { COUNTRIES, COUNTRY_CODES } from '../../lib/countries.js'
 
 const AreaPickerMap = defineAsyncComponent(() => import('./AreaPickerMap.vue'))
@@ -218,7 +218,7 @@ async function save() {
             <legend>Segment</legend>
             <p class="pd-hint">Ein Partner verkauft genau ein Segment und sieht nur dieses. Für ein zweites Segment einen weiteren Partner anlegen. Je Segment gehört jede Region nur einem Partner.</p>
             <div class="pd-seg">
-              <label v-for="(s, k) in SEGMENTS" :key="k" :class="{ 'is-on': form.segment === k }">
+              <label v-for="(s, k) in VISIBLE_SEGMENTS" :key="k" :class="{ 'is-on': form.segment === k }">
                 <input v-model="form.segment" type="radio" name="pd-segment" :value="k">
                 {{ s.plural }}
               </label>

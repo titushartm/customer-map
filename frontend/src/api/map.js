@@ -307,7 +307,7 @@ export function mockAllTargets() {
     key: r.key, segment: 'verwaltung', region_key: r.key, name: r.name, level: r.level, country: r.country,
     size: r.population, lat: r.lat, lng: r.lng,
   }))
-  const others = EXTRA_TARGETS.map((t) => {
+  const others = EXTRA_TARGETS.filter((t) => SEGMENT_KEYS.includes(t.segment)).map((t) => {
     const r = REGION_BY_KEY[t.region]
     const [dLat, dLng] = SEGMENT_OFFSET[t.segment] ?? [0, 0]
     return { key: t.key, segment: t.segment, region_key: t.region, name: t.name, level: null, country: r.country, size: t.size, lat: r.lat + dLat, lng: r.lng + dLng }
@@ -635,7 +635,7 @@ function mockReferralAccount(key) {
   }
   const code = codeFor(me.key, me.name)
   const referrals = MOCK_REFERRALS
-    .filter((r) => r.referrer === key)
+    .filter((r) => r.referrer === key && byKey[r.invited]) // ohne Ziele ausgeblendeter Segmente
     .map((r) => {
       const t = byKey[r.invited]
       return { key: t.key, name: t.name, segment: t.segment, level: t.level, status: r.status, date: r.date }

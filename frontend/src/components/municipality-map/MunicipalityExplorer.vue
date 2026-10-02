@@ -115,7 +115,7 @@ const expanded = ref(isPage.value)
 const mapRef = ref(null)
 
 // Filter nur, wenn auch Noch-nicht-Kunden geladen sind
-const statusFilter = ref('all') // 'all' | 'customer' | 'free' | 'prospect'
+const statusFilter = ref('all') // 'all' | 'customer' | 'free' | 'prospect' | 'licence:<licence_type>'
 const segmentFilter = ref('all') // 'all' | Segment-Schlüssel, nur ohne feste segment-Prop
 const countryFilter = ref('all') // 'all' | Ländercode, sobald mehr als ein Land geladen ist
 
@@ -278,6 +278,13 @@ const mapData = computed(() => {
   return { ...collection.value, features: [...collection.value.features, ...areaFeatures.value.filter((f) => !keys.has(f.properties.key))] }
 })
 
+// Lizenzarten sind Unterfälle von "Kunden": 'licence:orga-year' zeigt nur die mit Jahreslizenz
+const matchesStatus = (p) => {
+  const f = statusFilter.value
+  if (f === 'all') return true
+  if (f.startsWith('licence:')) return p.licence_type === f.slice(8)
+  return p.status === f
+}
 const unfiltered = computed(() => segmentFilter.value === 'all' && countryFilter.value === 'all')
 const inFilter = (p) => (segmentFilter.value === 'all' || p.segment === segmentFilter.value)
   && (countryFilter.value === 'all' || p.country === countryFilter.value)
@@ -287,7 +294,7 @@ const shown = computed(() => {
   return {
     ...mapData.value,
     features: mapData.value.features.filter((f) =>
-      (statusFilter.value === 'all' || f.properties.status === statusFilter.value) && inFilter(f.properties)),
+      matchesStatus(f.properties) && inFilter(f.properties)),
   }
 })
 
@@ -382,7 +389,16 @@ const legend = computed(() => {
   return Object.entries(LICENCE_TYPES).filter(([k]) => present.has(k))
 })
 const hasFree = computed(() => collection.value.features.some((f) => f.properties.status === 'free'))
-const statusOptions = computed(() => [['all', 'Alle'], ['customer', 'Kunden'], ...(hasFree.value ? [['free', 'Kostenlos']] : []), ['prospect', 'Noch keine Kunden']])
+// Lizenzarten als eigene Filter, nur wenn sie vorkommen
+const LICENCE_FILTERS = [['orga-year', 'Jahreslizenz'], ['orga-month', 'Monatslizenz'], ['pilot', 'Pilotphase']]
+const statusOptions = computed(() => {
+  const present = new Set(collection.value.features.map((f) => f.properties.licence_type))
+  return [
+    ['all', 'Alle'], ['customer', 'Kunden'],
+    ...LICENCE_FILTERS.filter(([k]) => present.has(k)).map(([k, label]) => [`licence:${k}`, label]),
+    ...(hasFree.value ? [['free', 'Kostenlos']] : []), ['prospect', 'Noch keine Kunden'],
+  ]
+})
 
 function itemMeta(p) {
   // Neue zeigen "Neu dabei" als Marke (daneben nur das Datum, falls geliefert), die anderen ihre Kundendauer
@@ -651,18 +667,17 @@ function itemMeta(p) {
 .mm-legend-sign { display: inline-block; padding: 0 4px; border-radius: 2px; border: 1px solid currentColor; font-size: 0.72rem; font-weight: 700; line-height: 1.4; }
 .mm-legend-sign.is-prospect { background: #C9D3D6; color: #1E2E34; }
 .mm-legend-note { margin: 6px 0 0; font-size: 0.8rem; color: var(--mm-muted); }
-.mm-seg { display: inline-flex; border: 1px solid var(--mm-line); border-radius: 4px; overflow: hidden; }
+.mm-seg { display: inline-flex; flex-wrap: wrap; gap: 1px; background: var(--mm-line); border: 1px solid var(--mm-line); border-radius: 4px; overflow: hidden; }
 .mm-seg button {
   font: inherit;
   font-size: 0.92rem;
   padding: 6px 10px;
+  flex: 1 0 auto;
   border: 0;
-  border-right: 1px solid var(--mm-line);
   background: var(--mm-surface);
   color: var(--mm-text);
   cursor: pointer;
 }
-.mm-seg button:last-child { border-right: 0; }
 .mm-seg button[aria-pressed='true'] { background: var(--mm-sign); color: var(--mm-ink); font-weight: 600; }
 .mm-seg button:focus-visible { outline: 2px solid var(--mm-sign); outline-offset: -2px; }
 

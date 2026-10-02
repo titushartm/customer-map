@@ -1,7 +1,7 @@
 <script setup>
 import { ref, computed, defineAsyncComponent, onMounted, onBeforeUnmount } from 'vue'
 import { fetchPartners, listCustomerLogins, listReferrers, lookupReferral } from './api/map.js'
-import { SEGMENTS, wordsFor, commonCountry } from './lib/segments.js'
+import { SEGMENTS, VISIBLE_SEGMENTS, wordsFor, commonCountry } from './lib/segments.js'
 import ReferralBanner from './components/referral/ReferralBanner.vue'
 import ReferralStrip from './components/referral/ReferralStrip.vue'
 import LicenceAdvisor from './components/licence/LicenceAdvisor.vue'
@@ -150,7 +150,7 @@ function onTabKey(e, i) {
             <label class="as">
               <span>Startseite für (Prototyp)</span>
               <select v-model="homeSegment">
-                <option v-for="(s, k) in SEGMENTS" :key="k" :value="k">{{ s.plural }}</option>
+                <option v-for="(s, k) in VISIBLE_SEGMENTS" :key="k" :value="k">{{ s.plural }}</option>
               </select>
             </label>
             <label class="as">
