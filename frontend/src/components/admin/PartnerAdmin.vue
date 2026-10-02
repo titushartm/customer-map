@@ -7,12 +7,12 @@ import { fetchAreaMap } from '../../api/map.js'
 
 const PartnerOverviewMap = defineAsyncComponent(() => import('./PartnerOverviewMap.vue'))
 
-// Admin-Bereich (SpeechMind intern): Vertriebspartner anlegen, Segment und Gebiet festlegen, deaktivieren.
+// Admin-Bereich (SpeechMind intern): Vertriebspartner anlegen, Segment und Gebiet festlegen, deaktivieren, löschen.
 const props = defineProps({
   partners: { type: Array, required: true },
   loading: { type: Boolean, default: false },
 })
-const emit = defineEmits(['saved', 'show'])
+const emit = defineEmits(['saved', 'deleted', 'show'])
 
 const segment = ref('all')
 const query = ref('')
@@ -43,6 +43,11 @@ const areaSummary = (areas) => {
 function onSaved(p) {
   editing.value = null
   emit('saved', p)
+}
+
+function onDeleted(id) {
+  editing.value = null
+  emit('deleted', id)
 }
 </script>
 
@@ -112,6 +117,7 @@ function onSaved(p) {
       :partners="partners"
       @close="editing = null"
       @saved="onSaved"
+      @deleted="onDeleted"
     />
   </section>
 </template>

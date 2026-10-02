@@ -18,7 +18,7 @@ const TABS = [
   { id: 'kunden', label: 'Kunden', note: 'Öffentliche Startseite, eine je Segment. Besucher sehen Kunden im Umkreis, nicht freigegebene nur als Zahl.' },
   { id: 'partner', label: 'Partner', note: 'Vertriebspartner sehen ihr Gebiet und nur ihr Segment: Kunden und Noch-nicht-Kunden, mit Größe und Lizenz.' },
   { id: 'intern', label: 'Intern', note: 'SpeechMind-Team: alle Ziele aller Segmente, Kunden und Noch-nicht-Kunden.' },
-  { id: 'admin', label: 'Admin', note: 'SpeechMind intern: Vertriebspartner anlegen, ihr Segment und Gebiet festlegen, deaktivieren.' },
+  { id: 'admin', label: 'Admin', note: 'SpeechMind intern: Vertriebspartner anlegen, ihr Segment und Gebiet festlegen, deaktivieren oder löschen.' },
   { id: 'liste', label: 'Liste', note: 'Alle Ziele als Tabelle. Filtern, suchen, Umkreis wählen; Klick öffnet Empfehlung und E-Mail.' },
   { id: 'empfehlen', label: 'Empfehlen', note: 'Eingeloggte Kunden mit Lizenz: eigener Empfehlungscode, Einladungen und Rabattstand.' },
 ]
@@ -31,18 +31,19 @@ const partnersLoading = ref(true)
 const partnersVersion = ref(0) // Partnerkarte neu laden, wenn sich Gebiet oder Segment ändert
 const partnerId = ref(null)
 const activePartners = computed(() => partners.value.filter((p) => p.active))
+const listScope = ref('intern') // 'intern' oder eine Partner-ID
 async function loadPartners() {
   partners.value = await fetchPartners()
   partnersLoading.value = false
   partnersVersion.value++
   if (!activePartners.value.some((p) => p.id === partnerId.value)) partnerId.value = activePartners.value[0]?.id ?? null
+  if (listScope.value !== 'intern' && !activePartners.value.some((p) => String(p.id) === listScope.value)) listScope.value = 'intern'
 }
 loadPartners()
 function showPartner(id) {
   partnerId.value = id
   select('partner')
 }
-const listScope = ref('intern') // 'intern' oder eine Partner-ID
 const openKey = ref(null)
 
 // Startseite je Segment (im Betrieb eigene Seiten, z. B. /stadtwerke)
@@ -231,7 +232,7 @@ function onTabKey(e, i) {
 
     <main v-else-if="tab === 'admin'" role="tabpanel" aria-labelledby="tab-admin" class="app-view">
       <div class="view-bar"><h1>Vertriebspartner</h1></div>
-      <PartnerAdmin :partners="partners" :loading="partnersLoading" @saved="loadPartners" @show="showPartner" />
+      <PartnerAdmin :partners="partners" :loading="partnersLoading" @saved="loadPartners" @deleted="loadPartners" @show="showPartner" />
     </main>
 
     <main v-else-if="tab === 'empfehlen'" role="tabpanel" aria-labelledby="tab-empfehlen" class="app-view">

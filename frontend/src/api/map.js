@@ -132,6 +132,12 @@ export async function savePartner({ id, name, segment, active, contact, areas })
   return partnerOut(saved)
 }
 
+/** Partner endgültig löschen, samt Gebiet. Deaktivieren (active: false) behält ihn für später. */
+export async function deletePartner(id) {
+  if (!USE_MOCK) return sendJson(`/partners/${id}/`, 'DELETE')
+  partnerStore = partnerStore.filter((p) => p.id !== id)
+}
+
 /**
  * Vorschau im Partnerdialog, bevor gespeichert wird: wie viele Ziele im Gebiet liegen und wo es
  * mit aktiven Partnern desselben Segments kollidiert (dann lässt es sich nicht speichern).

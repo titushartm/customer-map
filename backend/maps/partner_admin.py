@@ -12,6 +12,7 @@ zwei Verwaltungs-Partner nicht. Inaktive Partner blockieren nichts; beim Aktivie
     GET  /api/partners/            alle Partner mit Gebiet und Abdeckung
     POST /api/partners/            neuer Partner
     PUT  /api/partners/<id>/       Partner ändern (Gebiet wird ersetzt)
+    DELETE /api/partners/<id>/     Partner endgültig löschen, samt Gebiet (Deaktivieren behält ihn)
     POST /api/partners/preview/    Ziele im Gebiet und Überschneidungen, ohne zu speichern
     GET  /api/geo/areas/?level=land,kreis   Flächen für die Karte im Dialog
     GET  /api/geo/areas/?q=Bautzen          Suche nach Land, Kreis, Gemeinde
@@ -178,11 +179,14 @@ def partners(request):
 
 
 @staff_only
-@require_http_methods(["PUT"])
+@require_http_methods(["PUT", "DELETE"])
 def partner_detail(request, pk):
     partner = SalesPartner.objects.filter(pk=pk).first()
     if partner is None:
         return JsonResponse({"error": "Diesen Partner gibt es nicht."}, status=404)
+    if request.method == "DELETE":
+        partner.delete()  # Gebiete (PartnerTerritory) gehen per CASCADE mit
+        return JsonResponse({}, status=200)
     fields, regions, error = _validate(_body(request))
     if error:
         return JsonResponse({"error": error}, status=400)

@@ -1,6 +1,6 @@
 <script setup>
 import { ref, computed, watch, nextTick, defineAsyncComponent } from 'vue'
-import { fetchAreaMap, previewPartner, savePartner, searchAreas } from '../../api/map.js'
+import { deletePartner, fetchAreaMap, previewPartner, savePartner, searchAreas } from '../../api/map.js'
 import { VISIBLE_SEGMENTS, wordsFor, commonCountry } from '../../lib/segments.js'
 import { COUNTRIES, COUNTRY_CODES } from '../../lib/countries.js'
 
@@ -14,7 +14,7 @@ const props = defineProps({
   /** Alle Partner: Gebiete sind je Segment exklusiv, vergebene zeigt die Karte an */
   partners: { type: Array, default: () => [] },
 })
-const emit = defineEmits(['close', 'saved'])
+const emit = defineEmits(['close', 'saved', 'deleted'])
 
 const dialog = ref(null)
 const form = ref(blank())
@@ -24,6 +24,7 @@ const hits = ref([])
 const notice = ref(null) // { text, warn }
 const error = ref(null)
 const saving = ref(false)
+const confirmDelete = ref(false) // Löschen braucht einen zweiten Klick
 const preview = ref(null)
 
 const LEVEL_ORDER = { staat: 0, land: 1, kreis: 2, gemeinde: 3 }
@@ -46,6 +47,7 @@ watch(() => props.open, async (open) => {
   hits.value = []
   notice.value = null
   error.value = null
+  confirmDelete.value = false
   await nextTick()
   if (!dialog.value.open) dialog.value.showModal()
   areaMap.value ??= await fetchAreaMap()
@@ -194,6 +196,19 @@ async function save() {
     saving.value = false
   }
 }
+
+async function removePartner() {
+  error.value = null
+  saving.value = true
+  try {
+    await deletePartner(form.value.id)
+    emit('deleted', form.value.id)
+  } catch (e) {
+    error.value = e.message
+  } finally {
+    saving.value = false
+  }
+}
 </script>
 
 <template>
@@ -301,7 +316,14 @@ async function save() {
         </div>
       </div>
 
-      <footer class="pd-foot">
+      <footer v-if="confirmDelete" class="pd-foot">
+        <p class="pd-confirm" role="alert">{{ form.name }} und das ganze Gebiet endgültig löschen? Das lässt sich nicht rückgängig machen. Zum Pausieren lieber deaktivieren.</p>
+        <p v-if="error" class="pd-error" role="alert">{{ error }}</p>
+        <button type="button" class="pd-btn-quiet" @click="confirmDelete = false">Behalten</button>
+        <button type="button" class="pd-btn-danger" :disabled="saving" @click="removePartner">{{ saving ? 'Löscht …' : 'Endgültig löschen' }}</button>
+      </footer>
+      <footer v-else class="pd-foot">
+        <button v-if="form.id" type="button" class="pd-btn-quiet pd-delete" @click="confirmDelete = true">Partner löschen</button>
         <p v-if="error" class="pd-error" role="alert">{{ error }}</p>
         <button type="button" class="pd-btn-quiet" @click="emit('close')">Abbrechen</button>
         <button type="submit" class="pd-btn" :disabled="saving || blocked">{{ saving ? 'Speichert …' : 'Speichern' }}</button>
@@ -400,6 +422,11 @@ async function save() {
 .pd-btn { border: 1.5px solid #000; background: var(--page-accent); color: #000; }
 .pd-btn:disabled { opacity: 0.6; cursor: default; }
 .pd-btn-quiet { border: 1px solid var(--page-line); background: var(--page-surface); color: var(--page-text); }
+.pd-delete { margin-right: auto; color: #FFB4A8; }
+.pd-delete:hover { border-color: #FFB4A8; }
+.pd-confirm { margin: 0; flex-basis: 100%; line-height: 1.4; }
+.pd-btn-danger { font: inherit; font-weight: 600; padding: 8px 16px; border-radius: 4px; cursor: pointer; border: 1.5px solid #000; background: #FFB4A8; color: #000; }
+.pd-btn-danger:disabled { opacity: 0.6; cursor: default; }
 
 @media (max-width: 860px) {
   .pd-grid { grid-template-columns: 1fr; }
