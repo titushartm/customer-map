@@ -6,6 +6,7 @@ import {
 import { kindLabel, sizeText } from '../../lib/segments.js'
 import { tenureText } from '../../lib/tenure.js'
 import { HEAT_BY_KEY, NOTE_TAGS } from '../../lib/sales.js'
+import CustomerMark from './CustomerMark.vue'
 
 // Seitenleiste zu einem Ziel im Tab Vertrieb: warum es heiß ist, Kontakt (korrigierbar), Notizen und Aufgaben wie im
 // Lizenz-Dashboard. Notizen und Aufgaben eines Partners sieht nur er (und SpeechMind); Kontaktdaten gelten für alle.
@@ -94,6 +95,11 @@ const dateFmt = new Intl.DateTimeFormat('de-DE', { day: '2-digit', month: '2-dig
 const dateTimeFmt = new Intl.DateTimeFormat('de-DE', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })
 const isoDate = (iso) => dateFmt.format(new Date(`${iso}T12:00:00`))
 const telHref = (phone) => `tel:${phone.replace(/[^\d+]/g, '')}`
+// Als Kunde markiert: Das Ziel hat keinen Score mehr und fällt aus der Liste
+function onMarked() {
+  emit('changed')
+  dialog.value.close()
+}
 const heat = computed(() => (data.value ? HEAT_BY_KEY[data.value.heat] : null))
 const firstDomain = computed(() => data.value?.domain?.split(',')[0].trim() ?? null)
 </script>
@@ -229,6 +235,11 @@ const firstDomain = computed(() => data.value?.domain?.split(',')[0].trim() ?? n
             </li>
           </ul>
           <p v-else class="sd-muted sd-small">Keine Aufgaben.</p>
+        </section>
+
+        <section v-if="audience === 'intern'" class="sd-card">
+          <h3>Schon Kunde?</h3>
+          <CustomerMark :target-key="data.key" @changed="onMarked" />
         </section>
       </div>
       <p v-else-if="!error" class="sd-muted">Wird geladen …</p>

@@ -53,7 +53,7 @@ const telHref = (phone) => `tel:${phone.replace(/[^\d+]/g, '')}`
     <div class="wd-inner">
       <header class="wd-head">
         <div>
-          <p class="wd-kicker">Vorschau · geht jeden Montag um 7 Uhr raus</p>
+          <p class="wd-kicker">Vorschau · geht jeden Montag um 6 Uhr raus</p>
           <h2 id="wd-title">Wochenmail</h2>
         </div>
         <button type="button" class="wd-close" aria-label="Schließen" @click="dialog.close()">×</button>

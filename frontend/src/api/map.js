@@ -179,6 +179,79 @@ export async function saveSalesContact(key, { address, phone, email }, { audienc
   return contactOf(key)
 }
 
+/**
+ * Lizenzinhaber zum Verknüpfen ("Als Kunde markieren"): Organisationen nach Name, Nutzer nach E-Mail. Treffer mit der
+ * Domain des Ziels zuerst. Rückgabe { organizations: [{ id, name, licence, licence_type, created_at, linked_to }],
+ * users: [{ id, email, licence, created_at }] }. linked_to: Ziel, mit dem die Organisation schon verknüpft ist.
+ * Im Mock nur Organisationen (aus dem Export, scripts/build_organizations.py); Nutzer gibt es nur im Backend.
+ */
+export async function searchLicenceHolders(q, key) {
+  if (!USE_MOCK) return getJson('/sales/holders/', { q, key })
+  const needle = q.trim().toLowerCase()
+  if (needle.length < 2) return { organizations: [], users: [] }
+  ORGS ??= (await import('../mocks/organizations.json')).default
+  const manualOrgs = Object.entries(salesStore.load().customers).filter(([, m]) => m.holder?.type === 'organization')
+  const own = REGION_BY_KEY[key]?.name?.toLowerCase() ?? ''
+  const organizations = ORGS
+    .filter((o) => o.name.toLowerCase().includes(needle))
+    .map((o) => {
+      const manualTo = manualOrgs.find(([, m]) => m.holder.id === o.name)?.[0]
+      const to = o.linked ? o.region_key : manualTo
+      return { id: o.name, name: o.name, licence: o.licence, licence_type: o.licence_type, created_at: o.created_at,
+        linked_to: to ? REGION_BY_KEY[to]?.name ?? to : null }
+    })
+    // Name des Ziels im Organisationsnamen zuerst, dann freie vor schon verknüpften
+    .sort((a, b) => Number(!a.name.toLowerCase().includes(own)) - Number(!b.name.toLowerCase().includes(own))
+      || Number(Boolean(a.linked_to)) - Number(Boolean(b.linked_to)) || a.name.localeCompare(b.name, 'de'))
+    .slice(0, 8)
+  return { organizations, users: [] }
+}
+let ORGS = null
+
+/**
+ * Nur SpeechMind intern: ein Ziel von Hand als Kunde markieren und mit dem Lizenzinhaber verknüpfen, wenn der
+ * Abgleich es nicht findet: eine Organisation ohne Verknüpfung oder ein einzelner Nutzer (Einzellizenz).
+ * { holder: { type: 'organization', id, name, licence, licence_type } | { type: 'user', id?, email }, since, note }.
+ * Das Ziel fällt dann aus dem Vertrieb (kein Score mehr) und zählt überall als Kunde, öffentlich nur anonym.
+ * Im Backend setzt Target.organization bzw. Target.customer_user; der nächtliche Abgleich mit RecurringInvoice
+ * (maps/customers.py) fasst von Hand Gesetztes nicht an.
+ */
+export async function markCustomer(key, { holder, since, note }) {
+  if (!USE_MOCK) {
+    return sendJson(`/sales/targets/${encodeURIComponent(key)}/customer/`, 'PUT', {
+      customer: true, since, note,
+      ...(holder?.type === 'organization' ? { organization_id: holder.id } : { user_id: holder?.id, user_email: holder?.email }),
+    })
+  }
+  if (!holder) throw new Error('Bitte die Organisation oder den Nutzer mit der Lizenz wählen.')
+  if (holder.type === 'organization' && holder.linked_to) throw new Error(`${holder.name} ist schon mit ${holder.linked_to} verknüpft.`)
+  if (holder.type === 'user' && !/^[^@\s]+@[^@\s]+\.[a-z]{2,}$/i.test(holder.email ?? '')) throw new Error('Bitte die E-Mail-Adresse des Nutzers angeben.')
+  if (!since) throw new Error('Bitte angeben, seit wann.')
+  const d = salesStore.load()
+  const stored = holder.type === 'organization'
+    ? { type: 'organization', id: holder.id, name: holder.name, licence: holder.licence, licence_type: holder.licence_type }
+    : { type: 'user', email: holder.email.trim().toLowerCase() }
+  d.customers[key] = { holder: stored, since, note: note?.trim() ?? '', author: 'SpeechMind', at: new Date().toISOString() }
+  salesStore.save()
+  SCORES = null // Nachbarn bekommen einen neuen Score
+}
+
+/** Markierung aufheben (nur von Hand gesetzte): Das Ziel ist wieder Noch-nicht-Kunde. */
+export async function unmarkCustomer(key) {
+  if (!USE_MOCK) return sendJson(`/sales/targets/${encodeURIComponent(key)}/customer/`, 'PUT', { customer: false })
+  const d = salesStore.load()
+  delete d.customers[key]
+  salesStore.save()
+  SCORES = null
+}
+
+/** Nur intern: Score sofort neu rechnen statt erst nachts. Rückgabe { scored_at, count } */
+export async function recalcSales() {
+  if (!USE_MOCK) return sendJson('/sales/recalc/', 'POST', {})
+  SCORES = null
+  return { scored_at: (salesScores(), SCORED_AT), count: SCORES.size }
+}
+
 /** Aufgabe anlegen (ohne id) oder ändern: { title, description, due (ISO-Datum), assignee } */
 export async function saveSalesTask(key, task, { audience, partnerId }) {
   if (!USE_MOCK) return sendJson(task.id ? `/sales/tasks/${task.id}/` : `/sales/targets/${encodeURIComponent(key)}/tasks/`, task.id ? 'PUT' : 'POST', { partner: partnerId, ...task })
@@ -466,23 +539,31 @@ export function mockAllTargets() {
     const [dLat, dLng] = SEGMENT_OFFSET[t.segment] ?? [0, 0]
     return { key: t.key, segment: t.segment, region_key: t.region, name: t.name, level: null, country: r.country, size: t.size, lat: r.lat + dLat, lng: r.lng + dLng }
   })
+  const manual = salesStore.load().customers
   return [...verwaltungen, ...others].map((t) => {
     const r = REGION_BY_KEY[t.region_key]
     const c = MOCK_CUSTOMERS[t.key]
+    // Von Hand als Kunde markiert, mit Lizenzinhaber (Organisation oder einzelner Nutzer), siehe markCustomer
+    const m = c ? null : manual[t.key]
+    const org = m?.holder?.type === 'organization' ? m.holder : null
     // Kunde = zahlende Lizenz (Jahres-, Monatslizenz, Pilot, Pay-per-Use, Budget). Kostenlose zählen nicht mit.
-    const free = c?.licence_type === 'free'
+    const free = c?.licence_type === 'free' || org?.licence_type === 'free'
     return {
       ...t,
       state: r.state,
       postcodes: r.postcodes,
       population: r.population, // der Region, für Größenklassen bei Verwaltungen
-      is_customer: Boolean(c) && !free,
+      is_customer: (Boolean(c) || Boolean(m)) && !free,
       is_free: free,
-      customer_since: c?.since ?? null, // geht nur an partner und intern, kunden bekommen customer_tenure
-      public_reference: c?.public_reference ?? false,
-      licence: c?.licence ?? null,
+      customer_since: c?.since ?? m?.since ?? null, // geht nur an partner und intern, kunden bekommen customer_tenure
+      public_reference: c?.public_reference ?? false, // von Hand markierte: ohne Freigabe, öffentlich nur anonym
+      licence: c?.licence ?? org?.licence ?? null,
       seats: c?.seats ?? null, // nur intern, für die Lizenzempfehlung
-      licence_type: c?.licence_type ?? null,
+      licence_type: c?.licence_type ?? org?.licence_type ?? (m ? 'single' : null), // Nutzer ohne Organisation: Einzellizenz
+      // Woher wir wissen, dass es ein Kunde ist: Organisation mit Lizenz, Rechnung (Backend: RecurringInvoice) oder von Hand
+      customer_source: c ? 'organization' : m ? 'manual' : null,
+      customer_note: m?.note ?? null,
+      customer_holder: m?.holder ?? null, // { type: 'organization', id, name } oder { type: 'user', email }
       created_by: c?.created_by ?? null, // SpeechMind, Partner oder Dienstleister (wer die Orga angelegt hat)
     }
   })
@@ -862,9 +943,17 @@ function contactOf(key) {
   return own ? { ...osm, ...own.fields, contact_source: 'manual', contact_changed: { by: own.author, at: own.at } } : { ...osm, contact_source: address || phone || email ? 'osm' : null }
 }
 
-// Einmal je Seitenaufruf: Die Kundendaten ändern sich im Mock nicht. Im Backend nachts neu (siehe sales.py).
+// Einmal je Seitenaufruf und nach jeder Änderung am Kundenstatus (markCustomer) oder per recalcSales.
+// Im Backend nachts nach dem Abgleich der Rechnungen (maps/tasks.py) und auf Knopfdruck.
 let SCORES = null
-const salesScores = () => (SCORES ??= scoreTargets(mockAllTargets()))
+let SCORED_AT = null
+function salesScores() {
+  if (!SCORES) {
+    SCORES = scoreTargets(mockAllTargets())
+    SCORED_AT = new Date().toISOString()
+  }
+  return SCORES
+}
 
 /**
  * Notizen und Aufgaben, im Browser gespeichert (localStorage), damit sie das Neuladen überleben. Im Backend SalesNote
@@ -879,6 +968,7 @@ const salesStore = {
     try { this.data = JSON.parse(localStorage.getItem(SALES_STORE)) } catch { /* privat oder gesperrt */ }
     this.data ??= { seq: 0, notes: [], tasks: [] }
     this.data.contacts ??= {} // Schlüssel → { fields: { address, phone, email }, author, at }
+    this.data.customers ??= {} // von Hand als Kunde markiert: Schlüssel → { since, note, author, at }
     return this.data
   },
   save() {
@@ -995,6 +1085,7 @@ function mockSalesPage({ audience, partnerId, filters: f, sort, dir, page, pageS
       states: [...new Map(all.map((r) => [r.state, { name: r.state, country: r.country }])).values()]
         .sort((a, b) => COUNTRY_ORDER.indexOf(a.country) - COUNTRY_ORDER.indexOf(b.country) || a.name.localeCompare(b.name, 'de')),
       partners: audience === 'intern' ? partnerStore.filter((p) => p.active).map(({ id, name }) => ({ id, name })) : [],
+      scored_at: SCORED_AT,
     },
   }
 }

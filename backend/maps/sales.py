@@ -20,7 +20,13 @@ Hinweis auf andere Partner, und nur ihre eigenen Notizen und Aufgaben. Kontaktda
     POST   /api/sales/targets/<key>/tasks/      Aufgabe anlegen
     PUT|PATCH /api/sales/tasks/<id>/            ändern, erledigen, zurückstellen
     PUT    /api/sales/targets/<key>/contact/    Adresse, Telefon, E-Mail korrigieren
-    GET    /api/sales/digest/preview/?partner=  Wochenmail ansehen (Versand: manage.py send_sales_digest)
+    GET    /api/sales/holders/?q=&key=          Organisationen und Nutzer zum Verknüpfen (nur intern)
+    PUT    /api/sales/targets/<key>/customer/   von Hand als Kunde markieren, mit Lizenzinhaber, bzw. aufheben (nur intern)
+    POST   /api/sales/recalc/                   Kunden aus Rechnungen und Score sofort neu (nur intern, läuft im Hintergrund)
+    GET    /api/sales/digest/preview/?partner=  Wochenmail ansehen
+
+Zeitplan (celery beat, manage.py setup_sales_schedule): nachts Kunden aus RecurringInvoice (customers.py) und Score,
+montags 06:00 Berlin die Wochenmail. Siehe maps/tasks.py.
 """
 import json
 import math
@@ -30,7 +36,11 @@ from datetime import date, timedelta
 from functools import reduce
 from operator import or_
 
+from django.apps import apps
+from django.conf import settings
+from django.contrib.auth import get_user_model
 from django.core.exceptions import ValidationError
+from django.core.mail import send_mail
 from django.core.paginator import Paginator
 from django.core.validators import validate_email
 from django.db.models import F, Q, Value
@@ -41,7 +51,7 @@ from django.views.decorators.http import require_GET, require_http_methods
 
 from .audiences import AUDIENCES, customer_tenure
 from .models import RegionLevel, SalesNote, SalesPartner, SalesTask, SalesTaskStatus, Target
-from .views import ArrayToString, _partner_id, _properties
+from .views import ArrayToString, _licence, _partner_id, _properties
 
 RADIUS_KM = 30
 NEW_FACTOR = 1.5  # Kunde seit unter 3 Monaten: das Thema ist gerade frisch in der Gegend
@@ -428,6 +438,113 @@ def digest_text(d):
         lines += [f"Fällige Aufgaben in den nächsten 7 Tagen: {d['due_tasks']}", ""]
     lines.append("Alle Ziele mit Begründung, Notizen und Aufgaben: Tab Vertrieb in der SpeechMind-Karte.")
     return "\n".join(lines)
+
+
+def send_weekly_digest(dry_run=False):
+    """Wochenmail an SALES_DIGEST_RECIPIENTS (alle Ziele) und jeden aktiven Partner mit E-Mail (sein Gebiet).
+    Versand aus dem normalen Postfach (DEFAULT_FROM_EMAIL), kein noreply: Antworten sollen ankommen. Gibt Protokollzeilen zurück."""
+    log = []
+    jobs = [(None, list(getattr(settings, "SALES_DIGEST_RECIPIENTS", [])))]
+    for p in SalesPartner.objects.filter(active=True):
+        if p.email:
+            jobs.append((p, [p.email]))
+        else:
+            log.append(f"{p.name}: keine E-Mail-Adresse, übersprungen")
+    for partner, to in jobs:
+        d = digest(partner) if to else None
+        if not d or not d["items"]:
+            continue
+        greeting = f"Hallo {partner.contact_name or f'Team {partner.name}'}," if partner else "Hallo Vertrieb,"
+        body = f"{greeting}\n\n{digest_text(d)}"
+        if dry_run:
+            log.append(f"--- An {', '.join(to)}: {d['subject']}\n{body}\n")
+        else:
+            send_mail(d["subject"], body, settings.DEFAULT_FROM_EMAIL, to)
+            log.append(f"{d['subject']} → {', '.join(to)}")
+    return log
+
+
+# ---- Kundenstatus von Hand, Neuberechnen ----
+
+@require_GET
+def licence_holders(request):
+    """
+    Nur intern: Lizenzinhaber zum Verknüpfen. ?q= (Name der Organisation bzw. E-Mail des Nutzers), ?key= (Ziel: dessen
+    Mail-Domains zuerst). Organisationen, die schon mit einem Ziel verknüpft sind, kommen mit linked_to (nicht wählbar).
+    """
+    _viewer(request, "intern")
+    q = request.GET.get("q", "").strip()
+    if len(q) < 2:
+        return JsonResponse({"organizations": [], "users": []})
+    target = Target.objects.filter(key=request.GET.get("key", "")).first()
+    domains = target.email_domains if target else []
+    Organization = apps.get_model("api", "Organization")
+    linked = dict(Target.objects.filter(organization__isnull=False).values_list("organization_id", "name"))
+    orgs = Organization.objects.filter(name__icontains=q).order_by("name")[:20]
+    users = get_user_model().objects.filter(email__icontains=q).order_by("email")[:40]
+    same = lambda email: any(email.lower().endswith("@" + d) or email.lower().endswith("." + d) for d in domains)  # noqa: E731
+    return JsonResponse({
+        "organizations": sorted(
+            ({"id": o.pk, "name": o.name, "licence": _licence(o), "created_at": o.created_at.date().isoformat() if o.created_at else None,
+              "linked_to": linked.get(o.pk)} for o in orgs),
+            key=lambda o: (o["linked_to"] is not None, o["name"].lower()))[:8],
+        "users": sorted(
+            ({"id": u.pk, "email": u.email, "created_at": u.date_joined.date().isoformat()} for u in users),
+            key=lambda u: (not same(u["email"]), u["email"]))[:8],
+    })
+
+
+@require_http_methods(["PUT"])
+def set_customer(request, key):
+    """
+    Nur intern: Ziel von Hand als Kunde markieren und mit dem Lizenzinhaber verknüpfen, wenn der Abgleich mit den
+    Rechnungen es nicht findet, oder die Markierung aufheben.
+    Body: { customer: true, organization_id | user_id, since, note } bzw. { customer: false }.
+    Kunden über Organisation oder Rechnung lassen sich hier nicht ändern.
+    """
+    _, scope = _viewer(request, "intern")
+    t = get_object_or_404(scope, key=key)
+    body = json.loads(request.body or b"{}")
+    if body.get("customer"):
+        if t.customer_since:
+            return JsonResponse({"error": "Ist schon Kunde."}, status=409)
+        if org_id := body.get("organization_id"):
+            if other := Target.objects.filter(organization_id=org_id).exclude(pk=t.pk).first():
+                return JsonResponse({"error": f"Die Organisation ist schon mit {other.name} verknüpft."}, status=409)
+            t.organization = get_object_or_404(apps.get_model("api", "Organization"), pk=org_id)
+        elif user_id := body.get("user_id"):
+            t.customer_user = get_object_or_404(get_user_model(), pk=user_id)
+        else:
+            return JsonResponse({"error": "Bitte die Organisation oder den Nutzer mit der Lizenz wählen."}, status=400)
+        try:
+            t.customer_since = date.fromisoformat(body.get("since") or "")
+        except ValueError:
+            return JsonResponse({"error": "Bitte angeben, seit wann."}, status=400)
+        t.customer_source, t.customer_note = "manual", str(body.get("note") or "").strip()[:200]
+    else:
+        if t.customer_source != "manual":
+            return JsonResponse({"error": "Nur von Hand markierte Kunden lassen sich hier aufheben."}, status=409)
+        t.customer_since, t.customer_source, t.customer_note = None, "", ""
+        t.organization, t.customer_user = None, None
+    t.customer_marked_by, t.customer_marked_at = request.user, timezone.now()
+    t.save(update_fields=["customer_since", "customer_source", "customer_note", "organization", "customer_user",
+                          "customer_marked_by", "customer_marked_at"])
+    _refresh_later()  # Score des Ziels und seiner Nachbarn
+    return JsonResponse({"key": t.key, "is_customer": t.is_customer, "customer_source": t.customer_source or None})
+
+
+@require_http_methods(["POST"])
+def recalc(request):
+    """Nur intern: Kunden aus den Rechnungen und Score sofort neu, im Hintergrund (sonst nachts)."""
+    _viewer(request, "intern")
+    _refresh_later()
+    return JsonResponse({"queued": True}, status=202)
+
+
+def _refresh_later():
+    from .tasks import refresh_sales
+
+    refresh_sales.delay()
 
 
 @require_GET

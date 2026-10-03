@@ -176,6 +176,21 @@ class Target(models.Model):
         help_text="Optional, sobald die Organisation angelegt ist (Lizenz, Ansprechpartner).",
     )
     customer_since = models.DateField("Kunde seit", null=True, blank=True, help_text="Gesetzt = Kunde.")
+    # Woher wir es wissen: Organisation mit Lizenz, Rechnung (Domain der Rechnungsadresse passt zu email_domains,
+    # customers.py: sync_invoice_customers, nachts) oder von Hand (Tab Vertrieb, z. B. Einzellizenzen mit Freemail-Adresse).
+    # Der nächtliche Abgleich setzt und entfernt nur "invoice"; "manual" bleibt, bis es jemand aufhebt.
+    customer_source = models.CharField(
+        max_length=12, blank=True,
+        choices=[("organization", "Organisation"), ("invoice", "Rechnung"), ("manual", "von Hand")],
+    )
+    customer_note = models.CharField("Notiz zum Kundenstatus", max_length=200, blank=True)
+    # Lizenzinhaber, wenn es keine Organisation gibt: ein einzelner Nutzer (Einzellizenz). Sonst steht er in organization.
+    customer_user = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name="licence_targets",
+        help_text="Einzellizenz: Nutzer, der die Lizenz hat (von Hand oder aus RecurringInvoice.user).",
+    )
+    customer_marked_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name="+")
+    customer_marked_at = models.DateTimeField(null=True, blank=True)
     public_reference = models.BooleanField(
         "Namentliche Nennung freigegeben",
         default=False,

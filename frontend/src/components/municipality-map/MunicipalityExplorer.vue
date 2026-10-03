@@ -395,7 +395,7 @@ const legend = computed(() => {
 })
 const hasFree = computed(() => collection.value.features.some((f) => f.properties.status === 'free'))
 // Lizenzarten als eigene Filter, nur wenn sie vorkommen
-const LICENCE_FILTERS = [['orga-year', 'Jahreslizenz'], ['orga-month', 'Monatslizenz'], ['pay-per-use', 'Pay-per-Use'], ['pilot', 'Pilotphase']]
+const LICENCE_FILTERS = [['orga-year', 'Jahreslizenz'], ['orga-month', 'Monatslizenz'], ['pay-per-use', 'Pay-per-Use'], ['pilot', 'Pilotphase'], ['single', 'Einzellizenz']]
 const statusOptions = computed(() => {
   const present = new Set(collection.value.features.map((f) => f.properties.licence_type))
   return [

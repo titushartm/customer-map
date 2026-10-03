@@ -106,6 +106,7 @@ export function recommend(target, all, { withDate = false } = {}) {
       key: target.key, name: target.name, segment: target.segment, level: target.level, state: target.state, country: target.country,
       size: target.size, postcodes: target.postcodes, is_customer: target.is_customer,
       customer_tenure: tenureOf(target.customer_since), licence: target.licence,
+      customer_source: target.customer_source, customer_note: target.customer_note, customer_holder: target.customer_holder,
       ...(withDate ? { customer_since: target.customer_since } : {}), // Startdatum nur für partner und intern
     },
     licence,

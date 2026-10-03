@@ -142,7 +142,16 @@ Welche Verwaltung kauft wahrscheinlich als Nächstes, weil die Nachbarn schon da
 
 **Notizen und Aufgaben** wie im Lizenz-Dashboard: Notizen sind ein Verlauf mit Stand-Tags (Angerufen, E-Mail geschickt, Termin vereinbart, Demo gezeigt, Angebot geschickt, Später melden, Kein Interesse; `lib/sales.js`) und Freitext, nur anhängen oder löschen. Aufgaben haben Titel, Fälligkeit, Zuständige, sind offen oder erledigt und lassen sich eine Woche zurückstellen. Sie hängen am Ziel (`Target` = Region + Segment), nicht an der Organisation, weil Noch-nicht-Kunden keine haben; wird das Ziel Kunde, bleibt der Verlauf und ist über `Target.organization` auch im Lizenz-Dashboard zu sehen. Im Mock liegen sie im Browser (localStorage).
 
-**Wochenmail.** Montags um 7 Uhr (`manage.py send_sales_digest`, nach dem nächtlichen `score_targets`): die zehn Ziele mit dem höchsten Score, ohne kalte und ohne „Kein Interesse“ in den letzten 180 Tagen, mit Begründung, Telefon und Adresse, dazu die Zahl der Aufgaben, die in den nächsten 7 Tagen fällig sind. An den SpeechMind-Vertrieb (`SALES_DIGEST_RECIPIENTS`, alle Ziele, mit Partnergebiet) und an jeden aktiven Partner mit E-Mail-Adresse (nur sein Gebiet). Versand aus dem normalen Postfach, kein noreply. „Wochenmail ansehen“ zeigt die Vorschau je Empfänger.
+**Kunden ohne Verknüpfung.** Manche Verwaltungen haben Lizenzen nur bei einzelnen Nutzern oder über eine Organisation, die mit keinem Ziel verknüpft ist; sie fehlen in den Kundendaten und stünden sonst als heißes Ziel im Vertrieb. Zwei Wege, beide in `Target.customer_source`:
+
+- *Rechnung* (`invoice`, automatisch): Nachts gleicht `backend/maps/customers.py` die aktiven, bezahlten wiederkehrenden Rechnungen (`api.RecurringInvoice`, Spiegel von sevDesk) ab. Passt die Domain von `send_to_email` (sonst der E-Mail des Nutzers) zu den Mail-Domains eines Ziels, genau oder als Subdomain, ist es Kunde seit dem frühesten Rechnungsstart, und die Rechnungsorganisation bzw. der Nutzer wird verknüpft. Freemail-Adressen zählen nicht. Endet die letzte Rechnung, ist es wieder Noch-nicht-Kunde.
+- *Von Hand* (`manual`, nur SpeechMind intern): „Ist schon Kunde?“ im Detail eines Ziels (Tab Vertrieb) oder im Empfehlungsdialog. Gefragt wird, wer die Lizenz hat: eine Organisation (Suche nach Name; schon verknüpfte sind gesperrt) oder ein einzelner Nutzer (Suche nach E-Mail, Domain der Verwaltung zuerst). Dazu „Kunde seit“ (vorbelegt mit der Anlage) und eine Notiz. Aufheben geht dort auch; der nächtliche Abgleich fasst von Hand Gesetztes nicht an.
+
+Die Lizenz kommt dann von der Organisation bzw. ist „Einzellizenz“ (eigene Schildfarbe in Partner- und Intern-Karte). So markierte Ziele zählen überall als Kunde, öffentlich ohne Referenzfreigabe nur anonym, und heben den Score ihrer Nachbarn. Im Mock gibt es keine Rechnungen und keine Nutzerliste: Organisationen kommen aus dem Export (`mocks/organizations.json`, `scripts/build_organizations.py`), Nutzer per E-Mail-Adresse; gespeichert im Browser.
+
+**Neu berechnen.** Celery beat (`manage.py setup_sales_schedule`, einmal je Umgebung, wie `setup_lizenz_task_schedule` im Hauptbackend): `maps.tasks.refresh_sales` nachts 03:15 UTC, nach dem sevDesk-Abgleich, erst Kunden aus den Rechnungen, dann der Score; `maps.tasks.send_sales_digest` montags 06:00 Berlin. Sofort: „Neu berechnen“ im Tab Vertrieb (`POST /api/sales/recalc/`), nach jedem Markieren von Hand automatisch, oder `manage.py score_targets`.
+
+**Wochenmail.** Montags um 6 Uhr (Celery beat, siehe oben; von Hand `manage.py send_sales_digest`): die zehn Ziele mit dem höchsten Score, ohne kalte und ohne „Kein Interesse“ in den letzten 180 Tagen, mit Begründung, Telefon und Adresse, dazu die Zahl der Aufgaben, die in den nächsten 7 Tagen fällig sind. An den SpeechMind-Vertrieb (`SALES_DIGEST_RECIPIENTS`, alle Ziele, mit Partnergebiet) und an jeden aktiven Partner mit E-Mail-Adresse (nur sein Gebiet). Versand aus dem normalen Postfach, kein noreply. „Wochenmail ansehen“ zeigt die Vorschau je Empfänger.
 
 ### Kontaktdaten
 
@@ -190,6 +199,7 @@ frontend/src/
     SalesDetail.vue                    Seitenleiste: Begründung, Kontakt (korrigierbar), Notizen, Aufgaben
     SalesMap.vue                       Karte nach Score-Stufe, intern mit Partnergebieten
     WeeklyDigest.vue                   Vorschau der Wochenmail je Empfänger
+    CustomerMark.vue                   von Hand als Kunde markieren (Organisation oder Nutzer wählen) bzw. aufheben
   components/referral/
     ReferralView.vue                   Empfehlungsbereich eines Kunden
     ReferralBanner.vue                 Einladungsbanner auf der Startseite
@@ -210,6 +220,7 @@ frontend/src/
   mocks/areas.json                     Staaten, Länder, Kreise in DE/AT/CH/FR mit Fläche (aus scripts/build_areas.py)
   mocks/recommendations.js             Empfehlungslogik
   mocks/sales.js                       Vertriebs-Score und Begründung (SALES_RULES)
+  mocks/organizations.json             Organisationen zur Auswahl beim Markieren (aus scripts/build_organizations.py)
   mocks/contacts.json                  Adresse, Telefon, E-Mail je Verwaltung aus OSM (aus scripts/build_contacts.py)
   lib/sales.js                         Score-Stufen (Heiß/Warm/Kalt, Farben), Stand-Tags der Notizen
   lib/segments.js                      Segmente: Wörter, Einheiten, Artikel
@@ -225,8 +236,11 @@ backend/maps/                          Skizze
   partner_admin.py /api/partners/…, /api/geo/areas/ (Admin-Tab, nur is_staff)
   licence.py       /api/licence/suggest/ (öffentliche Lizenzempfehlung)
   sales.py         /api/sales/… (Tab Vertrieb): Score, Liste, Karte, Notizen, Aufgaben, Kontakt, Wochenmail
-  management/commands/score_targets.py      Vertriebs-Score nachts neu
-  management/commands/send_sales_digest.py  Wochenmail montags
+  customers.py     Kunden aus RecurringInvoice (Domain der Rechnungsadresse = Domain des Ziels)
+  tasks.py         Celery: refresh_sales (nachts), send_sales_digest (montags)
+  management/commands/setup_sales_schedule.py  Zeitplan in celery beat eintragen
+  management/commands/score_targets.py      Kunden aus Rechnungen und Score sofort neu
+  management/commands/send_sales_digest.py  Wochenmail sofort
   management/commands/import_contacts.py    Kontakte aus region_contacts.csv (ohne von Hand geänderte)
   management/commands/import_regions.py   Geo-Referenz je Land (DE, AT, CH, FR)
 ```
@@ -237,6 +251,7 @@ backend/maps/                          Skizze
 - `Target` ist ein Ziel, dem wir verkaufen, mit `segment`, `size` (Einwohner bzw. Mitarbeitende), eigener Lage und der Region, in der es sitzt. Verwaltungen entstehen beim VG250-Import automatisch je Region. **Kunde = `customer_since` gesetzt.** Öffentlich liefert die API nur die Kundendauer als Gruppe (`customer_tenure`), Partner und Intern zusätzlich das Datum (siehe [Freigaben](#freigaben)). `organization` ist optional und wird verknüpft, sobald es sie gibt.
 - `SalesPartner` wird im Admin-Tab angelegt und hat genau ein `segment`. Logins hängen als User daran. Kunden eines Partners erkennt man an `Organization.creater_user`. `Organization.is_partner` meint API-Partner und spielt hier keine Rolle.
 - `PartnerTerritory` = Partner + Region (Land, Kreis oder Gemeinde). Ein Ziel gehört zum Gebiet, wenn der Schlüssel seiner Region mit dem Schlüssel der Gebietsregion beginnt und sein Segment das des Partners ist.
+- `Target.customer_source`: woher der Kundenstatus kommt (`organization`, `invoice` aus RecurringInvoice, `manual` von Hand), mit `customer_note`, wer es wann gesetzt hat und dem Lizenzinhaber: `organization` oder, bei Einzellizenzen, `customer_user`.
 - `Target` trägt außerdem den Kontakt (`address`, `phone`, `contact_email`, `contact_source` osm/manual) und den Vertriebs-Score (`sales_score`, `sales_reasons`, `sales_contributors`, nachts von `score_targets`).
 - `SalesNote` und `SalesTask` hängen am `Target` (nicht an der Organisation), mit `partner` (null = SpeechMind) für die Sichtbarkeit. Felder wie `customerNotes` und `LizenzTask` im Lizenz-Dashboard.
 - Geplant: eine eigene Tabelle für Segmente statt `Segment` (TextChoices), damit neue Segmente ohne Codeänderung dazukommen. Notizen und Aufgaben bleiben dabei unverändert am `Target`.

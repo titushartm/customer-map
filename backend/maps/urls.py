@@ -25,6 +25,9 @@ urlpatterns = [
     path("sales/targets/<slug:key>/tasks/", sales.add_task, name="sales-tasks"),
     path("sales/tasks/<int:pk>/", sales.update_task, name="sales-task"),
     path("sales/targets/<slug:key>/contact/", sales.update_contact, name="sales-contact"),
+    path("sales/holders/", sales.licence_holders, name="sales-holders"),
+    path("sales/targets/<slug:key>/customer/", sales.set_customer, name="sales-customer"),
+    path("sales/recalc/", sales.recalc, name="sales-recalc"),
     path("sales/digest/preview/", sales.digest_preview, name="sales-digest"),
     # Admin-Bereich, nur SpeechMind intern
     path("partners/", partner_admin.partners, name="partners"),

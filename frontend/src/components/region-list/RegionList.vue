@@ -12,6 +12,8 @@ import { COUNTRIES, COUNTRY_CODES } from '../../lib/countries.js'
 // Nur die Tabelle scrollt, Filter und Blätterleiste bleiben stehen.
 const props = defineProps({
   partnerId: { type: [Number, String], default: null },
+  /** Hochzählen, wenn sich Daten geändert haben (z. B. Kundenstatus im Empfehlungsdialog): lädt die Seite neu */
+  version: { type: Number, default: 0 },
 })
 const emit = defineEmits(['open'])
 
@@ -87,6 +89,7 @@ watch(() => [props.partnerId, filters.value, sortKey.value, sortDir.value, pageS
   else load()
 }, { deep: true })
 watch(page, load)
+watch(() => props.version, load)
 
 function nearBy(hit) {
   center.value = { name: hit.name, lat: hit.lat, lng: hit.lng }
@@ -257,7 +260,7 @@ const numFmt = new Intl.NumberFormat('de-DE')
             <td class="rl-plz">{{ (r.postcodes ?? [])[0] ?? '–' }}<span v-if="(r.postcodes ?? []).length > 1" class="rl-muted"> +{{ r.postcodes.length - 1 }}</span></td>
             <td class="num">{{ sizeText(r.segment, r.size) ?? '–' }}</td>
             <td>{{ tenureText(r.customer_tenure, r.customer_since) || '–' }}</td>
-            <td :class="{ 'rl-muted': !r.licence }">{{ r.licence ?? (r.status === 'customer' ? 'noch keine Orga' : '–') }}</td>
+            <td :class="{ 'rl-muted': !r.licence }">{{ r.licence ?? (r.licence_type === 'single' ? 'Einzellizenz (Nutzer)' : r.status === 'customer' ? 'noch keine Orga' : '–') }}</td>
             <td v-if="center" class="num">{{ r.distance_km }} km</td>
           </tr>
           <tr v-if="!loading && !rows.length" class="rl-empty">

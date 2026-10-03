@@ -52,6 +52,8 @@ function showPartner(id) {
   select('partner')
 }
 const openKey = ref(null)
+// Kundenstatus im Empfehlungsdialog von Hand geändert: Listen und Karten neu laden
+const dataVersion = ref(0)
 // Nur ausgefüllte Kontaktfelder, sonst steht "Ansprechpartner , ," da
 const contactLine = computed(() => {
   const c = currentPartner.value?.contact ?? {}
@@ -246,11 +248,12 @@ function onTabKey(e, i) {
           class="list-fill"
           audience="partner"
           :partner-id="partnerId"
+          :version="dataVersion"
           @recommend="openKey = $event"
         />
         <MunicipalityExplorer
           v-else
-          :key="`partner-${partnerId}-${partnersVersion}`"
+          :key="`partner-${partnerId}-${partnersVersion}-${dataVersion}`"
           audience="partner"
           :partner-id="partnerId"
           variant="page"
@@ -262,7 +265,7 @@ function onTabKey(e, i) {
 
     <main v-else-if="tab === 'intern'" role="tabpanel" aria-labelledby="tab-intern" class="app-view">
       <div class="view-bar"><h1>Alle Ziele</h1></div>
-      <MunicipalityExplorer audience="intern" variant="page" @recommend="openKey = $event" />
+      <MunicipalityExplorer :key="`intern-${dataVersion}`" audience="intern" variant="page" @recommend="openKey = $event" />
     </main>
 
     <main v-else-if="tab === 'vertrieb'" role="tabpanel" aria-labelledby="tab-vertrieb" class="app-view list-view">
@@ -272,6 +275,7 @@ function onTabKey(e, i) {
         class="list-fill"
         audience="intern"
         :partners="partners"
+        :version="dataVersion"
         @recommend="openKey = $event"
       />
     </main>
@@ -305,7 +309,7 @@ function onTabKey(e, i) {
           </select>
         </label>
       </div>
-      <RegionList class="list-fill" :partner-id="listPartnerId" @open="openKey = $event" />
+      <RegionList class="list-fill" :partner-id="listPartnerId" :version="dataVersion" @open="openKey = $event" />
     </main>
 
     <RecommendationDialog
@@ -313,6 +317,7 @@ function onTabKey(e, i) {
       :audience="dialogAudience"
       :partner-id="dialogPartnerId"
       @close="openKey = null"
+      @changed="dataVersion++"
     />
 
     <footer>© SpeechMind · Prototyp mit Mock-Daten</footer>

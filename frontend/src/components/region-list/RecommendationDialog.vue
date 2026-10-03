@@ -4,6 +4,7 @@ import { fetchRecommendation, fetchReferralAccount } from '../../api/map.js'
 import { SEGMENTS, kindLabel, wordsFor } from '../../lib/segments.js'
 import { STATUS_LABEL } from '../../lib/referral.js'
 import { tenureText } from '../../lib/tenure.js'
+import CustomerMark from '../sales/CustomerMark.vue'
 
 const props = defineProps({
   /** Ziel, für das der Dialog offen ist. null = geschlossen */
@@ -11,7 +12,7 @@ const props = defineProps({
   audience: { type: String, default: 'intern' },
   partnerId: { type: [Number, String], default: null },
 })
-const emit = defineEmits(['close'])
+const emit = defineEmits(['close', 'changed'])
 
 const dialog = ref(null)
 const data = ref(null)
@@ -25,7 +26,8 @@ const account = ref(null) // Empfehlungskonto, nur bei Kunden
 const numFmt = new Intl.NumberFormat('de-DE')
 const CONTACT_FIELDS = [['address', 'Adresse'], ['phone', 'Telefon'], ['email', 'E-Mail'], ['website', 'Website']]
 
-watch(() => props.targetKey, async (key) => {
+watch(() => props.targetKey, (key) => load(key))
+async function load(key) {
   if (!key) {
     dialog.value?.close()
     return
@@ -47,7 +49,12 @@ watch(() => props.targetKey, async (key) => {
   } catch (e) {
     error.value = e.message
   }
-})
+}
+// Kundenstatus von Hand geändert: neu laden (Kunde ↔ Noch-nicht-Kunde) und der Seite Bescheid geben
+function onMarked() {
+  load(props.targetKey)
+  emit('changed')
+}
 
 const r = computed(() => data.value?.target)
 const seg = computed(() => wordsFor(r.value?.segment, r.value?.country) ?? SEGMENTS.verwaltung)
@@ -119,7 +126,19 @@ function onClose() {
         <section class="rd-card">
           <h3>Lizenz</h3>
           <p v-if="r.licence" class="rd-big">{{ r.licence }}</p>
+          <p v-else-if="r.customer_source === 'manual'" class="rd-muted">Lizenz bei einem einzelnen Nutzer, ohne Organisation.</p>
           <p v-else class="rd-muted">Noch keine Organisation verknüpft, daher keine Lizenzdaten. Der Kundenstatus steht trotzdem fest.</p>
+          <CustomerMark
+            v-if="audience === 'intern'"
+            class="rd-gap"
+            :target-key="r.key"
+            :is-customer="true"
+            :source="r.customer_source"
+            :since="r.customer_since"
+            :note="r.customer_note"
+            :holder="r.customer_holder"
+            @changed="onMarked"
+          />
         </section>
         <section class="rd-card">
           <h3>Empfehlungsprogramm</h3>
@@ -179,6 +198,11 @@ function onClose() {
                 <li v-if="r.segment === 'verwaltung' && r.level === 'gemeinde'">{{ data.peers.count }} Kunden in derselben Größenklasse ({{ data.peers.label }})</li>
                 <li v-else-if="data.peers.count">{{ data.peers.count }} {{ data.peers.label }} {{ data.peers.count === 1 ? 'ist' : 'sind' }} deutschlandweit Kunde</li>
               </ul>
+            </section>
+
+            <section v-if="audience === 'intern'" class="rd-card">
+              <h3>Schon Kunde?</h3>
+              <CustomerMark :target-key="r.key" @changed="onMarked" />
             </section>
 
             <section class="rd-card">

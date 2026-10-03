@@ -14,8 +14,8 @@ class RegionAdmin(admin.GISModelAdmin):
 
 @admin.register(Target)
 class TargetAdmin(admin.GISModelAdmin):
-    list_display = ("name", "segment", "region", "size", "customer_since", "public_reference", "organization", "sales_score")
-    list_filter = ("segment", "public_reference", "region__country")
+    list_display = ("name", "segment", "region", "size", "customer_since", "customer_source", "public_reference", "organization", "sales_score")
+    list_filter = ("segment", "customer_source", "public_reference", "region__country")
     search_fields = ("name", "key", "region__name")
     raw_id_fields = ("region", "organization")
 

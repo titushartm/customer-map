@@ -1,6 +1,6 @@
 <script setup>
 import { ref, shallowRef, computed, watch, onMounted, defineAsyncComponent } from 'vue'
-import { fetchSalesPage } from '../../api/map.js'
+import { fetchSalesPage, recalcSales } from '../../api/map.js'
 import { kindLabel, sizeText } from '../../lib/segments.js'
 import { COUNTRIES, COUNTRY_CODES } from '../../lib/countries.js'
 import { HEAT, HEAT_BY_KEY } from '../../lib/sales.js'
@@ -16,6 +16,8 @@ const props = defineProps({
   partnerId: { type: [Number, String], default: null },
   /** Partner (fetchPartners), nur intern: Auswahl der Empfänger in der Wochenmail und Farben auf der Karte */
   partners: { type: Array, default: () => [] },
+  /** Hochzählen, wenn sich außerhalb Daten geändert haben (Kundenstatus im Empfehlungsdialog) */
+  version: { type: Number, default: 0 },
 })
 const emit = defineEmits(['recommend'])
 
@@ -86,6 +88,29 @@ watch(() => [props.partnerId, filters.value, sortKey.value, sortDir.value, pageS
   else load()
 }, { deep: true })
 watch(page, load)
+
+// Neu laden: Liste und Karte (mapVersion), nach Änderungen im Detail, im Empfehlungsdialog oder nach dem Neuberechnen
+const mapVersion = ref(0)
+function reload() {
+  mapVersion.value++
+  load()
+}
+watch(() => props.version, reload)
+
+// Nur intern: Score sofort neu rechnen (sonst nachts nach dem Abgleich der Rechnungen)
+const recalcBusy = ref(false)
+async function recalc() {
+  recalcBusy.value = true
+  try {
+    await recalcSales()
+    reload()
+  } catch (e) {
+    loadError.value = e.message
+  } finally {
+    recalcBusy.value = false
+  }
+}
+const timeFmt = new Intl.DateTimeFormat('de-DE', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })
 
 function sortBy(key) {
   if (sortKey.value === key) sortDir.value *= -1
@@ -188,6 +213,10 @@ const telHref = (phone) => `tel:${phone.replace(/[^\d+]/g, '')}`
         </button>
       </div>
       <button type="button" class="sv-reset" @click="resetFilters">Filter zurücksetzen</button>
+      <p v-if="isIntern && result.meta.scored_at" class="sv-scored">
+        Score vom {{ timeFmt.format(new Date(result.meta.scored_at)) }}
+        <button type="button" class="sv-link" :disabled="recalcBusy" @click="recalc">{{ recalcBusy ? 'Rechnet …' : 'Neu berechnen' }}</button>
+      </p>
       <div class="sv-bar-end">
         <div class="sv-seg" role="group" aria-label="Ansicht">
           <button type="button" :aria-pressed="view === 'liste'" @click="view = 'liste'">Liste</button>
@@ -206,6 +235,7 @@ const telHref = (phone) => `tel:${phone.replace(/[^\d+]/g, '')}`
       :partner-id="partnerId"
       :filters="filters"
       :partners="partners"
+      :version="mapVersion"
       @open="openKey = $event"
     />
 
@@ -291,7 +321,7 @@ const telHref = (phone) => `tel:${phone.replace(/[^\d+]/g, '')}`
       :audience="audience"
       :partner-id="partnerId"
       @close="openKey = null"
-      @changed="load"
+      @changed="reload"
       @recommend="emit('recommend', $event)"
     />
     <WeeklyDigest
@@ -335,6 +365,10 @@ const telHref = (phone) => `tel:${phone.replace(/[^\d+]/g, '')}`
 .sv-btn { font-weight: 600; border: 1.5px solid #000; background: var(--page-accent); color: #000; }
 .sv-reset:focus-visible, .sv-btn:focus-visible { outline: 2px solid var(--page-accent); outline-offset: 2px; }
 .sv-error { color: #FFB4A8; }
+.sv-scored { margin: 0; font-size: 0.88rem; color: var(--page-muted); }
+.sv-link { font: inherit; padding: 0; margin-left: 4px; border: 0; background: none; color: var(--page-accent); cursor: pointer; text-decoration: underline; text-underline-offset: 2px; }
+.sv-link:disabled { opacity: 0.5; cursor: default; }
+.sv-link:focus-visible { outline: 2px solid var(--page-accent); outline-offset: 2px; }
 
 .sv-map { flex: 1; min-height: 480px; }
 

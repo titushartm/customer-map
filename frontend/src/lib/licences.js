@@ -8,6 +8,8 @@ export const LICENCE_TYPES = {
   pilot: { label: 'Pilot', fill: '#199e70', ink: '#000000' },
   'pay-per-use': { label: 'Pay-per-Use', fill: '#9085e9', ink: '#000000' },
   budget: { label: 'Budget', fill: '#d95926', ink: '#000000' },
+  // Von Hand als Kunde markiert: Lizenzen nur bei einzelnen Nutzern, keine Organisation (siehe markCustomer)
+  single: { label: 'Einzellizenz', fill: '#e87ba4', ink: '#000000' },
   free: { label: 'Kostenlos', fill: '#24343C', ink: '#DDE7EA' },
 }
 

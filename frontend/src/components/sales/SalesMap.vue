@@ -15,6 +15,8 @@ const props = defineProps({
   filters: { type: Object, required: true },
   /** Partner aus fetchPartners, nur intern */
   partners: { type: Array, default: () => [] },
+  /** Hochzählen zum Neuladen (nach Änderungen im Detail oder nach dem Neuberechnen) */
+  version: { type: Number, default: 0 },
 })
 const emit = defineEmits(['open'])
 
@@ -47,7 +49,7 @@ onMounted(async () => {
   load()
   if (props.audience === 'intern') areas.value = await fetchAreaMap()
 })
-watch(() => [props.filters, props.partnerId], load, { deep: true })
+watch(() => [props.filters, props.partnerId, props.version], load, { deep: true })
 
 // Intern: Gebiete der aktiven Partner als getönte Fläche mit Umriss und Namen. Einmal je Partnerliste, das ist teuer.
 const active = computed(() => props.partners.filter((p) => p.active))
