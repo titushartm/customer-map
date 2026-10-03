@@ -122,6 +122,8 @@ def _properties(t, fields):
         props["licence"] = _licence(t.organization)
     if "postcodes" in fields:
         props["postcodes"] = t.region.postcodes
+    if "created_by" in fields and t.organization_id and t.organization.creater_user_id:
+        props["created_by"] = t.organization.creater_user.email.rsplit("@", 1)[-1]  # Domain: SpeechMind, Partner, Dienstleister
     if getattr(t, "distance", None) is not None:
         props["distance_km"] = round(t.distance.km)
     return props

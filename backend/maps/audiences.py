@@ -46,7 +46,9 @@ AUDIENCES = {
         "scope": "all",
         "include_prospects": True,
         "named_only": False,
-        "fields": ["customer_tenure", "customer_since", "size", "licence", "postcodes"],
+        # created_by (wer die Organisation angelegt hat: SpeechMind, Partner, Dienstleister) nur intern. Partner sollen
+        # nicht sehen, welcher andere Partner in ihrem Gebiet betreut.
+        "fields": ["customer_tenure", "customer_since", "size", "licence", "postcodes", "created_by"],
         "limit": 20_000,
         "recent_named_only": False,
         "recent_min": 1,

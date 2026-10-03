@@ -32,7 +32,7 @@ const AUDIENCE_DEFAULTS = {
       { key: 'size', label: 'Größe', format: 'size' },
       { key: 'customer_tenure', label: 'Kundendauer', format: 'tenure' },
       { key: 'licence', label: 'Lizenz', format: 'text' },
-      { key: 'created_by', label: 'Angelegt von', format: 'text' },
+      // Kein "Angelegt von": Partner sollen nicht sehen, welcher andere Partner im Gebiet betreut
     ],
   },
   intern: {

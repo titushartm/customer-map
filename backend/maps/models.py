@@ -155,6 +155,22 @@ class Target(models.Model):
                   "Import aus backend/data/region_domains.csv (scripts/build_domains.py).",
     )
 
+    # Kontakt für den Vertrieb: aus OpenStreetMap (import_contacts, backend/data/region_contacts.csv), von Hand
+    # korrigierbar (Tab Vertrieb, auch von Partnern). Von Hand Geändertes überschreibt der nächste Import nicht.
+    address = models.CharField("Adresse", max_length=200, blank=True)
+    phone = models.CharField("Telefon", max_length=40, blank=True)
+    contact_email = models.EmailField("E-Mail", blank=True)
+    contact_source = models.CharField(max_length=10, choices=[("osm", "OpenStreetMap"), ("manual", "von Hand")], blank=True)
+    contact_changed_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name="+")
+    contact_changed_at = models.DateTimeField(null=True, blank=True)
+
+    # Vertriebs-Score (0–100) für Noch-nicht-Kunden, nachts neu von score_targets (sales.py), damit Liste und Karte
+    # danach filtern und sortieren können. Bei Kunden leer.
+    sales_score = models.PositiveSmallIntegerField(null=True, blank=True, db_index=True)
+    sales_reasons = models.JSONField(default=list, blank=True)  # Begründung in Sätzen
+    sales_contributors = models.JSONField(default=list, blank=True)  # Kunden in der Nähe, die zum Score beitragen
+    sales_scored_at = models.DateTimeField(null=True, blank=True)
+
     organization = models.ForeignKey(
         "api.Organization", on_delete=models.SET_NULL, null=True, blank=True, related_name="targets",
         help_text="Optional, sobald die Organisation angelegt ist (Lizenz, Ansprechpartner).",
@@ -287,3 +303,55 @@ class Referral(models.Model):
 
     def __str__(self):
         return f"{self.code} → {self.invited.name}"
+
+
+class SalesNote(models.Model):
+    """
+    Notiz zu einem Ziel im Tab Vertrieb, wie customerNotes im Lizenz-Dashboard: Verlauf, nur anhängen, Stand-Tags + Freitext.
+    Hängt am Ziel (Region + Segment), nicht an der Organisation: Noch-nicht-Kunden haben keine. Wird das Ziel Kunde,
+    bleibt der Verlauf und ist über Target.organization auch im Lizenz-Dashboard zu sehen.
+    partner = welcher Vertriebspartner sie geschrieben hat (null = SpeechMind). Partner sehen nur ihre eigenen.
+    """
+
+    target = models.ForeignKey(Target, on_delete=models.CASCADE, related_name="sales_notes")
+    partner = models.ForeignKey(SalesPartner, on_delete=models.SET_NULL, null=True, blank=True, related_name="+")
+    status_tags = ArrayField(models.CharField(max_length=40), default=list, blank=True)  # NOTE_TAGS in frontend/src/lib/sales.js
+    free_text = models.TextField(blank=True)
+    created_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, related_name="+")
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+        verbose_name = "Vertriebsnotiz"
+        verbose_name_plural = "Vertriebsnotizen"
+
+
+class SalesTaskStatus(models.TextChoices):
+    OPEN = "OPEN", "Offen"
+    DONE = "DONE", "Erledigt"
+
+
+class SalesTask(models.Model):
+    """
+    Aufgabe zu einem Ziel, wie LizenzTask: offen/erledigt, zurückstellbar (snoozed_until; zurückgestellt bleibt OPEN),
+    mit Fälligkeit und Zuständigem. source DIGEST = aus der Wochenmail angelegt ("Neu heiß: anrufen"), sonst von Hand.
+    """
+
+    target = models.ForeignKey(Target, on_delete=models.CASCADE, related_name="sales_tasks")
+    partner = models.ForeignKey(SalesPartner, on_delete=models.SET_NULL, null=True, blank=True, related_name="+")
+    title = models.CharField(max_length=200)
+    description = models.TextField(blank=True)
+    status = models.CharField(max_length=4, choices=SalesTaskStatus.choices, default=SalesTaskStatus.OPEN, db_index=True)
+    source = models.CharField(max_length=10, choices=[("MANUAL", "Von Hand"), ("DIGEST", "Wochenmail")], default="MANUAL")
+    due_date = models.DateField(null=True, blank=True)
+    snoozed_until = models.DateField(null=True, blank=True)
+    assigned_to = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name="+")
+    created_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, related_name="+")
+    created_at = models.DateTimeField(auto_now_add=True)
+    done_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name="+")
+    done_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        ordering = ["status", "due_date"]
+        verbose_name = "Vertriebsaufgabe"
+        verbose_name_plural = "Vertriebsaufgaben"

@@ -5,6 +5,7 @@ import 'maplibre-gl/dist/maplibre-gl.css'
 import { createSignImage } from './signImage.js'
 import { SEGMENTS } from '../../lib/segments.js'
 import { LICENCE_TYPES } from '../../lib/licences.js'
+import { HEAT } from '../../lib/sales.js'
 
 const props = defineProps({
   /** GeoJSON FeatureCollection, properties.key ist die ID, properties.status 'customer' | 'free' | 'prospect',
@@ -42,6 +43,12 @@ const props = defineProps({
   placeLabels: { type: Boolean, default: true },
   /** Einzelne Kunden als Ortsschild mit Namen; aus = nur ein Punkt (Showcase) */
   signNames: { type: Boolean, default: true },
+  /** Zusammenfassen zu Clustern. Aus im Tab Vertrieb: Dort sollen die Score-Farben (properties.heat) auch weit draußen zu sehen sein. */
+  cluster: { type: Boolean, default: true },
+  /** Kundenschilder erst ab diesem Zoom, darunter ein gelber Punkt (Tab Vertrieb ohne Cluster: sonst deckt die Fläche zu) */
+  signMinZoom: { type: Number, default: 0 },
+  /** Noch-nicht-Kunden über den Kunden zeichnen und bei Überschneidung gewinnen lassen (Tab Vertrieb: dort geht es um sie) */
+  prospectsOnTop: { type: Boolean, default: false },
 })
 const emit = defineEmits(['update:selectedId', 'update:hoveredId', 'bounds-change'])
 
@@ -77,6 +84,10 @@ onMounted(() => {
     emphasizeBorders()
     addImages()
     addLayers()
+    if (props.prospectsOnTop) {
+      // Weiter oben gezeichnete Symbole werden zuerst platziert, gewinnen also bei Überschneidung
+      for (const id of ['mm-prospect-dots', 'mm-prospects']) map.moveLayer(id, 'mm-signs-active')
+    }
     bindEvents()
     ready = true
     syncLabels()
@@ -147,13 +158,20 @@ function addImages() {
     map.addImage(`mm-sign-${type}`, sign.image, sign.options)
     map.addImage(`mm-sign-${type}-active`, signActive.image, signActive.options)
   }
+  // Noch-nicht-Kunden mit Score (Tab Vertrieb): Schild in der Farbe der Stufe, Kalt bleibt grau
+  for (const { key, fill } of HEAT.filter((h) => h.fill)) {
+    const sign = createSignImage({ fill, ink: props.prospectInk })
+    const signActive = createSignImage({ fill: props.prospectInk, ink: fill })
+    map.addImage(`mm-sign-heat-${key}`, sign.image, sign.options)
+    map.addImage(`mm-sign-heat-${key}-active`, signActive.image, signActive.options)
+  }
 }
 
 function addLayers() {
   map.addSource(SRC, {
     type: 'geojson',
     data: props.data,
-    cluster: true,
+    cluster: props.cluster,
     clusterRadius: 48,
     clusterMaxZoom: 10,
     clusterProperties: {
@@ -231,16 +249,21 @@ function addLayers() {
     '\n', {},
     ['get', 'tenure_short'], { 'font-scale': 0.78 }, // Kundendauer, bei Partner/Intern mit Monat: "Etabliert · 03/2025"
   ]
-  // Noch keine Kunden: Name, darunter die Größe mit Einheit des Segments (nur wo das Backend sie liefert)
+  // Noch keine Kunden: Name, darunter der Score (Tab Vertrieb) oder die Größe mit Einheit des Segments (nur wo das Backend sie liefert)
   const unit = ['match', ['get', 'segment'], ...Object.entries(SEGMENTS).flatMap(([k, s]) => [k, ` ${s.sizeUnit}`]), '']
   const prospectLabel = [
     'format',
     ['get', 'name'], {},
-    ...[['has', 'size']].flatMap((has) => [
-      ['case', has, '\n', ''], {},
-      ['case', has, ['concat', ['number-format', ['get', 'size'], { locale: 'de-DE' }], unit], ''], { 'font-scale': 0.78 },
-    ]),
+    ['case', ['any', ['has', 'score'], ['has', 'size']], '\n', ''], {},
+    ['case',
+      ['has', 'score'], ['concat', 'Score ', ['to-string', ['get', 'score']]],
+      ['has', 'size'], ['concat', ['number-format', ['get', 'size'], { locale: 'de-DE' }], unit],
+      ''], { 'font-scale': 0.78 },
   ]
+  const heatKeys = HEAT.filter((h) => h.fill)
+  const prospectImage = (suffix = '') => ['match', ['coalesce', ['get', 'heat'], ''],
+    ...heatKeys.flatMap((h) => [h.key, `mm-sign-heat-${h.key}${suffix}`]), `mm-sign-prospect${suffix}`]
+  const prospectDot = ['match', ['coalesce', ['get', 'heat'], ''], ...heatKeys.flatMap((h) => [h.key, h.fill]), props.prospectFill]
   const signLayout = (image, field = label) => ({
     'icon-image': image,
     'icon-text-fit': 'both',
@@ -282,12 +305,29 @@ function addLayers() {
   // Noch keine Kunden: graues Ortsschild. Liegt unter den Kundenschildern, damit die bei
   // Überschneidung gewinnen; der kleine Punkt darunter bleibt dann als Hinweis sichtbar.
   // Weit herausgezoomt nur der Punkt: Am Rand bleiben sonst einzelne Orte neben den Clustern stehen.
+  // Weit draußen ohne Cluster (signMinZoom): Kunden als kleiner gelber Punkt statt Schild, unter den Noch-nicht-Kunden
+  map.addLayer({
+    id: 'mm-customer-dots',
+    type: 'circle',
+    source: SRC,
+    maxzoom: props.signMinZoom || 0.0001,
+    filter: ['all', notCluster, hasSign],
+    paint: { 'circle-radius': 3, 'circle-color': props.signFill, 'circle-opacity': 0.7, 'circle-stroke-color': props.signInk, 'circle-stroke-width': 0.5 },
+  })
   map.addLayer({
     id: 'mm-prospect-dots',
     type: 'circle',
     source: SRC,
     filter: ['all', notCluster, isProspect],
-    paint: { 'circle-radius': 3.5, 'circle-color': props.prospectFill, 'circle-stroke-color': props.signInk, 'circle-stroke-width': 1 },
+    paint: {
+      // Mit Score: heiße größer, damit sie aus der Fläche herausstechen
+      'circle-radius': ['match', ['coalesce', ['get', 'heat'], ''], 'hot', 5.5, 'warm', 4.5, 'cold', 2.5, 3.5],
+      'circle-color': prospectDot, 'circle-stroke-color': props.signInk, 'circle-stroke-width': 1,
+      // Kalte treten zurück, damit heiße und warme aus der Fläche herausstechen
+      'circle-opacity': ['match', ['coalesce', ['get', 'heat'], ''], 'cold', 0.45, 1],
+      'circle-stroke-opacity': ['match', ['coalesce', ['get', 'heat'], ''], 'cold', 0.45, 1],
+    },
+    layout: { 'circle-sort-key': ['coalesce', ['get', 'score'], 0] },
   })
   map.addLayer({
     id: 'mm-prospects',
@@ -296,9 +336,9 @@ function addLayers() {
     minzoom: 8,
     filter: ['all', notCluster, isProspect],
     layout: {
-      ...signLayout('mm-sign-prospect', prospectLabel),
+      ...signLayout(prospectImage(), prospectLabel),
       'text-size': 12,
-      'symbol-sort-key': ['-', 0, ['coalesce', ['get', 'size'], 0]],
+      'symbol-sort-key': ['-', 0, ['coalesce', ['get', 'score'], ['get', 'size'], 0]], // höchster Score bzw. größte zuerst
     },
     paint: { 'text-color': props.prospectInk },
   })
@@ -316,6 +356,7 @@ function addLayers() {
     id: 'mm-signs',
     type: 'symbol',
     source: SRC,
+    minzoom: props.signMinZoom,
     filter: ['all', notCluster, hasSign],
     // Zahlende vor kostenlosen, dann näher bzw. größer zuerst, wenn Schilder sich überdecken
     layout: {
@@ -359,8 +400,8 @@ function addLayers() {
     type: 'symbol',
     source: SRC,
     filter: ['in', ['get', 'key'], ['literal', []]],
-    layout: { ...signLayout('mm-sign-prospect-active', prospectLabel), 'text-size': 12, 'icon-allow-overlap': true, 'text-allow-overlap': true },
-    paint: { 'text-color': props.prospectFill },
+    layout: { ...signLayout(prospectImage('-active'), prospectLabel), 'text-size': 12, 'icon-allow-overlap': true, 'text-allow-overlap': true },
+    paint: { 'text-color': ['match', ['coalesce', ['get', 'heat'], ''], ...heatKeys.flatMap((h) => [h.key, h.fill]), props.prospectFill] },
   })
 
   // Mögliche Partner (Showcase): graues Ortsschild, neben die Cluster geschoben (placeTags), sonst darüber

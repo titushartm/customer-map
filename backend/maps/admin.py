@@ -1,6 +1,6 @@
 from django.contrib.gis import admin
 
-from .models import PartnerTerritory, Referral, ReferralCode, Region, SalesPartner, Target
+from .models import PartnerTerritory, Referral, ReferralCode, Region, SalesNote, SalesPartner, SalesTask, Target
 
 
 @admin.register(Region)
@@ -14,7 +14,7 @@ class RegionAdmin(admin.GISModelAdmin):
 
 @admin.register(Target)
 class TargetAdmin(admin.GISModelAdmin):
-    list_display = ("name", "segment", "region", "size", "customer_since", "public_reference", "organization")
+    list_display = ("name", "segment", "region", "size", "customer_since", "public_reference", "organization", "sales_score")
     list_filter = ("segment", "public_reference", "region__country")
     search_fields = ("name", "key", "region__name")
     raw_id_fields = ("region", "organization")
@@ -48,3 +48,19 @@ class ReferralAdmin(admin.ModelAdmin):
     list_display = ("code", "invited", "status", "invited_at", "won_at")
     list_filter = ("status",)
     raw_id_fields = ("code", "invited")
+
+
+@admin.register(SalesNote)
+class SalesNoteAdmin(admin.ModelAdmin):
+    list_display = ("target", "partner", "status_tags", "created_by", "created_at")
+    list_filter = ("partner",)
+    search_fields = ("target__name", "free_text")
+    raw_id_fields = ("target",)
+
+
+@admin.register(SalesTask)
+class SalesTaskAdmin(admin.ModelAdmin):
+    list_display = ("title", "target", "partner", "status", "due_date", "snoozed_until", "assigned_to")
+    list_filter = ("status", "source", "partner")
+    search_fields = ("title", "target__name")
+    raw_id_fields = ("target",)

@@ -23,6 +23,7 @@ const copied = ref(null)
 const account = ref(null) // Empfehlungskonto, nur bei Kunden
 
 const numFmt = new Intl.NumberFormat('de-DE')
+const CONTACT_FIELDS = [['address', 'Adresse'], ['phone', 'Telefon'], ['email', 'E-Mail'], ['website', 'Website']]
 
 watch(() => props.targetKey, async (key) => {
   if (!key) {
@@ -183,11 +184,13 @@ function onClose() {
             <section class="rd-card">
               <h3>Kontakt</h3>
               <dl class="rd-contact">
-                <div><dt>Telefon</dt><dd class="rd-muted">noch nicht hinterlegt</dd></div>
-                <div><dt>E-Mail</dt><dd class="rd-muted">noch nicht hinterlegt</dd></div>
-                <div><dt>Website</dt><dd class="rd-muted">noch nicht hinterlegt</dd></div>
+                <div v-for="[k, label] in CONTACT_FIELDS" :key="k">
+                  <dt>{{ label }}</dt>
+                  <dd v-if="data.contact?.[k]">{{ data.contact[k] }}</dd>
+                  <dd v-else class="rd-muted">noch nicht hinterlegt</dd>
+                </div>
               </dl>
-              <p class="rd-muted">Liegt noch nicht vor. Später eventuell per Anreicherung über die Website (Impressum).</p>
+              <p class="rd-muted">Rathaus aus OpenStreetMap, Website aus Wikidata. Korrigieren im Tab Vertrieb.</p>
             </section>
           </div>
 

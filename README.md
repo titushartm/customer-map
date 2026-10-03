@@ -12,7 +12,7 @@ npm install
 npm run dev
 ```
 
-Die Ansichten sind Tabs (`#kunden`, `#partner`, `#intern`, `#admin`, `#liste`, `#empfehlen`). Die Anmeldung ist simuliert: Partner, Kunde und Scope wählst du oben rechts aus. Einen Einladungslink probierst du mit `?ref=BAU-9EMI#kunden` aus.
+Die Ansichten sind Tabs (`#kunden`, `#partner`, `#intern`, `#vertrieb`, `#admin`, `#liste`, `#empfehlen`). Die Anmeldung ist simuliert: Partner, Kunde und Scope wählst du oben rechts aus. Einen Einladungslink probierst du mit `?ref=BAU-9EMI#kunden` aus.
 
 `#showcase` zeigt nur die Karte über das ganze Fenster, für Screenshots (z. B. LinkedIn): zahlende Kunden als gelbe Schilder, dahinter die Partnergebiete in Farbe, ihre Namen daneben (außerhalb der Fläche, damit die Cluster sie nicht verdecken), keine Noch-nicht-Kunden. Testlizenzen und Titel lassen sich zuschalten, die Taste H blendet die Steuerung aus. „Partner gesucht“ (an) schraffiert in Deutschland, Österreich und der Schweiz alles, was noch keinem aktiven Partner gehört (`openAreas` in `lib/territories.js`: ganz freie Staaten als ein Stück, sonst die freien Länder, darunter die freien Kreise), mit einem Hinweis je Staat und einem Eintrag im Titel. „Mögliche Partner“ (an) setzt kommunale IT-Dienstleister, die als Partner in Frage kommen, als graues Schild mit „?“ in ihre Fläche, über die Cluster (`mocks/prospects.js`, Recherche in `backend/data/potenzielle_partner.md`); in Staaten mit solchen Schildern entfällt der Hinweis „Partner gesucht“.
 
@@ -24,10 +24,13 @@ Kunden (öffentliche Startseite)
 : Eine Startseite je Segment („Stadtwerke in Ihrer Nähe“). Kleine Karte, groß per Klick. Zeigt Kunden im Umkreis des Besuchers (IP → Browser auf Klick → Ort/PLZ-Suche); in der großen Karte lädt jedes Verschieben oder Herauszoomen die Kunden im Ausschnitt nach (bis 400 km um die Kartenmitte), Überschrift und Zahlen bleiben beim eigenen Umkreis. Nicht freigegebene Kunden zählen nur als Zahl. Für FOMO: „Neu im letzten Monat“ (deutschlandweit, Anonyme nur mit Bundesland; erst ab 3 Kunden, sonst „in den letzten drei Monaten“, sonst ausgeblendet) und „In Deutschland (bzw. Österreich, der Schweiz, Frankreich) arbeiten N Verwaltungen in Ihrer Größenklasse mit SpeechMind“ (im Land des Besuchers, erst ab 3). Angemeldete Kunden mit Organisation sehen direkt über der Karte ihren Einladungslink zum Kopieren; Besucher und Kunden ohne Orga sehen ihn nicht. Unter der Karte „Welche Lizenz passt zu Ihnen?“, siehe [Lizenzempfehlung](#lizenzempfehlung).
 
 Partner
-: Vertriebspartner sehen ihr Gebiet (Staaten, Länder/Kantone/Régions, Kreise/Bezirke/Départements oder Gemeinden, auch über Ländergrenzen) und darin nur ihr Segment. Das Gebiet ist auf der Karte gelb umrandet und leicht getönt. Kunden sind gelbe Ortsschilder, Noch-nicht-Kunden graue (mit Einwohnerzahl). Dazu die Abdeckung in Prozent und die Lizenz. Cluster zeigen „Kunden/Gesamt“.
+: Vertriebspartner sehen ihr Gebiet (Staaten, Länder/Kantone/Régions, Kreise/Bezirke/Départements oder Gemeinden, auch über Ländergrenzen) und darin nur ihr Segment. Das Gebiet ist auf der Karte gelb umrandet und leicht getönt. Kunden sind gelbe Ortsschilder, Noch-nicht-Kunden graue (mit Einwohnerzahl). Dazu die Abdeckung in Prozent und die Lizenz. Cluster zeigen „Kunden/Gesamt“. Partner sehen nicht, wer eine Organisation angelegt hat (`created_by` nur intern): Daran ließe sich ablesen, welcher andere Partner im Gebiet betreut. Oben rechts schaltet „Vertrieb“ auf den [Vertrieb](#vertrieb) für das eigene Gebiet.
 
 Intern
 : Wie Partner, aber alle Ziele aller Segmente, mit Segmentfilter.
+
+Vertrieb
+: Nur SpeechMind intern: Noch-nicht-Kunden nach Score, mit Begründung, Adresse, Telefon, Partnergebiet, Stand, Notizen, Aufgaben und Wochenmail, als Liste oder Karte. Siehe [Vertrieb](#vertrieb).
 
 Admin
 : Nur SpeechMind intern: Liste aller Vertriebspartner mit Segment, Gebiet und Abdeckung. „Neuer Partner“ und „Bearbeiten“ öffnen einen Dialog, siehe [Vertriebspartner](#vertriebspartner). „Karte“ springt in die Partneransicht.
@@ -123,6 +126,37 @@ Auf der Startseite („Welche Lizenz passt zu Ihnen?“), öffentlich und ohne A
 
 Backend: `GET /api/licence/suggest/?segment=verwaltung&key=DE-G-14625240` bzw. `?segment=stadtwerk&size=250` (`backend/maps/licence.py`), im Mock `suggestLicence` in `mocks/recommendations.js`. Werte sind Platzhalter, mit dem Vertrieb abstimmen.
 
+## Vertrieb
+
+Welche Verwaltung kauft wahrscheinlich als Nächstes, weil die Nachbarn schon dabei sind? Der Tab Vertrieb (intern) und „Vertrieb“ im Partner-Tab (nur das eigene Gebiet) zeigen alle Noch-nicht-Kunden mit Score, sortiert nach Score. Kostenlose (Testlizenzen) haben schon eine Organisation und bekommen keinen Score.
+
+**Score (0–100).** Je zahlendem Kunden desselben Segments im Umkreis von 30 km ein Punkt, linear schwächer mit der Entfernung, mal 1,5 für neue Kunden (unter 3 Monaten: das Thema ist gerade frisch), mal 1,3 für lange laufende (über 12 Monate: bewährte Referenz), mal 1,5 im selben Kreis. Tests in der Nähe zählen 0,3. Gemeinden in einem Landkreis, der Kunde ist, bekommen 1,5 dazu. Landkreise zählen stattdessen ihre Verwaltungen, die Kunde sind (je 0,6). Score = 100 · (1 − e^(−Punkte/8)): Heiß ab 70 (rund 5 %), Warm ab 40. Die Werte sind ein erster Entwurf, mit dem Vertrieb abstimmen; sie stehen in `mocks/sales.js` (`SALES_RULES`) und `backend/maps/sales.py`.
+
+**Begründung.** Je Ziel in Sätzen, z. B. „27 Kunden im Umkreis von 30 km, am nächsten Schriesheim (3 km) · Neu dabei: Hirschberg (seit 07/2026), Mannheim (seit 08/2026) · 6 davon sind seit über einem Jahr dabei · Rhein-Neckar-Kreis ist Kunde“. In der Liste die ersten zwei, im Detail alle, dazu die Kunden, die am meisten beitragen.
+
+**Spalten:** Score, Name (Art, Land, Größe), Begründung, Adresse, Telefon, Partnergebiet (nur intern), Stand (Tags der letzten Notiz, offene Aufgaben). Filter: Suche (Name, PLZ, Domain), Land/Region, Partnergebiet (ohne Partner, bei einem Partner, bei einem bestimmten; nur intern), mit Telefon/Adresse, Bearbeitung (neu, in Bearbeitung, mit offener Aufgabe, kein Interesse) und die Stufe (Heiß/Warm/Kalt mit Anzahl).
+
+**Karte.** Die gefilterten Ziele in der Farbe ihrer Stufe (Rot, geprüft gegen die dunkle Karte und das Gelb der Kunden; Kalt blass), ohne Cluster und über den Kunden, damit sie auch weit draußen zu sehen sind. Kunden sind darunter kleine gelbe Punkte, ab Zoom 9 Schilder. Intern liegen die Partnergebiete in ihrer Farbe dahinter.
+
+**Partner.** Sehen nur ihr Gebiet und ihr Segment, keine anderen Partner (auch nicht, wo sich Gebiete überschneiden), und nur ihre eigenen Notizen und Aufgaben. SpeechMind sieht alles, mit Absender.
+
+**Notizen und Aufgaben** wie im Lizenz-Dashboard: Notizen sind ein Verlauf mit Stand-Tags (Angerufen, E-Mail geschickt, Termin vereinbart, Demo gezeigt, Angebot geschickt, Später melden, Kein Interesse; `lib/sales.js`) und Freitext, nur anhängen oder löschen. Aufgaben haben Titel, Fälligkeit, Zuständige, sind offen oder erledigt und lassen sich eine Woche zurückstellen. Sie hängen am Ziel (`Target` = Region + Segment), nicht an der Organisation, weil Noch-nicht-Kunden keine haben; wird das Ziel Kunde, bleibt der Verlauf und ist über `Target.organization` auch im Lizenz-Dashboard zu sehen. Im Mock liegen sie im Browser (localStorage).
+
+**Wochenmail.** Montags um 7 Uhr (`manage.py send_sales_digest`, nach dem nächtlichen `score_targets`): die zehn Ziele mit dem höchsten Score, ohne kalte und ohne „Kein Interesse“ in den letzten 180 Tagen, mit Begründung, Telefon und Adresse, dazu die Zahl der Aufgaben, die in den nächsten 7 Tagen fällig sind. An den SpeechMind-Vertrieb (`SALES_DIGEST_RECIPIENTS`, alle Ziele, mit Partnergebiet) und an jeden aktiven Partner mit E-Mail-Adresse (nur sein Gebiet). Versand aus dem normalen Postfach, kein noreply. „Wochenmail ansehen“ zeigt die Vorschau je Empfänger.
+
+### Kontaktdaten
+
+Adresse, Telefon und E-Mail der Verwaltungen kommen aus OpenStreetMap (Rathäuser, für Landkreise die Landratsämter; ODbL), zugeordnet mit `scripts/build_contacts.py` nach Lage, PLZ und Ort: `mocks/contacts.json` und `backend/data/region_contacts.csv` (zum Prüfen, mit OSM-Objekt und Trefferpunkten). Wikidata hat Adresse oder Telefon nur bei rund 1 % der Gemeinden. Lieber keine Angabe als eine falsche: Liegt das Rathaus in einem anderen Ort oder ist es nach einem anderen Ort benannt, bleibt das Feld leer. Abdeckung (Stand 03.10.2026):
+
+| | Verwaltungen | Adresse | Telefon | E-Mail |
+|---|---|---|---|---|
+| DE Gemeinden | 4.408 | 72 % | 22 % | 11 % |
+| DE Ämter/VG | 827 | 55 % | 18 % | 10 % |
+| DE Landkreise | 294 | 66 % | 39 % | 15 % |
+| AT Gemeinden | 2.092 | 60 % | 46 % | 23 % |
+
+Vertrieb und Partner können Adresse, Telefon und E-Mail im Detail eines Ziels korrigieren. Das gilt für alle (die Nummer des Rathauses ist für alle dieselbe), zeigt, wer wann geändert hat, und der nächste Import (`manage.py import_contacts`) überschreibt es nicht.
+
 ## Empfehlungsdialog
 
 Für Noch-nicht-Kunden:
@@ -130,7 +164,7 @@ Für Noch-nicht-Kunden:
 - **Lizenz:** Median der Kunden mit ähnlicher Einwohnerzahl und bekannter Lizenz, sonst eine Faustregel nach Einwohnern.
 - **Hardware:** vorerst eine Faustregel.
 - **Argumente:** Kunden im Umkreis, im Bundesland und in der Größenklasse.
-- **Kontakt:** Platzhalter, bis die Daten aus Organisation/Zoho oder einer Anreicherung kommen.
+- **Kontakt:** Adresse, Telefon und E-Mail des Rathauses (siehe [Kontaktdaten](#kontaktdaten)), Website aus der Domain. Korrigieren geht im Tab Vertrieb.
 - **E-Mail-Entwurf:** editierbar und kopierbar, Sitzungsart je Segment. Er nennt nur Kunden mit Referenzfreigabe.
 - **One-Pager:** druckbar oder als PDF zu sichern.
 
@@ -151,6 +185,11 @@ frontend/src/
   components/region-list/
     RegionList.vue                     Tabelle mit Filtern und Umkreis
     RecommendationDialog.vue           Lizenz, Hardware, Kontakt, E-Mail, One-Pager
+  components/sales/
+    SalesView.vue                      Tab Vertrieb und Vertrieb im Partner-Tab: Liste nach Score, Filter, Liste/Karte
+    SalesDetail.vue                    Seitenleiste: Begründung, Kontakt (korrigierbar), Notizen, Aufgaben
+    SalesMap.vue                       Karte nach Score-Stufe, intern mit Partnergebieten
+    WeeklyDigest.vue                   Vorschau der Wochenmail je Empfänger
   components/referral/
     ReferralView.vue                   Empfehlungsbereich eines Kunden
     ReferralBanner.vue                 Einladungsbanner auf der Startseite
@@ -170,6 +209,9 @@ frontend/src/
   mocks/referrals.js                   Regeln, Beispiel-Empfehlungen, Codes
   mocks/areas.json                     Staaten, Länder, Kreise in DE/AT/CH/FR mit Fläche (aus scripts/build_areas.py)
   mocks/recommendations.js             Empfehlungslogik
+  mocks/sales.js                       Vertriebs-Score und Begründung (SALES_RULES)
+  mocks/contacts.json                  Adresse, Telefon, E-Mail je Verwaltung aus OSM (aus scripts/build_contacts.py)
+  lib/sales.js                         Score-Stufen (Heiß/Warm/Kalt, Farben), Stand-Tags der Notizen
   lib/segments.js                      Segmente: Wörter, Einheiten, Artikel
   lib/referral.js                      Status-Texte, Einladungstext
   lib/tenure.js                        Kundendauer-Gruppen (Neu, Etabliert, Lange dabei), Anzeige mit Startdatum
@@ -182,6 +224,10 @@ backend/maps/                          Skizze
   views.py         /api/map/<audience>/targets/, /api/map/<audience>/list/ (Seiten), /api/map/<audience>/recent/, /api/referral/<code>/, /api/geo/…
   partner_admin.py /api/partners/…, /api/geo/areas/ (Admin-Tab, nur is_staff)
   licence.py       /api/licence/suggest/ (öffentliche Lizenzempfehlung)
+  sales.py         /api/sales/… (Tab Vertrieb): Score, Liste, Karte, Notizen, Aufgaben, Kontakt, Wochenmail
+  management/commands/score_targets.py      Vertriebs-Score nachts neu
+  management/commands/send_sales_digest.py  Wochenmail montags
+  management/commands/import_contacts.py    Kontakte aus region_contacts.csv (ohne von Hand geänderte)
   management/commands/import_regions.py   Geo-Referenz je Land (DE, AT, CH, FR)
 ```
 
@@ -191,6 +237,9 @@ backend/maps/                          Skizze
 - `Target` ist ein Ziel, dem wir verkaufen, mit `segment`, `size` (Einwohner bzw. Mitarbeitende), eigener Lage und der Region, in der es sitzt. Verwaltungen entstehen beim VG250-Import automatisch je Region. **Kunde = `customer_since` gesetzt.** Öffentlich liefert die API nur die Kundendauer als Gruppe (`customer_tenure`), Partner und Intern zusätzlich das Datum (siehe [Freigaben](#freigaben)). `organization` ist optional und wird verknüpft, sobald es sie gibt.
 - `SalesPartner` wird im Admin-Tab angelegt und hat genau ein `segment`. Logins hängen als User daran. Kunden eines Partners erkennt man an `Organization.creater_user`. `Organization.is_partner` meint API-Partner und spielt hier keine Rolle.
 - `PartnerTerritory` = Partner + Region (Land, Kreis oder Gemeinde). Ein Ziel gehört zum Gebiet, wenn der Schlüssel seiner Region mit dem Schlüssel der Gebietsregion beginnt und sein Segment das des Partners ist.
+- `Target` trägt außerdem den Kontakt (`address`, `phone`, `contact_email`, `contact_source` osm/manual) und den Vertriebs-Score (`sales_score`, `sales_reasons`, `sales_contributors`, nachts von `score_targets`).
+- `SalesNote` und `SalesTask` hängen am `Target` (nicht an der Organisation), mit `partner` (null = SpeechMind) für die Sichtbarkeit. Felder wie `customerNotes` und `LizenzTask` im Lizenz-Dashboard.
+- Geplant: eine eigene Tabelle für Segmente statt `Segment` (TextChoices), damit neue Segmente ohne Codeänderung dazukommen. Notizen und Aufgaben bleiben dabei unverändert am `Target`.
 
 Die Flächen im Mock (`mocks/areas.json`, gebaut mit `scripts/build_areas.py`) sind vereinfachte Ableitungen der amtlichen Grenzen (Quellen und Download im Kopf des Skripts; DE über opendatasoft aus VG250, AT aus Statistik Austria, CH aus BFS/swisstopo, FR aus IGN); Länder, Régions und Staaten sind die Vereinigung ihrer Kreise. Gemeinden haben im Mock keine Fläche, ein Gemeinde-Gebiet fehlt deshalb auf der Karte. Im Betrieb liefert das Backend die Fläche als Vereinigung von `Region.boundary` der Gebietsregionen.
 
@@ -232,7 +281,8 @@ Kunde ist, wer eine zahlende Lizenz hat: Jahreslizenz, Monatslizenz, Pilot, Pay-
 - Schweiz und Frankreich vollständig (swisstopo bzw. IGN, wie bei `import_regions`).
 - Lizenzempfehlung: Die echten Lizenzen laufen über Stunden (Jahres-/Monatslizenz, Pilot), die Empfehlung rechnet noch mit Plätzen und den Stufen Basis/Professional/Enterprise.
 - Welche Felder die Karten der Partner und Intern zeigen, und woher Lizenz- und Hardwaredaten kommen.
-- Kontaktdaten der Noch-nicht-Kunden liegen nicht vor. Eventuell per Anreicherung über die Website der Verwaltung (Impressum).
+- Kontaktdaten: rund ein Drittel der Verwaltungen hat noch keine Adresse, drei Viertel kein Telefon. Rest aus Zoho oder dem Impressum der Website; Ansprechpartner (Bürgermeister, Hauptamt) fehlen ganz.
+- Vertrieb: Score-Werte mit dem Vertrieb abstimmen; Verlauf des Scores je Woche speichern, um „neu heiß“ in der Wochenmail zu markieren und daraus Aufgaben anzulegen (`SalesTask.source = DIGEST`); Zuständige als User statt Freitext (im Mock Freitext).
 - Empfehlungsprogramm: endgültige Prozente und Deckel, rechtliche Prüfung, Auszahlung/Verrechnung, Empfehlungskonto im Backend (`/referral/me/`, braucht die Anmeldung).
 - Listen für Stadtwerke, DRK und weitere Segmente, inklusive Größe (Mitarbeitende).
 - Anmeldung: Bis dahin wählt der Prototyp den Partner per Parameter. Das Backend erlaubt das nur mit `MAP_ALLOW_PARTNER_PARAM` (Default: `DEBUG`).

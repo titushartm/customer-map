@@ -14,12 +14,14 @@ const RecommendationDialog = defineAsyncComponent(() => import('./components/reg
 const ReferralView = defineAsyncComponent(() => import('./components/referral/ReferralView.vue'))
 const PartnerAdmin = defineAsyncComponent(() => import('./components/admin/PartnerAdmin.vue'))
 const ShowcaseMap = defineAsyncComponent(() => import('./components/showcase/ShowcaseMap.vue'))
+const SalesView = defineAsyncComponent(() => import('./components/sales/SalesView.vue'))
 
 // Prototyp: Die Anmeldung wird simuliert. Tabs und Partnerauswahl stehen für "wer ist eingeloggt".
 const TABS = [
   { id: 'kunden', label: 'Kunden', note: 'Öffentliche Startseite, eine je Segment. Besucher sehen Kunden im Umkreis, nicht freigegebene nur als Zahl.' },
-  { id: 'partner', label: 'Partner', note: 'Vertriebspartner sehen ihr Gebiet und nur ihr Segment: Kunden und Noch-nicht-Kunden, mit Größe und Lizenz.' },
+  { id: 'partner', label: 'Partner', note: 'Vertriebspartner sehen ihr Gebiet und nur ihr Segment: Kunden und Noch-nicht-Kunden, mit Größe und Lizenz. Nicht, welcher Partner wen betreut. Dazu Vertrieb für ihr Gebiet.' },
   { id: 'intern', label: 'Intern', note: 'SpeechMind-Team: alle Ziele, Kunden und Noch-nicht-Kunden.' },
+  { id: 'vertrieb', label: 'Vertrieb', note: 'SpeechMind intern: Noch-nicht-Kunden nach Score (Kunden in der Nähe, neue und lange laufende Lizenzen), mit Begründung, Kontakt, Partnergebiet, Notizen, Aufgaben und Wochenmail.' },
   { id: 'admin', label: 'Admin', note: 'SpeechMind intern: Vertriebspartner anlegen, ihr Segment und Gebiet festlegen, deaktivieren oder löschen.' },
   { id: 'liste', label: 'Liste', note: 'Alle Ziele als Tabelle. Filtern, suchen, Umkreis wählen; Klick öffnet Empfehlung und E-Mail.' },
   { id: 'empfehlen', label: 'Empfehlen', note: 'Eingeloggte Kunden mit Lizenz: eigener Empfehlungscode, Einladungen und Rabattstand.' },
@@ -34,6 +36,7 @@ const partners = ref([])
 const partnersLoading = ref(true)
 const partnersVersion = ref(0) // Partnerkarte neu laden, wenn sich Gebiet oder Segment ändert
 const partnerId = ref(null)
+const partnerView = ref('karte') // Partner-Tab: 'karte' | 'vertrieb'
 const activePartners = computed(() => partners.value.filter((p) => p.active))
 const listScope = ref('intern') // 'intern' oder eine Partner-ID
 async function loadPartners() {
@@ -216,22 +219,37 @@ function onTabKey(e, i) {
       </section>
     </main>
 
-    <main v-else-if="tab === 'partner'" role="tabpanel" aria-labelledby="tab-partner" class="app-view">
+    <main v-else-if="tab === 'partner'" role="tabpanel" aria-labelledby="tab-partner" class="app-view" :class="{ 'list-view': partnerView === 'vertrieb' }">
       <div class="view-bar">
         <h1>Ihr Gebiet</h1>
-        <label class="as">
-          <span>Angemeldet als (Prototyp)</span>
-          <select v-model.number="partnerId">
-            <option v-for="p in activePartners" :key="p.id" :value="p.id">{{ p.name }}</option>
-          </select>
-        </label>
+        <div class="as-group">
+          <div class="view-switch" role="group" aria-label="Ansicht">
+            <button type="button" :aria-pressed="partnerView === 'karte'" @click="partnerView = 'karte'">Karte</button>
+            <button type="button" :aria-pressed="partnerView === 'vertrieb'" @click="partnerView = 'vertrieb'">Vertrieb</button>
+          </div>
+          <label class="as">
+            <span>Angemeldet als (Prototyp)</span>
+            <select v-model.number="partnerId">
+              <option v-for="p in activePartners" :key="p.id" :value="p.id">{{ p.name }}</option>
+            </select>
+          </label>
+        </div>
       </div>
       <template v-if="currentPartner">
         <p class="partner-line">
           Segment: <strong>{{ wordsFor(currentPartner.segment, commonCountry(currentPartner.areas)).plural }}</strong>
           <template v-if="contactLine"> · Ansprechpartner {{ contactLine }}</template>
         </p>
+        <SalesView
+          v-if="partnerView === 'vertrieb'"
+          :key="`partner-sales-${partnerId}-${partnersVersion}`"
+          class="list-fill"
+          audience="partner"
+          :partner-id="partnerId"
+          @recommend="openKey = $event"
+        />
         <MunicipalityExplorer
+          v-else
           :key="`partner-${partnerId}-${partnersVersion}`"
           audience="partner"
           :partner-id="partnerId"
@@ -245,6 +263,17 @@ function onTabKey(e, i) {
     <main v-else-if="tab === 'intern'" role="tabpanel" aria-labelledby="tab-intern" class="app-view">
       <div class="view-bar"><h1>Alle Ziele</h1></div>
       <MunicipalityExplorer audience="intern" variant="page" @recommend="openKey = $event" />
+    </main>
+
+    <main v-else-if="tab === 'vertrieb'" role="tabpanel" aria-labelledby="tab-vertrieb" class="app-view list-view">
+      <div class="view-bar"><h1>Vertrieb</h1></div>
+      <SalesView
+        :key="`sales-${partnersVersion}`"
+        class="list-fill"
+        audience="intern"
+        :partners="partners"
+        @recommend="openKey = $event"
+      />
     </main>
 
     <main v-else-if="tab === 'admin'" role="tabpanel" aria-labelledby="tab-admin" class="app-view">
@@ -370,7 +399,11 @@ body {
 .view-bar h1 { margin: 0; font-size: 1.8rem; }
 .as { display: grid; gap: 4px; }
 .as span { font-size: 0.85rem; color: var(--page-muted); }
-.as-group { display: flex; flex-wrap: wrap; gap: 10px 14px; margin-left: auto; }
+.as-group { display: flex; flex-wrap: wrap; align-items: end; gap: 10px 14px; margin-left: auto; }
+.view-switch { display: inline-flex; gap: 1px; background: var(--page-line); border: 1px solid var(--page-line); border-radius: 4px; overflow: hidden; }
+.view-switch button { font: inherit; font-weight: 600; padding: 7px 14px; border: 0; background: var(--page-surface); color: var(--page-text); cursor: pointer; }
+.view-switch button[aria-pressed='true'] { background: var(--page-accent); color: #000; }
+.view-switch button:focus-visible { outline: 2px solid var(--page-accent); outline-offset: -2px; }
 .partner-line { margin: -6px 0 14px; color: var(--page-muted); font-size: 0.95rem; }
 .partner-line strong { color: var(--page-text); }
 .as select {

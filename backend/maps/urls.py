@@ -1,6 +1,6 @@
 from django.urls import path
 
-from . import licence, partner_admin, views
+from . import licence, partner_admin, sales, views
 
 app_name = "maps"
 
@@ -16,6 +16,16 @@ urlpatterns = [
     path("geo/reverse/", views.reverse_location, name="reverse"),
     path("geo/search/", views.place_search, name="search"),
     path("geo/states/", views.states, name="states"),
+    # Tab Vertrieb: intern (is_staff) und Partner (nur ihr Gebiet)
+    path("sales/<slug:audience>/list/", sales.sales_list, name="sales-list"),
+    path("sales/<slug:audience>/map/", sales.sales_map, name="sales-map"),
+    path("sales/<slug:audience>/targets/<slug:key>/", sales.sales_target, name="sales-target"),
+    path("sales/targets/<slug:key>/notes/", sales.add_note, name="sales-notes"),
+    path("sales/notes/<int:pk>/", sales.delete_note, name="sales-note"),
+    path("sales/targets/<slug:key>/tasks/", sales.add_task, name="sales-tasks"),
+    path("sales/tasks/<int:pk>/", sales.update_task, name="sales-task"),
+    path("sales/targets/<slug:key>/contact/", sales.update_contact, name="sales-contact"),
+    path("sales/digest/preview/", sales.digest_preview, name="sales-digest"),
     # Admin-Bereich, nur SpeechMind intern
     path("partners/", partner_admin.partners, name="partners"),
     path("partners/preview/", partner_admin.partner_preview, name="partner-preview"),

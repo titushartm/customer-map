@@ -8,6 +8,8 @@ import { sizeClassOf, SIZE_CLASSES } from '../lib/sizeClasses.js'
 import { haversineKm } from '../lib/geo.js'
 import { tenureOf, tenureRank, tenureText } from '../lib/tenure.js'
 import { recommend, suggestLicence } from '../mocks/recommendations.js'
+import { scoreTargets, SALES_RULES } from '../mocks/sales.js'
+import { HEAT, NO_INTEREST_DAYS } from '../lib/sales.js'
 
 const USE_MOCK = import.meta.env.VITE_MAP_USE_MOCK !== 'false'
 const API_BASE = import.meta.env.VITE_API_BASE ?? '/api'
@@ -67,7 +69,7 @@ export async function fetchRecent({ audience, segment, partnerId }) {
 }
 
 /**
- * Empfehlung für ein Ziel: Lizenz, Hardware, Referenzen in der Nähe, E-Mail-Entwurf, One-Pager.
+ * Empfehlung für ein Ziel: Lizenz, Hardware, Referenzen in der Nähe, Kontakt (Adresse, Telefon, E-Mail, Website), E-Mail-Entwurf, One-Pager.
  * Bestandskunden bekommen stattdessen Vorschläge fürs Empfehlungsprogramm.
  */
 export async function fetchRecommendation(key, { audience = 'intern', partnerId } = {}) {
@@ -75,7 +77,9 @@ export async function fetchRecommendation(key, { audience = 'intern', partnerId 
   const all = mockAllTargets()
   const target = all.find((t) => t.key === key)
   if (!target) throw new Error('Dieses Ziel ist nicht in der Liste.')
-  return recommend(target, all, { withDate: AUDIENCES[audience]?.fields.includes('customer_since') })
+  await loadSales()
+  const { address, phone, email } = contactOf(key)
+  return { ...recommend(target, all, { withDate: AUDIENCES[audience]?.fields.includes('customer_since') }), contact: { address, phone, email, website: domainOf(key)?.split(',')[0] ?? null } }
 }
 
 /**
@@ -103,6 +107,106 @@ export async function fetchLicenceSuggestion({ segment, key, size }) {
   const cls = segment === 'verwaltung' && target.level === 'gemeinde' ? sizeClassOf(target.size) : null
   return { place, segment, size: target.size, sizeClass: cls?.label ?? null, ...suggestLicence(target, all) }
 }
+
+// ---- Vertrieb: Score, Kontakt, Notizen, Aufgaben, Wochenmail ----
+
+/**
+ * Noch-nicht-Kunden mit Score: Wie wahrscheinlich kaufen sie, weil ihre Nachbarn schon dabei sind (Regeln in mocks/sales.js).
+ *   audience 'intern' | 'partner' (+ partnerId: nur das eigene Gebiet, ohne Hinweis auf andere Partner)
+ *   filters: { q (Name, PLZ-Anfang, Domain), state, heat ('hot' | 'warm' | 'cold'), partner (nur intern: 'none' | 'any' | Partner-ID),
+ *              contact ('phone' | 'address'), work ('new' | 'active' | 'tasks' | 'lost') }
+ *   sort: 'score' | 'name' | 'size' | 'state', dir, page, pageSize
+ * Rückgabe: { count, page, pages, page_size, heat: { hot, warm, cold } (ohne den Wärmefilter), results: [Zeile],
+ *             meta: { partner, states, partners: [{ id, name }] (nur intern) } }
+ * Zeile: key, name, segment, level, state, country, size, postcodes, lat, lng, score, heat, reasons: [Text],
+ *        address, phone, email, domain, partners (nur intern: Partner, in deren Gebiet das Ziel liegt),
+ *        notes (Anzahl), open_tasks, stage (Tags der letzten Notiz), last_note_at
+ */
+export async function fetchSalesPage({ audience, partnerId, filters = {}, sort = 'score', dir = -1, page = 1, pageSize = 50 }) {
+  if (!USE_MOCK) {
+    const f = filters
+    return getJson(`/sales/${audience}/list/`, {
+      partner: partnerId, q: f.q, state: f.state, heat: f.heat, area_partner: f.partner, contact: f.contact, work: f.work,
+      sort, dir: dir === 1 ? 'asc' : 'desc', page, page_size: pageSize,
+    })
+  }
+  await loadSales()
+  await new Promise((r) => setTimeout(r, 120))
+  return mockSalesPage({ audience, partnerId, filters, sort, dir, page, pageSize })
+}
+
+/**
+ * Karte zum Tab Vertrieb: die gefilterten Noch-nicht-Kunden (alle, nicht nur eine Seite) mit score und heat, dazu die Kunden
+ * im Ausschnitt als Bezug. Gleiche Filter wie fetchSalesPage. Rückgabe wie fetchTargets: { collection, meta }
+ */
+export async function fetchSalesMap({ audience, partnerId, filters = {} }) {
+  if (!USE_MOCK) return normalize(await getJson(`/sales/${audience}/map/`, { partner: partnerId, ...salesParams(filters) }))
+  await loadSales()
+  return normalize(mockSalesMap({ audience, partnerId, filters }))
+}
+
+/** Ein Ziel wie eine Zeile von fetchSalesPage, dazu Kunden in der Nähe (contributors), Notizen, Aufgaben und die Score-Regeln (rules) */
+export async function fetchSalesTarget(key, { audience, partnerId }) {
+  if (!USE_MOCK) return getJson(`/sales/${audience}/targets/${encodeURIComponent(key)}/`, { partner: partnerId })
+  await loadSales()
+  return mockSalesTarget(key, { audience, partnerId })
+}
+
+/** Neue Notiz (der Verlauf wird nur ergänzt, wie im Lizenz-Dashboard): { tags: [aus NOTE_TAGS], text } */
+export async function addSalesNote(key, { tags, text }, { audience, partnerId }) {
+  if (!USE_MOCK) return sendJson(`/sales/targets/${encodeURIComponent(key)}/notes/`, 'POST', { partner: partnerId, status_tags: tags, free_text: text })
+  if (!tags.length && !text.trim()) throw new Error('Bitte einen Stand wählen oder einen Text schreiben.')
+  return salesStore.add('notes', { key, ...author(audience, partnerId), tags: [...tags], text: text.trim() })
+}
+
+export async function deleteSalesNote(id, { audience, partnerId }) {
+  if (!USE_MOCK) return sendJson(`/sales/notes/${id}/`, 'DELETE')
+  salesStore.remove('notes', id, owner(audience, partnerId))
+}
+
+/**
+ * Adresse, Telefon, E-Mail korrigieren, wenn der Vertrieb etwas Neueres weiß. Gilt für alle (SpeechMind und Partner):
+ * Die Nummer des Rathauses ist für alle dieselbe. Leer = Feld leeren. Gibt die neuen Kontaktfelder zurück.
+ */
+export async function saveSalesContact(key, { address, phone, email }, { audience, partnerId }) {
+  if (!USE_MOCK) return sendJson(`/sales/targets/${encodeURIComponent(key)}/contact/`, 'PUT', { partner: partnerId, address, phone, email })
+  const clean = (v) => (v ?? '').trim() || null
+  const fields = { address: clean(address), phone: clean(phone), email: clean(email) }
+  if (fields.email && !/^[^@\s]+@[^@\s]+\.[a-z]{2,}$/i.test(fields.email)) throw new Error('Bitte eine gültige E-Mail-Adresse eingeben.')
+  const d = salesStore.load()
+  d.contacts[key] = { fields, author: author(audience, partnerId).author, at: new Date().toISOString() }
+  salesStore.save()
+  return contactOf(key)
+}
+
+/** Aufgabe anlegen (ohne id) oder ändern: { title, description, due (ISO-Datum), assignee } */
+export async function saveSalesTask(key, task, { audience, partnerId }) {
+  if (!USE_MOCK) return sendJson(task.id ? `/sales/tasks/${task.id}/` : `/sales/targets/${encodeURIComponent(key)}/tasks/`, task.id ? 'PUT' : 'POST', { partner: partnerId, ...task })
+  if (!task.title?.trim()) throw new Error('Bitte einen Titel angeben.')
+  const fields = { title: task.title.trim(), description: task.description?.trim() ?? '', due: task.due || null, assignee: task.assignee?.trim() ?? '' }
+  if (task.id) return salesStore.update('tasks', task.id, owner(audience, partnerId), fields)
+  return salesStore.add('tasks', { key, ...author(audience, partnerId), ...fields, status: 'open', snoozed_until: null, source: 'manual', done_at: null })
+}
+
+/** Erledigt, wieder offen oder zurückgestellt: { status: 'open' | 'done' } oder { snoozed_until: ISO-Datum | null } */
+export async function updateSalesTask(id, change, { audience, partnerId }) {
+  if (!USE_MOCK) return sendJson(`/sales/tasks/${id}/`, 'PATCH', change)
+  const extra = change.status === 'done' ? { done_at: new Date().toISOString() } : change.status === 'open' ? { done_at: null } : {}
+  return salesStore.update('tasks', id, owner(audience, partnerId), { ...change, ...extra })
+}
+
+/**
+ * Wochenmail mit den heißesten Zielen, wie sie montags rausgeht (backend: manage.py send_sales_digest).
+ * partnerId null = SpeechMind-Vertrieb (alle Ziele, mit Partnergebiet), sonst der Partner (nur sein Gebiet).
+ * Rückgabe: { to, week, subject, intro, items: [Zeile wie fetchSalesPage], hot_total, due_tasks, text }
+ */
+export async function fetchSalesDigest({ partnerId = null } = {}) {
+  if (!USE_MOCK) return getJson('/sales/digest/preview/', { partner: partnerId })
+  await loadSales()
+  return mockSalesDigest(partnerId)
+}
+
+const salesParams = (f) => ({ q: f.q, state: f.state, heat: f.heat, area_partner: f.partner, contact: f.contact, work: f.work })
 
 // ---- Vertriebspartner (Admin, nur SpeechMind intern) ----
 
@@ -336,11 +440,13 @@ function normalize(fc) {
 // ---- Mock-Backend: verhält sich wie backend/maps/views.py ----
 
 // Spiegel von backend/maps/audiences.py
-const FIELDS_FULL = ['customer_tenure', 'customer_since', 'size', 'licence', 'created_by', 'postcodes']
+// Partner sehen nicht, wer eine Organisation angelegt hat (created_by): Daran ließe sich ablesen, welcher andere
+// Partner im Gebiet betreut. Nur intern.
+const FIELDS_PARTNER = ['customer_tenure', 'customer_since', 'size', 'licence', 'postcodes']
 const AUDIENCES = {
   kunden: { scope: 'radius', includeProspects: false, namedOnly: true, fields: ['customer_tenure'], recentMin: 3 },
-  partner: { scope: 'territory', includeProspects: true, namedOnly: false, fields: FIELDS_FULL, recentMin: 1 },
-  intern: { scope: 'all', includeProspects: true, namedOnly: false, fields: FIELDS_FULL, recentMin: 1 },
+  partner: { scope: 'territory', includeProspects: true, namedOnly: false, fields: FIELDS_PARTNER, recentMin: 1 },
+  intern: { scope: 'all', includeProspects: true, namedOnly: false, fields: [...FIELDS_PARTNER, 'created_by'], recentMin: 1 },
 }
 
 // "Neu dabei": der erste Zeitraum mit mindestens recentMin Kunden, sonst leer
@@ -736,6 +842,232 @@ function mockLookupReferral(code) {
       lat: named ? me.lat : null,
       lng: named ? me.lng : null,
     },
+  }
+}
+
+// ---- Vertrieb (Mock): im Backend backend/maps/sales.py, SalesNote und SalesTask ----
+
+// Adresse, Telefon, E-Mail je Verwaltung aus OpenStreetMap (scripts/build_contacts.py). Groß, daher nachladen.
+let CONTACTS = null
+async function loadSales() {
+  await loadAreas() // auch intern: welcher Partner wo zuständig ist
+  await loadDomains()
+  CONTACTS ??= (await import('../mocks/contacts.json')).default
+}
+// Von Hand korrigiert (Vertrieb oder Partner) gewinnt vor OSM und bleibt beim nächsten Import erhalten
+function contactOf(key) {
+  const [address, phone, email] = CONTACTS?.[key] ?? []
+  const own = salesStore.load().contacts[key]
+  const osm = { address: address || null, phone: phone || null, email: email || null }
+  return own ? { ...osm, ...own.fields, contact_source: 'manual', contact_changed: { by: own.author, at: own.at } } : { ...osm, contact_source: address || phone || email ? 'osm' : null }
+}
+
+// Einmal je Seitenaufruf: Die Kundendaten ändern sich im Mock nicht. Im Backend nachts neu (siehe sales.py).
+let SCORES = null
+const salesScores = () => (SCORES ??= scoreTargets(mockAllTargets()))
+
+/**
+ * Notizen und Aufgaben, im Browser gespeichert (localStorage), damit sie das Neuladen überleben. Im Backend SalesNote
+ * und SalesTask mit Fremdschlüssel auf Target. partner_id = welcher Partner sie angelegt hat, null = SpeechMind.
+ * Partner sehen nur ihre eigenen, SpeechMind sieht alle.
+ */
+const SALES_STORE = 'speechmind-sales-v1'
+const salesStore = {
+  data: null,
+  load() {
+    if (this.data) return this.data
+    try { this.data = JSON.parse(localStorage.getItem(SALES_STORE)) } catch { /* privat oder gesperrt */ }
+    this.data ??= { seq: 0, notes: [], tasks: [] }
+    this.data.contacts ??= {} // Schlüssel → { fields: { address, phone, email }, author, at }
+    return this.data
+  },
+  save() {
+    try { localStorage.setItem(SALES_STORE, JSON.stringify(this.data)) } catch { /* nur Komfort: dann bis zum Neuladen */ }
+  },
+  add(kind, item) {
+    const d = this.load()
+    const row = { ...item, id: ++d.seq, created_at: new Date().toISOString() }
+    d[kind] = [row, ...d[kind]]
+    this.save()
+    return row
+  },
+  update(kind, id, who, change) {
+    const d = this.load()
+    const row = d[kind].find((x) => x.id === id)
+    if (!row || !mayEdit(row, who)) throw new Error('Diesen Eintrag gibt es nicht mehr.')
+    Object.assign(row, change)
+    this.save()
+    return row
+  },
+  remove(kind, id, who) {
+    const d = this.load()
+    d[kind] = d[kind].filter((x) => x.id !== id || !mayEdit(x, who))
+    this.save()
+  },
+}
+const owner = (audience, partnerId) => (audience === 'partner' ? Number(partnerId) : null)
+const mayEdit = (row, who) => who === null || row.partner_id === who // SpeechMind darf alles, Partner nur Eigenes
+function author(audience, partnerId) {
+  const id = owner(audience, partnerId)
+  return { partner_id: id, author: id ? partnerStore.find((p) => p.id === id)?.name ?? 'Partner' : 'SpeechMind' }
+}
+function salesItems(kind, key, audience, partnerId) {
+  const who = owner(audience, partnerId)
+  return salesStore.load()[kind].filter((x) => x.key === key && (who === null || x.partner_id === who))
+}
+
+const NO_INTEREST_MS = NO_INTEREST_DAYS * 86_400_000
+function salesRow(t, s, audience, partnerId, actives) {
+  const notes = salesItems('notes', t.key, audience, partnerId)
+  const tasks = salesItems('tasks', t.key, audience, partnerId)
+  const last = notes[0]
+  return {
+    key: t.key, name: t.name, segment: t.segment, level: t.level, state: t.state, country: t.country,
+    size: t.size, postcodes: t.postcodes, lat: t.lat, lng: t.lng,
+    score: s.score, heat: s.heat, reasons: s.reasons,
+    ...contactOf(t.key), domain: domainOf(t.key),
+    // Wo ein Partner zuständig ist, nur intern: Partner sehen andere Partner nicht
+    ...(audience === 'intern' ? { partners: actives.filter((p) => inPartnerArea(p, t)).map((p) => ({ id: p.id, name: p.name })) } : {}),
+    notes: notes.length,
+    open_tasks: tasks.filter((x) => x.status === 'open').length,
+    stage: last?.tags ?? [],
+    last_note_at: last?.created_at ?? null,
+    // "Kein Interesse" in der letzten Notiz, vor weniger als NO_INTEREST_DAYS: bleibt aus der Wochenmail
+    lost: Boolean(last?.tags.includes('Kein Interesse') && Date.now() - new Date(last.created_at).getTime() < NO_INTEREST_MS),
+  }
+}
+
+function salesScope(audience, partnerId) {
+  if (audience !== 'intern' && audience !== 'partner') throw new Error('Den Vertrieb gibt es nur intern und für Partner.')
+  const { rows, meta } = scoped(audience, partnerId)
+  const sc = salesScores()
+  const actives = partnerStore.filter((p) => p.active)
+  return {
+    all: rows,
+    meta,
+    rows: rows.filter((t) => sc.has(t.key)).map((t) => salesRow(t, sc.get(t.key), audience, partnerId, actives)),
+  }
+}
+
+function salesFilter(rows, f, { withHeat = true } = {}) {
+  const needle = (f.q ?? '').trim().toLowerCase()
+  const isPlz = /^\d+$/.test(needle)
+  return rows.filter((r) => {
+    if (needle && !(isPlz ? (r.postcodes ?? []).some((p) => p.startsWith(needle)) : r.name.toLowerCase().includes(needle) || r.domain?.includes(needle))) return false
+    if (f.state && r.state !== f.state) return false
+    if (withHeat && f.heat && r.heat !== f.heat) return false
+    if (f.partner === 'none' && r.partners?.length) return false
+    if (f.partner === 'any' && !r.partners?.length) return false
+    if (f.partner && !['none', 'any'].includes(f.partner) && !r.partners?.some((p) => String(p.id) === String(f.partner))) return false
+    if (f.contact === 'phone' && !r.phone) return false
+    if (f.contact === 'address' && !r.address) return false
+    if (f.work === 'new' && r.notes) return false
+    if (f.work === 'active' && (!r.notes || r.lost)) return false
+    if (f.work === 'tasks' && !r.open_tasks) return false
+    if (f.work === 'lost' && !r.lost) return false
+    return true
+  })
+}
+
+const SALES_SORT = { score: (r) => r.score, name: (r) => r.name, size: (r) => r.size ?? '', state: (r) => r.state ?? '' }
+
+function mockSalesPage({ audience, partnerId, filters: f, sort, dir, page, pageSize }) {
+  const { all, rows: scoped_, meta } = salesScope(audience, partnerId)
+  const base = salesFilter(scoped_, f, { withHeat: false })
+  const rows = (f.heat ? base.filter((r) => r.heat === f.heat) : base).sort((a, b) => {
+    const get = SALES_SORT[sort] ?? SALES_SORT.score
+    const va = get(a)
+    const vb = get(b)
+    const cmp = typeof va === 'number' && typeof vb === 'number' ? va - vb : String(va).localeCompare(String(vb), 'de')
+    return cmp * dir || b.score - a.score || a.name.localeCompare(b.name, 'de')
+  })
+  const pages = Math.max(1, Math.ceil(rows.length / pageSize))
+  const current = Math.min(Math.max(1, page), pages)
+  return {
+    count: rows.length,
+    page: current,
+    pages,
+    page_size: pageSize,
+    heat: Object.fromEntries(HEAT.map((h) => [h.key, base.filter((r) => r.heat === h.key).length])),
+    results: rows.slice((current - 1) * pageSize, current * pageSize),
+    meta: {
+      partner: meta.partner ?? null,
+      states: [...new Map(all.map((r) => [r.state, { name: r.state, country: r.country }])).values()]
+        .sort((a, b) => COUNTRY_ORDER.indexOf(a.country) - COUNTRY_ORDER.indexOf(b.country) || a.name.localeCompare(b.name, 'de')),
+      partners: audience === 'intern' ? partnerStore.filter((p) => p.active).map(({ id, name }) => ({ id, name })) : [],
+    },
+  }
+}
+
+function mockSalesMap({ audience, partnerId, filters }) {
+  const { all, rows, meta } = salesScope(audience, partnerId)
+  const hits = salesFilter(rows, filters)
+  const point = (t, properties) => ({ type: 'Feature', geometry: { type: 'Point', coordinates: [t.lng, t.lat] }, properties })
+  const base = (t) => ({ key: t.key, name: t.name, segment: t.segment, level: t.level, state: t.state, country: t.country, size: t.size })
+  // Kunden als Bezug, ohne Lizenzfarben (gelbes Schild): Die Karte erzählt hier nur "wer ist schon dabei"
+  const customers = all.filter((t) => t.is_customer).map((t) => point(t, {
+    ...base(t), status: 'customer', customer_tenure: tenureOf(t.customer_since), customer_since: t.customer_since,
+  }))
+  const prospects = hits.map((r) => point(r, { ...base(r), status: 'prospect', score: r.score, heat: r.heat }))
+  return {
+    type: 'FeatureCollection',
+    features: [...customers, ...prospects],
+    meta: { partner: meta.partner ?? null, territory: meta.territory ?? null, territories: meta.territories ?? null, prospect_count: prospects.length, customer_count: customers.length },
+  }
+}
+
+function mockSalesTarget(key, { audience, partnerId }) {
+  const { rows } = salesScope(audience, partnerId)
+  const row = rows.find((r) => r.key === key)
+  if (!row) throw new Error('Dieses Ziel ist nicht (mehr) in Ihrer Liste.')
+  return {
+    ...row,
+    contributors: salesScores().get(key).contributors,
+    rules: SALES_RULES,
+    notes: salesItems('notes', key, audience, partnerId),
+    tasks: salesItems('tasks', key, audience, partnerId)
+      .sort((a, b) => (a.status === 'done') - (b.status === 'done') || (a.due ?? '9999').localeCompare(b.due ?? '9999')),
+  }
+}
+
+const DIGEST_SIZE = 10
+function isoWeek(d = new Date()) {
+  const t = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()))
+  t.setUTCDate(t.getUTCDate() + 4 - (t.getUTCDay() || 7))
+  return Math.ceil(((t - Date.UTC(t.getUTCFullYear(), 0, 1)) / 86_400_000 + 1) / 7)
+}
+
+function mockSalesDigest(partnerId) {
+  const audience = partnerId ? 'partner' : 'intern'
+  const partner = partnerId ? partnerStore.find((p) => p.id === Number(partnerId)) : null
+  const { rows } = salesScope(audience, partnerId)
+  const items = rows.filter((r) => r.heat !== 'cold' && !r.lost).sort((a, b) => b.score - a.score).slice(0, DIGEST_SIZE)
+  const week = isoWeek()
+  const in7 = new Date(Date.now() + 7 * 86_400_000).toISOString().slice(0, 10)
+  const who = owner(audience, partnerId)
+  const due = salesStore.load().tasks.filter((x) => x.status === 'open' && x.due && x.due <= in7 && (who === null || x.partner_id === who))
+  const hot = rows.filter((r) => r.heat === 'hot' && !r.lost).length
+  const where = partner ? `in Ihrem Gebiet` : 'insgesamt'
+  const subject = `Vertrieb KW ${week}: die ${items.length} heißesten Ziele ${partner ? 'in Ihrem Gebiet' : ''}`.trim()
+  const intro = items.length
+    ? `${hot} Ziele ${where} sind gerade heiß: Ihre Nachbarn arbeiten schon mit SpeechMind. Hier die ${items.length} mit dem höchsten Score.`
+    : 'Diese Woche gibt es keine heißen oder warmen Ziele.'
+  const line = (r, i) => [
+    `${i + 1}. ${r.name} (${r.state}) · Score ${r.score}${r.partners?.length ? ` · Gebiet ${r.partners.map((p) => p.name).join(', ')}` : ''}`,
+    `   ${r.reasons.slice(0, 2).join('. ')}.`,
+    `   ${[r.phone, r.address].filter(Boolean).join(' · ') || 'Kontakt noch nicht hinterlegt'}`,
+  ].join('\n')
+  const text = [
+    partner ? `Hallo ${partner.contact.name || `Team ${partner.name}`},` : 'Hallo Vertrieb,', '',
+    intro, '',
+    ...items.map(line).flatMap((l) => [l, '']),
+    ...(due.length ? [`Fällige Aufgaben bis ${in7.split('-').reverse().join('.')}: ${due.length}`, ''] : []),
+    'Alle Ziele mit Begründung, Notizen und Aufgaben: Tab Vertrieb in der SpeechMind-Karte.',
+  ].join('\n')
+  return {
+    to: partner ? partner.contact.email || null : 'SpeechMind-Vertrieb (Verteiler)',
+    to_name: partner ? partner.name : 'SpeechMind intern',
+    week, subject, intro, items, hot_total: hot, due_tasks: due.length, text,
   }
 }
 
