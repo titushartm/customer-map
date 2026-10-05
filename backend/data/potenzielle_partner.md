@@ -1,6 +1,6 @@
 # Potenzielle Vertriebspartner (Deutschland)
 
-Recherche vom 02.10.2026, Segment Verwaltungen: kommunale IT-Dienstleister, die als Wiederverkäufer für SpeechMind in Frage kommen. Auf der Karte stehen sie in `frontend/src/mocks/prospects.js` (Showcase: graue Namen mit „?“).
+Recherche vom 02.10.2026, Segment Verwaltungen: kommunale IT-Dienstleister, die als Wiederverkäufer für SpeechMind in Frage kommen. Als Daten in `frontend/src/mocks/prospects.js`, auf keiner Karte mehr (aus dem Showcase entfernt am 05.10.2026).
 
 **Geprüft** heißt: gegen eigene Website, Satzung oder Beteiligungsbericht abgeglichen. **Ungeprüft** heißt: aus Vorwissen, vor dem Taggen oder Ansprechen prüfen.
 

@@ -1,6 +1,6 @@
 // Mögliche Vertriebspartner (Verwaltungen, Deutschland): kommunale IT-Dienstleister, Recherche vom 02.10.2026 in
 // backend/data/potenzielle_partner.md. Nur die, die als Wiederverkäufer in Frage kommen; GISA (bundesweit, ohne
-// kommunale Mitglieder), stadteigene IT und Landes-IT fehlen. Im Showcase grau mit „?“ an der Fläche home.
+// kommunale Mitglieder), stadteigene IT und Landes-IT fehlen. Nirgends angezeigt (aus dem Showcase entfernt am 05.10.2026); home: Hauptsitz.
 // areas: Kreise bzw. Länder, die sie bedienen (Schwerpunkt, Einzelgemeinden außerhalb fehlen). verified: an eigener
 // Website, Satzung oder Beteiligungsbericht geprüft; sonst aus Vorwissen, vor dem Taggen prüfen.
 export const PROSPECTS = []

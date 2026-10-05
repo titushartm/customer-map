@@ -36,9 +36,10 @@ const props = defineProps({
   area: { type: Object, default: null },
   areaAttribution: { type: String, default: '© GeoBasis-DE / BKG 2025' },
   /** Partnergebiete im Hintergrund (Showcase): Flächen mit properties.color, Linien als Umriss, Punkte mit properties.name und color als Beschriftung.
-   * properties.open: Fläche ohne Partner, schraffiert mit gestricheltem Rand; properties.scale verkleinert die Beschriftung;
-   * Punkte mit properties.tag: graues Ortsschild (mögliche Partner), nach dem Zeichnen neben die Cluster geschoben */
+   * properties.open: Fläche ohne Partner, schraffiert mit gestricheltem Rand; properties.scale verkleinert die Beschriftung */
   territories: { type: Object, default: null },
+  /** Zusätzlicher Rand in px beim Einpassen ({ top, right, bottom, left }), z. B. für eine Seitenleiste über der Karte (Showcase) */
+  fitInset: { type: Object, default: () => ({}) },
   /** Ortsnamen des Grundstils (Städte, Gemeinden, Ortsteile); Länder und Staaten bleiben */
   placeLabels: { type: Boolean, default: true },
   /** Einzelne Kunden als Ortsschild mit Namen; aus = nur ein Punkt (Showcase) */
@@ -128,7 +129,6 @@ function syncLabels() {
   for (const id of PLACE_LAYERS) if (map.getLayer(id)) map.setLayoutProperty(id, 'visibility', vis(props.placeLabels))
   for (const id of ['mm-signs', 'mm-signs-active', 'mm-new-halo']) map.setLayoutProperty(id, 'visibility', vis(props.signNames))
   for (const id of ['mm-sign-dots', 'mm-sign-one']) map.setLayoutProperty(id, 'visibility', vis(!props.signNames))
-  schedulePlaceTags()
 }
 
 // Staatsgrenzen kräftiger als im Grundstil (fiord: 56 % Deckkraft); andere Stile ohne diese Ebenen bleiben unverändert
@@ -181,7 +181,6 @@ function addLayers() {
   map.addSource('mm-user', { type: 'geojson', data: emptyFc() })
   map.addSource('mm-area', { type: 'geojson', data: areaFc(), attribution: props.areaAttribution })
   map.addSource('mm-territories', { type: 'geojson', data: territoryFc() })
-  map.addSource('mm-tags', { type: 'geojson', data: emptyFc() })
 
   // Partnergebiete (Showcase): getönte Fläche in der Partnerfarbe, Name groß am Punkt aus territories (Showcase: neben dem Gebiet). Die Namen blockieren
   // keine anderen Beschriftungen, Cluster und Schilder liegen darüber.
@@ -404,13 +403,6 @@ function addLayers() {
     paint: { 'text-color': ['match', ['coalesce', ['get', 'heat'], ''], ...heatKeys.flatMap((h) => [h.key, h.fill]), props.prospectFill] },
   })
 
-  // Mögliche Partner (Showcase): graues Ortsschild, neben die Cluster geschoben (placeTags), sonst darüber
-  map.addLayer({
-    id: 'mm-territory-tag', type: 'symbol', source: 'mm-tags',
-    layout: { ...signLayout('mm-sign-prospect', ['get', 'name']), 'text-size': 11, 'icon-allow-overlap': true, 'text-allow-overlap': true },
-    paint: { 'text-color': props.prospectInk },
-  })
-
   map.addLayer({
     id: 'mm-user',
     type: 'circle',
@@ -440,7 +432,6 @@ function bindEvents() {
     map.easeTo({ center: f.geometry.coordinates, zoom: zoom + 0.3 })
   })
   map.on('moveend', emitBounds)
-  map.on('moveend', schedulePlaceTags)
 }
 
 function emitBounds() {
@@ -451,7 +442,6 @@ function syncData() {
   if (!ready) return
   map.getSource(SRC).setData(props.data)
   if (props.fitOnData) fitToData()
-  schedulePlaceTags()
 }
 
 function syncArea() {
@@ -463,65 +453,10 @@ function syncArea() {
 function syncTerritories() {
   if (!ready) return
   map.getSource('mm-territories').setData(territoryFc())
-  schedulePlaceTags()
 }
 
-const isTag = (f) => f.geometry.type === 'Point' && f.properties.tag
 function territoryFc() {
-  return { type: 'FeatureCollection', features: (props.territories?.features ?? []).filter((f) => !isTag(f)) }
-}
-
-// Schilder der möglichen Partner neben die Cluster: Wo die Cluster liegen, steht erst nach dem Zeichnen fest (hängt
-// am Zoom). Daher nach jeder Bewegung, sobald die Karte fertig ist, in Bildschirmpunkten die nächste freie Stelle um
-// den Wunschpunkt suchen, frei von Clustern, Kundenpunkten, Partnernamen und den schon gesetzten Schildern.
-let placeQueued = false
-function schedulePlaceTags() {
-  if (!ready || placeQueued) return
-  placeQueued = true
-  map.once('idle', () => { placeQueued = false; placeTags() })
-}
-function placeTags() {
-  const tags = (props.territories?.features ?? []).filter(isTag)
-  const source = map.getSource('mm-tags')
-  if (!tags.length) return source.setData(emptyFc())
-  const big = props.clusterRatio
-  const radius = (f) => (f.properties.point_count == null ? (big ? 20 : 16)
-    : f.properties.point_count < 5 ? (big ? 20 : 16) : f.properties.point_count < 15 ? (big ? 23 : 20) : 27)
-  const layers = ['mm-clusters', 'mm-sign-dots'].filter((id) => map.getLayer(id))
-  const circles = map.queryRenderedFeatures({ layers }).map((f) => ({ ...map.project(f.geometry.coordinates), r: radius(f) + 4 }))
-  // Partnernamen als Boxen (Schrift wie in mm-territory-label; über 10 Zeichen bricht MapLibre am Leerzeichen um)
-  const z = map.getZoom()
-  const px = z <= 4 ? 15 : z <= 6 ? 15 + ((z - 4) * 7) / 2 : z <= 9 ? 22 + ((z - 6) * 12) / 3 : 34
-  const boxes = map.queryRenderedFeatures({ layers: ['mm-territory-label'] }).map((f) => {
-    const size = px * (f.properties.scale ?? 1)
-    const name = String(f.properties.name)
-    const lines = name.length > 10 ? name.split(' ') : [name]
-    const hw = (Math.max(...lines.map((l) => l.length)) * size * 0.78) / 2 + 4
-    const hh = (lines.length * size * 1.2) / 2 + 2
-    const { x, y } = map.project(f.geometry.coordinates)
-    return { x0: x - hw, x1: x + hw, y0: y - hh, y1: y + hh }
-  })
-  const hits = (b) => boxes.some((o) => b.x0 < o.x1 && b.x1 > o.x0 && b.y0 < o.y1 && b.y1 > o.y0)
-    || circles.some(({ x, y, r }) => Math.hypot(Math.max(b.x0 - x, 0, x - b.x1), Math.max(b.y0 - y, 0, y - b.y1)) < r)
-  const features = tags.map((f) => {
-    const p = map.project(f.geometry.coordinates)
-    const hw = (f.properties.name.length * 6.2 + 16) / 2 // Schild: ca. 6 px je Zeichen bei 11 px Schrift, plus Rand
-    const hh = 11
-    const boxAt = (x, y) => ({ x0: x - hw, x1: x + hw, y0: y - hh, y1: y + hh })
-    let best = boxAt(p.x, p.y)
-    search: for (let r = 0; r <= 160; r += 6) {
-      const steps = r ? Math.max(8, Math.round(r / 4)) : 1
-      for (let i = 0; i < steps; i++) {
-        const a = (i / steps) * 2 * Math.PI
-        const b = boxAt(p.x + r * Math.cos(a), p.y + r * Math.sin(a))
-        if (!hits(b)) { best = b; break search }
-      }
-    }
-    boxes.push(best)
-    const { lng, lat } = map.unproject([(best.x0 + best.x1) / 2, (best.y0 + best.y1) / 2])
-    return { ...f, geometry: { type: 'Point', coordinates: [lng, lat] } }
-  })
-  source.setData({ type: 'FeatureCollection', features })
+  return props.territories ?? emptyFc()
 }
 
 function territoryCoords() {
@@ -559,7 +494,8 @@ function fitToData({ duration = 900 } = {}) {
   const bounds = coords.reduce((b, c) => b.extend(c), new maplibregl.LngLatBounds(coords[0], coords[0]))
   // Kleine Karte braucht kleineren Rand, sonst bleibt vom Ausschnitt nichts übrig
   const { clientWidth: w, clientHeight: h } = map.getCanvas()
-  const padding = Math.max(16, Math.min(64, Math.min(w, h) * 0.12))
+  const base = Math.max(16, Math.min(64, Math.min(w, h) * 0.12))
+  const padding = Object.fromEntries(['top', 'right', 'bottom', 'left'].map((k) => [k, base + (props.fitInset[k] ?? 0)]))
   map.fitBounds(bounds, { padding, maxZoom: 11, duration })
 }
 
@@ -611,11 +547,18 @@ watch(() => [props.placeLabels, props.signNames], syncLabels)
 watch(() => [props.hoveredId, props.selectedId], syncHighlight)
 watch(() => props.selectedId, syncPopup)
 
-function flyTo({ lng, lat, zoom = 10 }) {
-  map?.easeTo({ center: [lng, lat], zoom: Math.max(map.getZoom(), zoom) })
+function flyTo({ lng, lat, zoom = 10, duration }) {
+  map?.easeTo({ center: [lng, lat], zoom: Math.max(map.getZoom(), zoom), ...(duration != null ? { duration } : {}) })
 }
 
-defineExpose({ fitToData, flyTo, resize: () => map?.resize() })
+/** Eigenes HTML-Element an einem Punkt (Showcase: Puls beim neuen Kunden); gibt die Funktion zum Entfernen zurück */
+function addMarker(element, [lng, lat]) {
+  if (!map) return () => {}
+  const marker = new maplibregl.Marker({ element }).setLngLat([lng, lat]).addTo(map)
+  return () => marker.remove()
+}
+
+defineExpose({ fitToData, flyTo, addMarker, resize: () => map?.resize() })
 
 function point(lng, lat) {
   return { type: 'Feature', geometry: { type: 'Point', coordinates: [lng, lat] }, properties: {} }
