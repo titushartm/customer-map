@@ -13,6 +13,7 @@ Sichtbarkeit: intern (is_staff) alles, mit Partnergebiet je Ziel. Partner nur ih
 Hinweis auf andere Partner, und nur ihre eigenen Notizen und Aufgaben. Kontaktdaten gelten für alle.
 
     GET    /api/sales/<audience>/list/          Seite der Tabelle (Filter wie fetchSalesPage)
+    GET    /api/sales/<audience>/export/        alle Zeilen zu den Filtern, für den CSV-Export
     GET    /api/sales/<audience>/map/           alle gefilterten Ziele als GeoJSON, dazu die Kunden
     GET    /api/sales/<audience>/targets/<key>/ ein Ziel mit Notizen, Aufgaben, Kunden in der Nähe
     POST   /api/sales/targets/<key>/notes/      Notiz anhängen
@@ -50,6 +51,7 @@ from django.utils import timezone
 from django.views.decorators.http import require_GET, require_http_methods
 
 from .audiences import AUDIENCES, customer_tenure
+from .licence import LicenceIndex
 from .models import RegionLevel, SalesNote, SalesPartner, SalesTask, SalesTaskStatus, Target
 from .views import ArrayToString, _licence, _partner_id, _properties
 
@@ -187,12 +189,13 @@ def _partner_areas():
     return out
 
 
-def _row(t, partner, areas, notes, tasks, cutoff):
+def _row(t, partner, areas, notes, tasks, cutoff, licences):
     last = notes[0] if notes else None
     fields = AUDIENCES["partner" if partner else "intern"]["fields"]
     row = {
         **_properties(t, fields), "lat": round(t.location.y, 5), "lng": round(t.location.x, 5),
         "score": t.sales_score, "heat": heat_of(t.sales_score), "reasons": t.sales_reasons,
+        "licence": licences.for_target(t),  # wie der Empfehlungsdialog: { tier, seats, sets, basis, similarCount }
         "address": t.address or None, "phone": t.phone or None, "email": t.contact_email or None,
         "domain": ", ".join(t.email_domains) or None, "contact_source": t.contact_source or None,
         "notes": len(notes), "open_tasks": sum(x.status == SalesTaskStatus.OPEN for x in tasks),
@@ -258,7 +261,8 @@ def _rows(objs, partner):
         tasks[x.target_id].append(x)
     areas = _partner_areas() if partner is None else []
     cutoff = timezone.now() - timedelta(days=NO_INTEREST_DAYS)
-    return [_row(t, partner, areas, notes[t.pk], tasks[t.pk], cutoff) for t in objs]
+    licences = LicenceIndex()
+    return [_row(t, partner, areas, notes[t.pk], tasks[t.pk], cutoff, licences) for t in objs]
 
 
 # ---- Endpoints ----
@@ -266,14 +270,19 @@ def _rows(objs, partner):
 SORT = {"score": "sales_score", "name": "name", "size": "size", "state": "region__state__name"}
 
 
+def _ordered(request, base):
+    """Wärmefilter und Sortierung aus der Anfrage, für Liste und Export"""
+    qs = base.filter(_heat_q(request.GET["heat"])) if request.GET.get("heat") in dict(HEAT) else base
+    field = F(SORT.get(request.GET.get("sort"), "sales_score"))
+    return qs.order_by(field.asc(nulls_last=True) if request.GET.get("dir") == "asc" else field.desc(nulls_last=True), "-sales_score", "name")
+
+
 @require_GET
 def sales_list(request, audience):
     partner, scope = _viewer(request, audience)
     base = _filtered(request, scope, partner)
     heat_counts = {h: base.filter(_heat_q(h)).count() for h, _ in HEAT}
-    qs = base.filter(_heat_q(request.GET["heat"])) if request.GET.get("heat") in dict(HEAT) else base
-    field = F(SORT.get(request.GET.get("sort"), "sales_score"))
-    qs = qs.order_by(field.asc(nulls_last=True) if request.GET.get("dir") == "asc" else field.desc(nulls_last=True), "-sales_score", "name")
+    qs = _ordered(request, base)
     size = int(request.GET.get("page_size", 50)) if request.GET.get("page_size", "50").isdigit() else 50
     paginator = Paginator(qs.select_related("region__state", "organization"), size if size in PAGE_SIZES else 50)
     page = paginator.get_page(request.GET.get("page", 1))
@@ -287,6 +296,15 @@ def sales_list(request, audience):
             "partners": [] if partner else [{"id": p.id, "name": p.name} for p in SalesPartner.objects.filter(active=True)],
         },
     })
+
+
+@require_GET
+def sales_export(request, audience):
+    """Alle Zeilen zu den Filtern (nicht nur eine Seite), sortiert wie die Liste. Das CSV baut das Frontend (lib/sales.js)."""
+    partner, scope = _viewer(request, audience)
+    qs = _ordered(request, _filtered(request, scope, partner)).select_related("region__state", "organization")
+    rows = _rows(list(qs), partner)
+    return JsonResponse({"count": len(rows), "results": rows})
 
 
 @require_GET

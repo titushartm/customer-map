@@ -33,8 +33,10 @@ const PANEL_WIDTH = 320 // Seitenleiste rechts, beim Einpassen der Karte frei la
 
 const map = ref(null)
 const targets = shallowRef([])
-const partners = ref([])
-const areas = ref([])
+// shallowRef: Gebietsflächen bleiben einfache Arrays. Mit ref liefe jede Koordinate in labelPoint durch einen Proxy, und
+// die Namensplätze zu rechnen hielt die Seite minutenlang an. Beide werden nur als Ganzes ersetzt.
+const partners = shallowRef([])
+const areas = shallowRef([])
 const withFree = ref(false)
 const withTitle = ref(true)
 const withPlaces = ref(false) // Städtenamen der Grundkarte

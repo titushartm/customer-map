@@ -66,6 +66,16 @@ export function suggestLicence(target, all) {
 }
 
 /**
+ * Lizenz für Liste und CSV im Tab Vertrieb: dieselbe wie im Empfehlungsdialog (recommend), aber ohne Namen der Vergleichskunden.
+ * customers: Kunden mit bekannter Platzzahl. Ohne Größe keine Empfehlung (null).
+ */
+export function salesLicence(target, customers) {
+  if (!target.size) return null
+  const l = licenceFor(target, customers, { minSimilar: 2 })
+  return { tier: l.tier, seats: l.seats, sets: l.sets, basis: l.basis, similarCount: l.basis === 'similar' ? l.similar.length : 0 }
+}
+
+/**
  * @param {object} target   Eintrag aus mockAllTargets()
  * @param {object[]} all    alle Ziele mit Kundenstatus
  * @param {object} opts     withDate: Startdatum mitschicken (Zielgruppe partner/intern)

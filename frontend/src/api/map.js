@@ -7,7 +7,7 @@ import { SEGMENTS, SEGMENT_KEYS } from '../lib/segments.js'
 import { sizeClassOf, SIZE_CLASSES } from '../lib/sizeClasses.js'
 import { haversineKm } from '../lib/geo.js'
 import { tenureOf, tenureRank, tenureText } from '../lib/tenure.js'
-import { recommend, suggestLicence } from '../mocks/recommendations.js'
+import { recommend, suggestLicence, salesLicence } from '../mocks/recommendations.js'
 import { scoreTargets, SALES_RULES } from '../mocks/sales.js'
 import { HEAT, NO_INTEREST_DAYS } from '../lib/sales.js'
 
@@ -119,7 +119,7 @@ export async function fetchLicenceSuggestion({ segment, key, size }) {
  * Rückgabe: { count, page, pages, page_size, heat: { hot, warm, cold } (ohne den Wärmefilter), results: [Zeile],
  *             meta: { partner, states, partners: [{ id, name }] (nur intern) } }
  * Zeile: key, name, segment, level, state, country, size, postcodes, lat, lng, score, heat, reasons: [Text],
- *        address, phone, email, domain, partners (nur intern: Partner, in deren Gebiet das Ziel liegt),
+ *        licence (Empfehlung wie im Empfehlungsdialog: { tier, seats, sets, basis: 'similar' | 'rule', similarCount } oder null), address, phone, email, domain, partners (nur intern: Partner, in deren Gebiet das Ziel liegt),
  *        notes (Anzahl), open_tasks, stage (Tags der letzten Notiz), last_note_at
  */
 export async function fetchSalesPage({ audience, partnerId, filters = {}, sort = 'score', dir = -1, page = 1, pageSize = 50 }) {
@@ -133,6 +133,19 @@ export async function fetchSalesPage({ audience, partnerId, filters = {}, sort =
   await loadSales()
   await new Promise((r) => setTimeout(r, 120))
   return mockSalesPage({ audience, partnerId, filters, sort, dir, page, pageSize })
+}
+
+/**
+ * Alle Zeilen zu den Filtern, nicht nur eine Seite, sortiert wie die Liste: für den CSV-Export (lib/sales.js salesCsv).
+ * Rückgabe: { count, results: [Zeile wie fetchSalesPage] }
+ */
+export async function fetchSalesExport({ audience, partnerId, filters = {}, sort = 'score', dir = -1 }) {
+  if (!USE_MOCK) {
+    return getJson(`/sales/${audience}/export/`, { partner: partnerId, ...salesParams(filters), sort, dir: dir === 1 ? 'asc' : 'desc' })
+  }
+  await loadSales()
+  const { rows } = salesQuery({ audience, partnerId, filters, sort, dir })
+  return { count: rows.length, results: rows }
 }
 
 /**
@@ -1006,6 +1019,15 @@ function salesItems(kind, key, audience, partnerId) {
   return salesStore.load()[kind].filter((x) => x.key === key && (who === null || x.partner_id === who))
 }
 
+// Lizenzempfehlung je Ziel wie im Empfehlungsdialog. Platzzahlen kennen nur die Kunden aus dem Export (MOCK_CUSTOMERS),
+// von Hand markierte haben keine: Der Cache bleibt auch nach markCustomer gültig.
+let LICENCES = null
+function licenceOf(t) {
+  LICENCES ??= { customers: mockAllTargets().filter((x) => x.is_customer && x.seats), byKey: new Map() }
+  if (!LICENCES.byKey.has(t.key)) LICENCES.byKey.set(t.key, salesLicence(t, LICENCES.customers))
+  return LICENCES.byKey.get(t.key)
+}
+
 const NO_INTEREST_MS = NO_INTEREST_DAYS * 86_400_000
 function salesRow(t, s, audience, partnerId, actives) {
   const notes = salesItems('notes', t.key, audience, partnerId)
@@ -1014,7 +1036,7 @@ function salesRow(t, s, audience, partnerId, actives) {
   return {
     key: t.key, name: t.name, segment: t.segment, level: t.level, state: t.state, country: t.country,
     size: t.size, postcodes: t.postcodes, lat: t.lat, lng: t.lng,
-    score: s.score, heat: s.heat, reasons: s.reasons,
+    score: s.score, heat: s.heat, reasons: s.reasons, licence: licenceOf(t),
     ...contactOf(t.key), domain: domainOf(t.key),
     // Wo ein Partner zuständig ist, nur intern: Partner sehen andere Partner nicht
     ...(audience === 'intern' ? { partners: actives.filter((p) => inPartnerArea(p, t)).map((p) => ({ id: p.id, name: p.name })) } : {}),
@@ -1061,7 +1083,8 @@ function salesFilter(rows, f, { withHeat = true } = {}) {
 
 const SALES_SORT = { score: (r) => r.score, name: (r) => r.name, size: (r) => r.size ?? '', state: (r) => r.state ?? '' }
 
-function mockSalesPage({ audience, partnerId, filters: f, sort, dir, page, pageSize }) {
+/** Gefiltert (base: ohne Wärmefilter, für die Zahlen je Stufe) und sortiert (rows), für Seite und Export */
+function salesQuery({ audience, partnerId, filters: f, sort, dir }) {
   const { all, rows: scoped_, meta } = salesScope(audience, partnerId)
   const base = salesFilter(scoped_, f, { withHeat: false })
   const rows = (f.heat ? base.filter((r) => r.heat === f.heat) : base).sort((a, b) => {
@@ -1071,6 +1094,11 @@ function mockSalesPage({ audience, partnerId, filters: f, sort, dir, page, pageS
     const cmp = typeof va === 'number' && typeof vb === 'number' ? va - vb : String(va).localeCompare(String(vb), 'de')
     return cmp * dir || b.score - a.score || a.name.localeCompare(b.name, 'de')
   })
+  return { all, meta, base, rows }
+}
+
+function mockSalesPage({ audience, partnerId, filters: f, sort, dir, page, pageSize }) {
+  const { all, meta, base, rows } = salesQuery({ audience, partnerId, filters: f, sort, dir })
   const pages = Math.max(1, Math.ceil(rows.length / pageSize))
   const current = Math.min(Math.max(1, page), pages)
   return {

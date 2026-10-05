@@ -52,8 +52,13 @@ function showPartner(id) {
   select('partner')
 }
 const openKey = ref(null)
-// Kundenstatus im Empfehlungsdialog von Hand geändert: Listen und Karten neu laden
+// Kundenstatus von Hand geändert (Empfehlungsdialog oder Detail im Vertrieb): Listen und Karten neu laden, dazu die
+// Kundenzahlen je Partnergebiet (Admin). Ohne partnersVersion, sonst verlöre der Vertrieb Filter und Seite.
 const dataVersion = ref(0)
+async function onCustomersChanged() {
+  dataVersion.value++
+  partners.value = await fetchPartners()
+}
 // Nur ausgefüllte Kontaktfelder, sonst steht "Ansprechpartner , ," da
 const contactLine = computed(() => {
   const c = currentPartner.value?.contact ?? {}
@@ -250,6 +255,7 @@ function onTabKey(e, i) {
           :partner-id="partnerId"
           :version="dataVersion"
           @recommend="openKey = $event"
+          @customer-changed="onCustomersChanged"
         />
         <MunicipalityExplorer
           v-else
@@ -277,6 +283,7 @@ function onTabKey(e, i) {
         :partners="partners"
         :version="dataVersion"
         @recommend="openKey = $event"
+        @customer-changed="onCustomersChanged"
       />
     </main>
 
@@ -317,7 +324,7 @@ function onTabKey(e, i) {
       :audience="dialogAudience"
       :partner-id="dialogPartnerId"
       @close="openKey = null"
-      @changed="dataVersion++"
+      @changed="onCustomersChanged"
     />
 
     <footer>© SpeechMind · Prototyp mit Mock-Daten</footer>

@@ -18,6 +18,7 @@ urlpatterns = [
     path("geo/states/", views.states, name="states"),
     # Tab Vertrieb: intern (is_staff) und Partner (nur ihr Gebiet)
     path("sales/<slug:audience>/list/", sales.sales_list, name="sales-list"),
+    path("sales/<slug:audience>/export/", sales.sales_export, name="sales-export"),
     path("sales/<slug:audience>/map/", sales.sales_map, name="sales-map"),
     path("sales/<slug:audience>/targets/<slug:key>/", sales.sales_target, name="sales-target"),
     path("sales/targets/<slug:key>/notes/", sales.add_note, name="sales-notes"),

@@ -5,7 +5,7 @@ import {
 } from '../../api/map.js'
 import { kindLabel, sizeText } from '../../lib/segments.js'
 import { tenureText } from '../../lib/tenure.js'
-import { HEAT_BY_KEY, NOTE_TAGS } from '../../lib/sales.js'
+import { HEAT_BY_KEY, NOTE_TAGS, licenceText, licenceBasis } from '../../lib/sales.js'
 import CustomerMark from './CustomerMark.vue'
 
 // Seitenleiste zu einem Ziel im Tab Vertrieb: warum es heiß ist, Kontakt (korrigierbar), Notizen und Aufgaben wie im
@@ -15,7 +15,7 @@ const props = defineProps({
   audience: { type: String, default: 'intern' },
   partnerId: { type: [Number, String], default: null },
 })
-const emit = defineEmits(['close', 'changed', 'recommend'])
+const emit = defineEmits(['close', 'changed', 'recommend', 'customer-changed'])
 
 const dialog = ref(null)
 const data = ref(null)
@@ -95,9 +95,10 @@ const dateFmt = new Intl.DateTimeFormat('de-DE', { day: '2-digit', month: '2-dig
 const dateTimeFmt = new Intl.DateTimeFormat('de-DE', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })
 const isoDate = (iso) => dateFmt.format(new Date(`${iso}T12:00:00`))
 const telHref = (phone) => `tel:${phone.replace(/[^\d+]/g, '')}`
-// Als Kunde markiert: Das Ziel hat keinen Score mehr und fällt aus der Liste
+// Als Kunde markiert: Das Ziel hat keinen Score mehr und fällt aus der Liste. Die App lädt dann alles neu (version),
+// auch Karten und die Kundenzahlen je Partnergebiet
 function onMarked() {
-  emit('changed')
+  emit('customer-changed')
   dialog.value.close()
 }
 const heat = computed(() => (data.value ? HEAT_BY_KEY[data.value.heat] : null))
@@ -144,6 +145,12 @@ const firstDomain = computed(() => data.value?.domain?.split(',')[0].trim() ?? n
             Score aus den Kunden im Umkreis von {{ data.rules.radiusKm }} km: näher zählt mehr, neue Kunden ×{{ data.rules.newFactor }},
             lange dabei ×{{ data.rules.longFactor }}, selber Kreis ×{{ data.rules.sameParentFactor }}.
           </p>
+        </section>
+
+        <section v-if="data.licence" class="sd-card">
+          <h3>Empfehlung</h3>
+          <p>{{ licenceText(data.licence) }}</p>
+          <p class="sd-muted sd-small">{{ licenceBasis(data.licence) }}. Vergleichskunden, E-Mail-Entwurf und One-Pager unter „Empfehlung &amp; E-Mail“.</p>
         </section>
 
         <section class="sd-card">

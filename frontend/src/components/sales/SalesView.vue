@@ -1,9 +1,9 @@
 <script setup>
 import { ref, shallowRef, computed, watch, onMounted, defineAsyncComponent } from 'vue'
-import { fetchSalesPage, recalcSales } from '../../api/map.js'
+import { fetchSalesPage, fetchSalesExport, recalcSales } from '../../api/map.js'
 import { kindLabel, sizeText } from '../../lib/segments.js'
 import { COUNTRIES, COUNTRY_CODES } from '../../lib/countries.js'
-import { HEAT, HEAT_BY_KEY } from '../../lib/sales.js'
+import { HEAT, HEAT_BY_KEY, salesCsv, licenceBasis } from '../../lib/sales.js'
 import SalesDetail from './SalesDetail.vue'
 import WeeklyDigest from './WeeklyDigest.vue'
 
@@ -19,7 +19,7 @@ const props = defineProps({
   /** Hochzählen, wenn sich außerhalb Daten geändert haben (Kundenstatus im Empfehlungsdialog) */
   version: { type: Number, default: 0 },
 })
-const emit = defineEmits(['recommend'])
+const emit = defineEmits(['recommend', 'customer-changed'])
 
 const PAGE_SIZES = [25, 50, 100]
 
@@ -110,6 +110,28 @@ async function recalc() {
     recalcBusy.value = false
   }
 }
+// CSV: alle Ziele zu den Filtern (nicht nur die Seite), sortiert wie die Liste, mit Begründung und Empfehlung
+const exportBusy = ref(false)
+async function exportCsv() {
+  exportBusy.value = true
+  try {
+    const res = await fetchSalesExport({
+      audience: props.audience, partnerId: props.partnerId, filters: filters.value, sort: sortKey.value, dir: sortDir.value,
+    })
+    const blob = new Blob([salesCsv(res.results, { intern: isIntern.value })], { type: 'text/csv;charset=utf-8' })
+    const a = document.createElement('a')
+    a.href = URL.createObjectURL(blob)
+    const stage = heat.value ? HEAT_BY_KEY[heat.value].label.toLowerCase() : 'alle'
+    a.download = `vertrieb-${stage}-${new Date().toISOString().slice(0, 10)}.csv`
+    a.click()
+    setTimeout(() => URL.revokeObjectURL(a.href), 1000)
+  } catch (e) {
+    loadError.value = e.message
+  } finally {
+    exportBusy.value = false
+  }
+}
+
 const timeFmt = new Intl.DateTimeFormat('de-DE', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })
 
 function sortBy(key) {
@@ -222,6 +244,9 @@ const telHref = (phone) => `tel:${phone.replace(/[^\d+]/g, '')}`
           <button type="button" :aria-pressed="view === 'liste'" @click="view = 'liste'">Liste</button>
           <button type="button" :aria-pressed="view === 'karte'" @click="view = 'karte'">Karte</button>
         </div>
+        <button type="button" class="sv-reset" :disabled="exportBusy || !result.count" @click="exportCsv">
+          {{ exportBusy ? 'Exportiert …' : `CSV exportieren (${numFmt.format(result.count)})` }}
+        </button>
         <button type="button" class="sv-btn" @click="digestOpen = true">Wochenmail ansehen</button>
       </div>
     </div>
@@ -247,6 +272,7 @@ const telHref = (phone) => `tel:${phone.replace(/[^\d+]/g, '')}`
               <th scope="col" class="num" :aria-sort="ariaSort('score')"><button type="button" @click="sortBy('score')">Score</button></th>
               <th scope="col" :aria-sort="ariaSort('name')"><button type="button" @click="sortBy('name')">Name</button></th>
               <th scope="col">Begründung</th>
+              <th scope="col">Empfehlung</th>
               <th scope="col">Adresse</th>
               <th scope="col">Telefon</th>
               <th v-if="isIntern" scope="col">Partnergebiet</th>
@@ -277,6 +303,13 @@ const telHref = (phone) => `tel:${phone.replace(/[^\d+]/g, '')}`
                 <span>{{ r.reasons[0] }}</span>
                 <span v-if="r.reasons[1]" class="sv-sub">{{ r.reasons[1] }}<template v-if="r.reasons.length > 2"> · +{{ r.reasons.length - 2 }}</template></span>
               </td>
+              <td class="sv-licence">
+                <template v-if="r.licence">
+                  <span><strong>{{ r.licence.tier }}</strong> · {{ r.licence.seats }} Plätze</span>
+                  <span class="sv-sub" :title="licenceBasis(r.licence)">{{ r.licence.sets }}× Aufnahmeset · {{ r.licence.basis === 'similar' ? 'wie ähnliche Kunden' : 'Faustregel' }}</span>
+                </template>
+                <span v-else class="sv-muted">–</span>
+              </td>
               <td :class="{ 'sv-muted': !r.address }">{{ r.address ?? '–' }}</td>
               <td class="sv-phone">
                 <a v-if="r.phone" :href="telHref(r.phone)" @click.stop>{{ r.phone }}</a>
@@ -291,7 +324,7 @@ const telHref = (phone) => `tel:${phone.replace(/[^\d+]/g, '')}`
               </td>
             </tr>
             <tr v-if="!loading && !rows.length" class="sv-empty">
-              <td :colspan="isIntern ? 7 : 6">Nichts passt zu diesen Filtern.</td>
+              <td :colspan="isIntern ? 8 : 7">Nichts passt zu diesen Filtern.</td>
             </tr>
           </tbody>
         </table>
@@ -323,6 +356,7 @@ const telHref = (phone) => `tel:${phone.replace(/[^\d+]/g, '')}`
       @close="openKey = null"
       @changed="reload"
       @recommend="emit('recommend', $event)"
+      @customer-changed="emit('customer-changed')"
     />
     <WeeklyDigest
       v-if="digestOpen"
@@ -361,7 +395,8 @@ const telHref = (phone) => `tel:${phone.replace(/[^\d+]/g, '')}`
   font: inherit; padding: 6px 12px; border-radius: 4px; cursor: pointer; white-space: nowrap;
   border: 1px solid var(--page-line); background: var(--page-surface); color: var(--page-text);
 }
-.sv-reset:hover { border-color: var(--page-accent); }
+.sv-reset:hover:not(:disabled) { border-color: var(--page-accent); }
+.sv-reset:disabled { opacity: 0.5; cursor: default; }
 .sv-btn { font-weight: 600; border: 1.5px solid #000; background: var(--page-accent); color: #000; }
 .sv-reset:focus-visible, .sv-btn:focus-visible { outline: 2px solid var(--page-accent); outline-offset: 2px; }
 .sv-error { color: #FFB4A8; }
@@ -400,6 +435,8 @@ const telHref = (phone) => `tel:${phone.replace(/[^\d+]/g, '')}`
 .sv-reason { min-width: 280px; max-width: 460px; line-height: 1.35; }
 .sv-sub { color: var(--page-muted); font-size: 0.88em; }
 .sv-muted { color: var(--page-muted); }
+.sv-licence { min-width: 150px; white-space: nowrap; }
+.sv-licence span { display: block; }
 .sv-phone { white-space: nowrap; font-variant-numeric: tabular-nums; }
 .sv-phone a { color: var(--page-text); text-decoration-color: var(--page-line); }
 .sv-phone a:hover { color: var(--page-accent); }
