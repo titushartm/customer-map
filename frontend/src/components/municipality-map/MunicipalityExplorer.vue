@@ -96,7 +96,7 @@ const isPage = computed(() => props.variant === 'page')
 
 const {
   location, place, source, status, error, postcode, canUseBrowser,
-  locateByIp, useBrowserLocation, usePostcode, usePlace,
+  locateByIp, useBrowserLocation, usePlace,
 } = useUserLocation()
 
 const collection = shallowRef({ type: 'FeatureCollection', features: [] })
@@ -349,9 +349,6 @@ const contextLine = computed(() => {
   return `Rund um ${where}`
 })
 
-// PLZ der Nachbarschaft, vom Backend zum Standort geliefert
-const surroundingPlz = computed(() => (isRadius.value ? (place.value?.surrounding_plz ?? []).slice(0, 12) : []))
-
 // Liste folgt dem Kartenausschnitt
 const visible = computed(() => {
   const list = shown.value.features
@@ -422,8 +419,9 @@ function itemMeta(p) {
 </script>
 
 <template>
-  <!-- Groß wird die Teaser-Karte zum Overlay am Body: so kann kein Layout der Seite sie beschneiden. -->
+  <!-- Groß wird die Teaser-Karte zum Popup am Body: so kann kein Layout der Seite sie beschneiden. -->
   <Teleport to="body" :disabled="isPage || !expanded">
+    <div v-if="expanded && !isPage" class="mm-backdrop" aria-hidden="true" @click="expanded = false" />
     <section
       class="mm"
       :class="[isPage ? 'is-page' : expanded ? 'is-expanded' : 'is-compact', `is-${audience}`]"
@@ -494,21 +492,13 @@ function itemMeta(p) {
           </ul>
           <p v-if="!isRadius && hasFree" class="mm-legend-note">Kostenlose zählen nicht als Kunde, auch nicht in den Clustern.</p>
 
-          <div v-if="surroundingPlz.length" class="mm-plz-cloud">
-            <p class="mm-plz-cloud-label">Postleitzahlen in Ihrer Umgebung</p>
-            <ul>
-              <li v-for="plz in surroundingPlz" :key="plz">
-                <button type="button" :class="{ 'is-active': plz === postcode }" @click="usePostcode(plz)">{{ plz }}</button>
-              </li>
-            </ul>
-          </div>
-
           <RecentCustomers :recent="recent" :words="words" @select="focusRecent" />
 
           <p v-if="error || loadError" class="mm-error" role="alert">{{ error || loadError }}</p>
         </header>
 
-        <ol v-if="visible.length" class="mm-list">
+        <!-- Kunden-Karte ohne Liste: die Schilder auf der Karte reichen -->
+        <ol v-if="!isRadius && visible.length" class="mm-list">
           <li v-for="f in visibleItems" :key="f.properties.key">
             <button
               type="button"
@@ -530,7 +520,7 @@ function itemMeta(p) {
           </li>
           <li v-if="moreVisible" ref="listSentinel" class="mm-more" aria-hidden="true">Weitere werden geladen …</li>
         </ol>
-        <p v-else-if="ready && !loading && shown.features.length" class="mm-empty">{{ text.emptyArea }}</p>
+        <p v-else-if="!isRadius && ready && !loading && shown.features.length" class="mm-empty">{{ text.emptyArea }}</p>
       </aside>
 
       <div class="mm-map-area">
@@ -622,14 +612,30 @@ function itemMeta(p) {
   overflow: hidden;
 }
 
-/* Groß: Overlay über der ganzen Seite, links die Daten. */
+/* Groß: Popup mittig über der Seite (nicht Vollbild), links die Daten. */
+.mm-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 999;
+  background: rgb(4 12 16 / 0.6);
+}
 .mm.is-expanded {
   position: fixed;
   inset: 0;
+  margin: auto;
   z-index: 1000;
+  width: min(1240px, calc(100vw - 64px));
+  height: min(820px, calc(100dvh - 64px));
   display: grid;
-  grid-template-columns: minmax(320px, 400px) 1fr;
+  grid-template-columns: minmax(320px, 380px) 1fr;
+  border: 1px solid var(--mm-line);
+  border-radius: 10px;
+  overflow: hidden;
+  box-shadow: 0 24px 64px rgb(0 0 0 / 0.5);
 }
+/* Im Popup ist weniger Höhe: das ganze Panel scrollt, damit der Kopf die Liste nicht verdrängt */
+.mm.is-expanded .mm-panel { overflow-y: auto; }
+.mm.is-expanded .mm-list { flex: none; overflow: visible; }
 
 .mm-panel {
   display: flex;
@@ -639,6 +645,7 @@ function itemMeta(p) {
 }
 
 .mm-head { padding: 24px 24px 20px; border-bottom: 1px solid var(--mm-line); }
+.mm.is-kunden .mm-head { border-bottom: 0; }
 .mm-context { margin: 0 0 8px; color: var(--mm-muted); font-size: 0.95rem; }
 .mm-territory { margin: -4px 0 10px; font-size: 0.88rem; color: var(--mm-muted); }
 .mm-territory summary { cursor: pointer; width: fit-content; }
@@ -715,24 +722,6 @@ function itemMeta(p) {
   cursor: pointer;
 }
 .mm-btn:focus-visible, .mm-item:focus-visible { outline: 2px solid var(--mm-sign); outline-offset: 2px; }
-
-.mm-plz-cloud { margin-top: 18px; }
-.mm-plz-cloud-label { margin: 0 0 8px; font-size: 0.9rem; color: var(--mm-muted); }
-.mm-plz-cloud ul { display: flex; flex-wrap: wrap; gap: 6px; margin: 0; padding: 0; list-style: none; }
-.mm-plz-cloud button {
-  font: inherit;
-  font-size: 0.92rem;
-  font-variant-numeric: tabular-nums;
-  letter-spacing: 0.04em;
-  padding: 4px 9px;
-  border-radius: 999px;
-  border: 1px solid var(--mm-line);
-  background: var(--mm-surface);
-  color: var(--mm-text);
-  cursor: pointer;
-}
-.mm-plz-cloud button:hover { border-color: var(--mm-sign); }
-.mm-plz-cloud button.is-active { background: var(--mm-sign); border-color: var(--mm-sign); color: var(--mm-ink); font-weight: 600; }
 
 .mm-error { margin: 12px 0 0; color: #FFB4A8; font-size: 0.95rem; }
 
@@ -827,7 +816,12 @@ function itemMeta(p) {
 
 @media (max-width: 760px) {
   /* Groß auf dem Handy: Karte oben, Daten darunter */
-  .mm.is-expanded { grid-template-columns: 1fr; grid-template-rows: 45vh 1fr; }
+  .mm.is-expanded {
+    width: calc(100vw - 24px);
+    height: calc(100dvh - 24px);
+    grid-template-columns: 1fr;
+    grid-template-rows: 40dvh 1fr;
+  }
   .mm.is-page { grid-template-columns: 1fr; grid-template-rows: 50vh auto; height: auto; }
   .mm-panel { order: 1; border-right: 0; border-top: 1px solid var(--mm-line); overflow-y: auto; }
   .mm-map-area { order: 0; }
