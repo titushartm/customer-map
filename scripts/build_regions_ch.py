@@ -3,8 +3,11 @@ Baut die Referenzliste der Schweizer Verwaltungen für den CSV-Import:
   backend/data/verwaltungen_ch.csv   eine Zeile je politischer Gemeinde (Ziel des Segments verwaltung)
 
 Spalten wie regions.json (key … lng, siehe build_regions.py), dazu Kontakt wie region_contacts.csv (address, phone,
-email, osm, osm_name, score) und Domain wie region_domains.csv (domain, website). Listen (postcodes, domain) mit
-Leerzeichen getrennt. Schlüssel CH-G-<BFS-Nr.>, parent ist der Bezirk (CH-K-<BFS-Nr. des Bezirks>) oder, in
+email, osm, osm_name, score), Domain wie region_domains.csv (domain, website) sowie kind und segment für den
+Stammdaten-Import im Lizenz-Dashboard (Admin › Stammdaten › CSV importieren). Listen (postcodes, domain) mit
+Leerzeichen getrennt. Vor den Gemeinden stehen Staat, Kantone und Bezirke als eigene Zeilen ohne segment: Der Import
+legt daraus die Regionen an (Lage = Mittel ihrer Gemeinden, Einwohner summiert er selbst), die Gemeinden mit
+segment=verwaltung werden Ziele. Schlüssel CH-G-<BFS-Nr.>, parent ist der Bezirk (CH-K-<BFS-Nr. des Bezirks>) oder, in
 Kantonen ohne Bezirke (UR, OW, NW, GL, ZG, BS, AI, NE, GE), der Kanton (CH-L-<Kantonsnr.>). Verkauft wird an
 Gemeinden (TARGET_LEVELS in import_regions.py), Bezirke und Kantone sind keine Ziele.
 
@@ -240,7 +243,7 @@ for r in sorted(communes, key=lambda r: int(r['BfsCode'])):
     d, website = pick(SITES.get(bfs, []))
     row.update(address=c[0], phone=c[1], email=c[2], osm=e['id'] if any(c) else '',
                osm_name=e['tags'].get('name', '') if any(c) else '', score=round(s, 1) if any(c) else '',
-               domain=d, website=website)
+               domain=d, website=website, kind='Gemeinde', segment='verwaltung')
     rows.append(row)
 
 # Ein Gemeindehaus gehört zu höchstens einer Gemeinde: bei mehreren nur zur mit den meisten Trefferpunkten
@@ -258,9 +261,44 @@ for r in rows:
     if r['domain'] in shared:
         r['domain'] = ''
 
+
+
+def bfs_area(key):
+    """Name und parent einer Fläche aus dem BFS-Verzeichnis, für Flächen, die areas.json noch nicht kennt (Moutier 2026)"""
+    level, code = key.split('-')[1], key.split('-')[2]
+    u = next(u for u in upper.values() if u['BfsCode'] == code and u['Level'] == ('1' if level == 'L' else '2'))
+    if level == 'L':
+        return u['Name'].split(' / ')[0], 'CH'
+    return re.sub(r'^(Bezirk|District de la|District de|District du|Distretto di|Distretto della|Wahlkreis) ', '', u['Name']), \
+        f"CH-L-{canton_of(u)['BfsCode']}"
+
+
+def area_rows(rows):
+    """Staat, Kantone, Bezirke der Gemeinden als Zeilen, von oben nach unten"""
+    members, info = collections.defaultdict(list), {}
+    for r in rows:
+        key = r['parent']
+        while key:
+            members[key].append(r)
+            if key not in info:
+                a = AREAS.get(key)
+                info[key] = (a['name'], a['parent']) if a else bfs_area(key) if key != 'CH' else ('Schweiz', None)
+            key = info[key][1]
+    out = []
+    for key, (name, parent) in info.items():
+        level = 'staat' if key == 'CH' else 'land' if '-L-' in key else 'kreis'
+        group = members[key]
+        out.append(dict(key=key, country='CH', parent=parent or '', level=level, name=name,
+                        kind={'staat': 'Staat', 'land': 'Kanton', 'kreis': 'Bezirk'}[level],
+                        lat=round(sum(r['lat'] for r in group) / len(group), 4),
+                        lng=round(sum(r['lng'] for r in group) / len(group), 4)))
+    return sorted(out, key=lambda r: (['staat', 'land', 'kreis'].index(r['level']), r['key']))
+
+
 with open(ROOT / 'backend/data/verwaltungen_ch.csv', 'w', encoding='utf-8', newline='') as f:
-    w = csv.DictWriter(f, fieldnames=list(rows[0]))
+    w = csv.DictWriter(f, fieldnames=list(rows[0]), restval='')
     w.writeheader()
+    w.writerows(area_rows(rows))
     for r in rows:
         w.writerow({**r, 'postcodes': ' '.join(r['postcodes']), 'sameAsParent': str(r['sameAsParent']).lower()})
 
