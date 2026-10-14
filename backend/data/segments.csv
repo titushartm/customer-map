@@ -1,0 +1,26 @@
+key,country,group,prefix,label,plural,dative,one,nom,acc,sizeLabel,sizeUnit,meetings
+verwaltung,,verwaltung,,Verwaltung,Verwaltungen,Verwaltungen,Eine Verwaltung,,,Einwohner,Einw.,Gremiensitzungen
+stadtwerk,,versorgung,sw,Stadtwerk,Stadtwerke,Stadtwerken,Ein Stadtwerk,die,die,Mitarbeitende,Mitarb.,Aufsichtsrats- und Gremiensitzungen
+drk,,sozial,drk,DRK-Verband,DRK-Verbände,DRK-Verbänden,Ein DRK-Verband,der,den,Mitarbeitende,Mitarb.,Vorstandssitzungen und Mitgliederversammlungen
+drk,AT,sozial,drk,Rotkreuz-Bezirksstelle,Rotkreuz-Bezirksstellen,Rotkreuz-Bezirksstellen,Eine Rotkreuz-Bezirksstelle,die,die,Mitarbeitende,Mitarb.,Vorstandssitzungen und Mitgliederversammlungen
+drk,CH,sozial,drk,SRK-Kantonalverband,SRK-Kantonalverbände,SRK-Kantonalverbänden,Ein SRK-Kantonalverband,der,den,Mitarbeitende,Mitarb.,Vorstandssitzungen und Mitgliederversammlungen
+drk,FR,sozial,drk,Croix-Rouge-Delegation,Croix-Rouge-Delegationen,Croix-Rouge-Delegationen,Eine Croix-Rouge-Delegation,die,die,Mitarbeitende,Mitarb.,Vorstandssitzungen und Mitgliederversammlungen
+awo,,sozial,awo,AWO-Verband,AWO-Verbände,AWO-Verbänden,Ein AWO-Verband,der,den,Mitarbeitende,Mitarb.,Vorstandssitzungen und Mitgliederversammlungen
+caritas,,sozial,caritas,Caritasverband,Caritasverbände,Caritasverbänden,Ein Caritasverband,der,den,Mitarbeitende,Mitarb.,Vorstands- und Caritasratssitzungen
+caritas,AT,sozial,caritas,Caritas-Organisation,Caritas-Organisationen,Caritas-Organisationen,Eine Caritas-Organisation,die,die,Mitarbeitende,Mitarb.,Vorstands- und Gremiensitzungen
+caritas,CH,sozial,caritas,Caritas-Organisation,Caritas-Organisationen,Caritas-Organisationen,Eine Caritas-Organisation,die,die,Mitarbeitende,Mitarb.,Vorstands- und Gremiensitzungen
+diakonie,,sozial,diakonie,Diakonisches Werk,Diakonische Werke,Diakonischen Werken,Ein Diakonisches Werk,das,das,Mitarbeitende,Mitarb.,Vorstands- und Aufsichtsratssitzungen
+diakonie,AT,sozial,diakonie,Diakonie-Organisation,Diakonie-Organisationen,Diakonie-Organisationen,Eine Diakonie-Organisation,die,die,Mitarbeitende,Mitarb.,Vorstands- und Aufsichtsratssitzungen
+diakonie,CH,sozial,diakonie,Hilfswerk der Reformierten,Hilfswerke der Reformierten,Hilfswerken der Reformierten,Ein Hilfswerk der Reformierten,das,das,Mitarbeitende,Mitarb.,Stiftungsrats- und Gremiensitzungen
+paritaet,,sozial,paritaet,Paritätischer Verband,Paritätische Verbände,Paritätischen Verbänden,Ein Paritätischer Verband,der,den,Mitarbeitende,Mitarb.,Vorstandssitzungen und Mitgliederversammlungen
+asb,,sozial,asb,ASB-Verband,ASB-Verbände,ASB-Verbänden,Ein ASB-Verband,der,den,Mitarbeitende,Mitarb.,Vorstandssitzungen und Mitgliederversammlungen
+asb,AT,sozial,asb,Samariterbund-Verband,Samariterbund-Verbände,Samariterbund-Verbänden,Ein Samariterbund-Verband,der,den,Mitarbeitende,Mitarb.,Vorstandssitzungen und Mitgliederversammlungen
+johanniter,,sozial,johanniter,Johanniter-Verband,Johanniter-Verbände,Johanniter-Verbänden,Ein Johanniter-Verband,der,den,Mitarbeitende,Mitarb.,Vorstands- und Gremiensitzungen
+malteser,,sozial,malteser,Malteser-Gliederung,Malteser-Gliederungen,Malteser-Gliederungen,Eine Malteser-Gliederung,die,die,Mitarbeitende,Mitarb.,Vorstands- und Gremiensitzungen
+lebenshilfe,,sozial,lebenshilfe,Lebenshilfe-Vereinigung,Lebenshilfe-Vereinigungen,Lebenshilfe-Vereinigungen,Eine Lebenshilfe-Vereinigung,die,die,Mitarbeitende,Mitarb.,Vorstandssitzungen und Mitgliederversammlungen
+volkssolidaritaet,,sozial,volkssolidaritaet,Verband der Volkssolidarität,Verbände der Volkssolidarität,Verbänden der Volkssolidarität,Ein Verband der Volkssolidarität,der,den,Mitarbeitende,Mitarb.,Vorstandssitzungen und Mitgliederversammlungen
+lwv,,sozial,lwv,Höherer Kommunalverband,Höhere Kommunalverbände,Höheren Kommunalverbänden,Ein Höherer Kommunalverband,der,den,Mitarbeitende,Mitarb.,Verbandsversammlungen und Ausschusssitzungen
+volkshilfe,,sozial,volkshilfe,Volkshilfe-Organisation,Volkshilfe-Organisationen,Volkshilfe-Organisationen,Eine Volkshilfe-Organisation,die,die,Mitarbeitende,Mitarb.,Vorstandssitzungen und Mitgliederversammlungen
+hilfswerk,,sozial,hilfswerk,Hilfswerk-Organisation,Hilfswerk-Organisationen,Hilfswerk-Organisationen,Eine Hilfswerk-Organisation,die,die,Mitarbeitende,Mitarb.,Vorstandssitzungen und Mitgliederversammlungen
+prosenectute,,sozial,prosenectute,Pro-Senectute-Organisation,Pro-Senectute-Organisationen,Pro-Senectute-Organisationen,Eine Pro-Senectute-Organisation,die,die,Mitarbeitende,Mitarb.,Stiftungsrats- und Vorstandssitzungen
+proinfirmis,,sozial,proinfirmis,Pro-Infirmis-Geschäftsstelle,Pro-Infirmis-Geschäftsstellen,Pro-Infirmis-Geschäftsstellen,Eine Pro-Infirmis-Geschäftsstelle,die,die,Mitarbeitende,Mitarb.,Vorstands- und Gremiensitzungen
