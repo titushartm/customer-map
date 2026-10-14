@@ -283,6 +283,25 @@ Leere Felder (Land, Bundesland, Typ, PLZ) sind ergänzt, wo die Zuordnung eindeu
 
 Das sind rund 7.600 Verwaltungen. Der Mock lädt sie mit dem Bundle (etwa 270 kB gzip); im Betrieb kommen sie aus `Region` (`import_regions`), dort fehlen für DE noch die Ämter/VG (VG250 hat sie als `VG250_VWG`) und die Regel, welche Gemeinden kein eigenes Ziel sind.
 
+**Schweiz für den CSV-Import:** `backend/data/verwaltungen_ch.csv`, alle 2.110 politischen Gemeinden (BFS-Gemeindeverzeichnis, Einwohner STATPOP 31.12.2025, PLZ aus dem Ortschaftenverzeichnis, Kontakt aus OSM, Domain aus Wikidata), erzeugt mit `scripts/build_regions_ch.py`. Spalten wie `regions.json` plus Kontakt und Domain.
+
+### Stadtwerke und soziale Träger
+
+`backend/data/stadtwerke_soziale_traeger.csv` sind die Ziele außerhalb der Verwaltungen für den CSV-Import, `backend/data/segments.csv` die Segmente dazu (Bezeichnungen wie in `lib/segments.js`, je Land abweichende als eigene Zeile). Gebaut mit `scripts/build_targets.py` aus den Rohlisten in `backend/data/targets_raw/` (eine Datei je Quelle, Quelle und URL je Zeile). Das Skript sucht die Sitzgemeinde über PLZ und Ort und vergibt Region und Schlüssel wie bei den Kunden: Stadtwerk → Sitzgemeinde (`sw-DE-G-…`), Kreisverband → genannter Landkreis oder Stadt (`drk-DE-K-14625`), Landesverband → Land (`awo-DE-L-09`), Bundesverband → Staat (`caritas-DE`); bei Landes- und Bundesverbänden ist `region_key` trotzdem die Sitzgemeinde, weil der Import neue Ziele nur an Gemeinde, Amt oder Kreis hängt. Bestehende Kunden behalten ihren Schlüssel. Hochladen (Admin → Liste → Stammdaten importieren) nur `stadtwerke_soziale_traeger.csv`: Die Rohlisten haben noch keinen `key` und keine `region_key`. Verbände kommen ins Segment `sozial`, der Verband steht in `association`. Die Datei enthält nur die Spalten, die der Import liest, damit der Upload unter 1 MB bleibt; die Quellen stehen in den Rohlisten.
+
+Stand 14.10.2026:
+
+| Rohliste | Inhalt | Quelle |
+|---|---|---|
+| `stadtwerke_de.csv` | 1.144 Stadtwerke, Gemeindewerke, Technische Werke (ohne Töchter, Abwasser, Bäder) | Marktstammdatenregister (BNetzA) |
+| `stadtwerke_at_ch.csv` | AT 44 kommunale Versorger (ohne Landesnetzgesellschaften), CH 476 Werke von Gemeinden bzw. in Gemeindebesitz (ohne Genossenschaften, Kantonswerke) | E-Control, ElCom + Zefix |
+| `drk.csv` | DRK: Generalsekretariat, 19 Landesverbände, 449 Kreisverbände; ÖRK: 1 + 9 + 133 Bezirksstellen | drk.de, roteskreuz.at |
+| `caritas.csv` | Deutscher Caritasverband, 27 Diözesan- und 2 Landes-Caritasverbände (Bayern, Oldenburg), 278 Orts-/Kreis-/Regional-Caritasverbände (Schreibvarianten und Außenstellen zusammengeführt; Caritasverband Mainz fehlt, Adresse in der Quelle unvollständig) | caritas.de Diözesan-Caritasverbände und Adresssuche |
+| `diakonie.csv` | 264 regionale Diakonische Werke (Kirchenkreis/Dekanat/Stadt) und 4 Landesverbände (MV, Schleswig-Holstein, Bremen, Lippe); Name und Adresse aus den Einrichtungen des Werks abgeleitet (häufigste Adresse, kann eine Einrichtung statt der Geschäftsstelle sein). Werke, die sich nur "Diakonie X" nennen, fehlen noch | diakonie.de Einrichtungssuche |
+| `awo.csv` | AWO Bundesverband, 32 Landes-/Bezirksverbände; Kreisverbände bisher nur Ost (60: Sachsen, Thüringen, Sachsen-Anhalt, Brandenburg) | awo.org, Impressum der Verbände |
+
+Noch offen: SRK (CH), AWO-Kreisverbände West/Nord/Süd, Caritas AT/CH, Diakonie (Bundesverband, übrige Landesverbände aus dem Impressum, Werke "Diakonie X"), Paritätischer, ASB, Johanniter, Malteser, Lebenshilfe, Volkssolidarität, LWV, Volkshilfe/Hilfswerk (AT), Pro Senectute/Pro Infirmis (CH). Kontakt-E-Mails nur allgemeine Adressen (info@, kontakt@), keine von Personen.
+
 ### Freigabe der Kundenkarte
 
 Die Karte auf der Startseite (Tab Kunden) sehen nur dienstliche E-Mail-Adressen von Verwaltungen, damit Mitbewerber die Kundenliste nicht abgreifen. Angemeldete Kunden sehen sie direkt. `mocks/domains.json` ordnet jeder Verwaltung aus `regions.json` ihre Domain zu (offizielle Website aus Wikidata über AGS, Kreisschlüssel, Regionalschlüssel bzw. GKZ; erzeugt mit `scripts/build_domains.py`, Prüfliste in `backend/data/region_domains.csv`), dazu die Stadtwerke/DRK unter den Kunden von Hand. Eine Adresse passt, wenn ihre Domain gleich ist oder darunter liegt (`bauamt.wesel.de` → `wesel.de`). Rund 99 % der Verwaltungen haben eine Domain; fehlende und abweichende Mail-Domains (in Österreich oft `<ort>.gv.at`) in `MANUAL` im Skript nachtragen.

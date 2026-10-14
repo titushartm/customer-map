@@ -7,12 +7,15 @@ Eingabe ist ein Ordner mit Rohlisten (eine CSV je Quelle, Spalten: segment, coun
 street, postcode, city, lat, lng, phone, email, website, size, source, source_url). Die Rohlisten kommen aus den
 Verzeichnissen der Verbände und Register (Quelle je Zeile in source/source_url), siehe README "Stadtwerke und soziale Träger".
 
+Verbände kommen ins Segment sozial, der Verband in association (DRK, ÖRK, AWO, Caritas, Diakonie).
 Region (Target.region) und Schlüssel wie bei den Kunden im Organisations-Export:
   Stadtwerk (unternehmen)  Sitzgemeinde                                        sw-DE-G-08212000
   Kreisverband o. ä.       Landkreis, wenn der Name ihn nennt, sonst die        drk-DE-K-14625, caritas-DE-G-05315000
                            genannte bzw. die Sitzgemeinde
   Landesverband            Land/Kanton des Sitzes                               awo-DE-L-09
   Bundesverband            Staat                                                caritas-DE
+Bei Landes- und Bundesverbänden ist region_key die Sitzgemeinde (der Import hängt neue Ziele nur an Gemeinde, Amt
+oder Kreis), der Schlüssel bleibt der des Landes bzw. Staats.
 Sitzgemeinde über PLZ und Ort aus regions.json (DE, AT) bzw. verwaltungen_ch.csv (CH). Teilen sich mehrere Ziele
 desselben Segments eine Region, bekommen die weiteren -2, -3, … (nach Ebene und Name). Kunden aus customers.js
 behalten ihren Schlüssel.
@@ -29,6 +32,13 @@ AREAS = json.load(open(ROOT / 'frontend/src/mocks/areas.json', encoding='utf-8')
 
 PREFIX = {'stadtwerk': 'sw'}  # sonst der Segment-Schlüssel
 SEGMENT_ALIAS = {'pro_senectute': 'prosenectute', 'pro_infirmis': 'proinfirmis'}
+# Spalten der Importdatei: nur was der Import liest, dazu kind und level zum Lesen. Quelle und Sitz stehen in den Rohlisten;
+# der Upload geht als ein Request durch den Proxy (1 MB)
+COLUMNS = ['key', 'segment', 'association', 'country', 'name', 'kind', 'level', 'region_key', 'address', 'lat', 'lng',
+           'phone', 'email', 'website', 'domain', 'size']
+# Verband (Target.association) je Rohliste, je Land abweichend als (Segment, Land)
+ASSOCIATION = {'drk': 'DRK', ('drk', 'AT'): 'ÖRK', ('drk', 'CH'): 'SRK', 'awo': 'AWO', 'caritas': 'Caritas',
+               'diakonie': 'Diakonie', 'prosenectute': 'Pro Senectute', 'proinfirmis': 'Pro Infirmis'}
 LEVEL_RANK = {'bundesverband': 0, 'landesverband': 1, 'kreisverband': 2, 'unternehmen': 2}
 # Echte Kunden (customers.js, CUSTOMER_TARGETS): Schlüssel bleibt, damit der Kundenstatus beim Import hängen bleibt
 CUSTOMERS = {
@@ -38,7 +48,7 @@ CUSTOMERS = {
     'sw-DE-G-08237028': ('stadtwerk', r'stadtwerke freudenstadt'),
     'sw-DE-G-08135016': ('stadtwerk', r'stadtwerke giengen'),
     'sw-DE-G-15083270': ('stadtwerk', r'stadtwerke haldensleben'),
-    'sw-DE-G-12051000': ('stadtwerk', r'technische werke brandenburg'),
+    'sw-DE-G-12051000': ('stadtwerk', r'(stadtwerke|technische werke) brandenburg an der havel'),
     'sw-AT-G-70513': ('stadtwerk', r'stadtwerke kufstein'),
     'drk-DE-K-08226': ('drk', r'rhein neckar'),
     'drk-DE-K-14729': ('drk', r'leipzig land'),
@@ -70,6 +80,12 @@ for r in REGIONS.values():
         BY_PLZ[(r['country'], p)].append(r)
 
 
+BY_NAME = collections.defaultdict(list)
+for r in REGIONS.values():
+    if r['level'] == 'gemeinde':
+        BY_NAME[(r['country'], norm(r['name']))].append(r)
+
+
 def land_of(key):
     """Land/Kanton einer Region über die Flächen (Kreis → Land); Gemeinden direkt am Land haben es als parent"""
     k = REGIONS[key]['parent'] if key in REGIONS else key
@@ -88,6 +104,12 @@ def seat(row):
     """Sitzgemeinde (Schlüssel aus regions.json/verwaltungen_ch.csv) über PLZ und Ort, sonst über Lage"""
     cands = BY_PLZ.get((row['country'], row['postcode'].strip()), [])
     city = norm(row['city'])
+    if not cands and city:  # Postfach- oder Firmen-PLZ (06391 Bernburg, 4031 Linz) oder Ortsteil (Bregenz-Vorkloster): über den Ort
+        cands = BY_NAME.get((row['country'], city), []) or BY_NAME.get((row['country'], norm(row['city'].split('-')[0])), [])
+    if not cands and not city:  # ohne Adresse: Gemeinde, die der Name nennt (Stadtbetriebe Steyr)
+        name = norm(row['name'].replace(',', ' '))
+        named = [r for (c, n), rs in BY_NAME.items() if c == row['country'] and len(n) > 3 and has(name, n) for r in rs]
+        cands = [max(named, key=lambda r: len(r['name']))] if named else []
     if len(cands) > 1 and city:
         named = [c for c in cands if core(c['name']) == city or city.startswith(core(c['name']) + ' ')
                  or core(c['name']).startswith(city + ' ')]
@@ -113,9 +135,11 @@ for k, r in REGIONS.items():
 def area(row, seat_key):
     """Gebiet eines Kreisverbands: die Sitzstadt, wenn sie kreisfrei ist und der Name sie nennt (Caritasverband Leipzig);
     sonst der Landkreis, den der Name nennt (DRK-Kreisverband Bautzen, Leipzig-Land), sonst die genannte Stadt, sonst der Sitz"""
-    name, land = norm(row['name']), land_of(seat_key)
+    name, land = norm(row['name'].replace(',', ' ')), land_of(seat_key)
+    name = re.sub(r'(\w{4,})er land\b', r'\1 land', name)  # "Leipziger Land" wie "Leipzig-Land"
     home = REGIONS[seat_key]
-    if home['sameAsParent'] and has(name, core(home['name'])) and not re.search(r'\bland\b|landkreis', name):
+    kreisfrei = home['sameAsParent'] or AREAS.get(home['parent'], {}).get('kind') in ('Kreisfreie Stadt', 'Stadtkreis', 'Statutarstadt')
+    if kreisfrei and has(name, core(home['name'])) and not re.search(r'\bland\b|landkreis', name):
         return seat_key
     kreise = [(len(c), k) for c, k in KREISE.get(land, []) if len(c) > 3 and has(name, c)]
     if kreise and not re.search(r'\bstadt\b', name):
@@ -126,6 +150,15 @@ def area(row, seat_key):
     if towns:
         return max(towns)[1]
     return max(kreise)[1] if kreise else seat_key
+
+
+def coords(row):
+    """lat/lng aus der Rohliste; liegen sie außerhalb von DE, AT, CH, FR (Tippfehler, 0.0 in drk.de), nimmt der Import die Region"""
+    try:
+        lat, lng = float(row['lat']), float(row['lng'])
+    except ValueError:
+        return dict(lat='', lng='')
+    return dict(lat=row['lat'], lng=row['lng']) if 41 <= lat <= 56 and -5.5 <= lng <= 17.5 else dict(lat='', lng='')
 
 
 def domain(url):
@@ -169,18 +202,18 @@ for r in merged.values():
     street = r['street']
     town = ' '.join(filter(None, [r['postcode'], r['city']]))
     rows.append(dict(
-        key='', segment=r['segment'], country=r['country'], name=r['name'], kind=r['kind'], level=r['level'],
+        key='', segment=r['segment'], association='', country=r['country'], name=r['name'], kind=r['kind'], level=r['level'],
         parent_name=r['parent_name'], region_key=region, seat_key=s or '',
         state=REGIONS[s]['state'] if s else AREAS.get(region, {}).get('name', ''),
         address=', '.join(filter(None, [street, town])) if street else '', postcode=r['postcode'], city=r['city'],
-        lat=r['lat'], lng=r['lng'], phone=r['phone'], email=r['email'], website=r['website'],
+        **coords(r), phone=r['phone'], email=r['email'], website=r['website'],
         domain=domain(r['website']) if r['website'] else '', size=r['size'], source=r['source'], source_url=r['source_url'],
     ))
 
 # ---- Schlüssel ----
 taken = set()
 for key, (segment, pattern) in CUSTOMERS.items():
-    hit = [r for r in rows if r['segment'] == segment and re.search(pattern, norm(r['name']))]
+    hit = [r for r in rows if r['segment'] == segment and re.search(pattern, norm(r['name'].replace(',', ' ')))]
     if len(hit) == 1:
         hit[0]['key'], hit[0]['region_key'] = key, key.split('-', 1)[1]
         taken.add(key)
@@ -192,15 +225,25 @@ for r in rows:
         groups[f"{PREFIX.get(r['segment'], r['segment'])}-{r['region_key']}"].append(r)
 for base, group in groups.items():
     n = 1
-    for r in sorted(group, key=lambda r: (LEVEL_RANK.get(r['level'], 3), r['name'])):
+    # Den Schlüssel ohne Zusatz bekommt das Hauptunternehmen ("Stadtwerke …" vor Töchtern und Nachbarn), sonst nach Name
+    for r in sorted(group, key=lambda r: (LEVEL_RANK.get(r['level'], 3), 'stadtwerk' not in r['name'].lower(), len(r['name']), r['name'])):
         while (key := base if n == 1 else f'{base}-{n}') in taken:
             n += 1
         r['key'] = key
         taken.add(key)
 
+# Der Import hängt neue Ziele nur an Gemeinde, Amt oder Kreis: Bundes- und Landesverbände an ihren Sitz, der Schlüssel bleibt.
+# Die Verbände sind ein Segment "sozial" mit dem Verband in association; der Schlüssel behält den Verband (drk-DE-K-…)
+for r in rows:
+    if r['seat_key'] and ('-' not in r['region_key'] or '-L-' in r['region_key']):
+        r['region_key'] = r['seat_key']
+    if r['segment'] != 'stadtwerk':
+        r['association'] = ASSOCIATION.get((r['segment'], r['country']), ASSOCIATION.get(r['segment'], r['segment']))
+        r['segment'] = 'sozial'
+
 rows.sort(key=lambda r: (r['segment'], r['country'], LEVEL_RANK.get(r['level'], 3), r['state'], r['name']))
 with open(ROOT / 'backend/data/stadtwerke_soziale_traeger.csv', 'w', encoding='utf-8', newline='') as f:
-    w = csv.DictWriter(f, fieldnames=list(rows[0]))
+    w = csv.DictWriter(f, fieldnames=COLUMNS, extrasaction='ignore')
     w.writeheader()
     w.writerows(rows)
 
